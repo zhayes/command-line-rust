@@ -1,0 +1,1039 @@
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Boston Commons</title><link href="epub.css" rel="stylesheet" type="text/css"/>
+<meta content="urn:uuid:e80a1ec8-ed8e-40f7-ba3d-26a647960341" name="Adept.expected.resource"/></head><body data-type="book"><section data-pdf-bookmark="Chapter 10. Boston Commons" data-type="chapter" epub:type="chapter"><div class="chapter" id="ch10">
+<h1><span class="label">Chapter 10. </span>Boston Commons</h1>
+
+<blockquote>
+<p>
+Never looked at you before with / Common sense
+</p>
+<p data-type="attribution">
+They Might Be Giants, “Circular Karate Chop” (2013)
+</p>
+</blockquote>
+
+<p>In this chapter, you will write a <a data-primary="comm (common) utility" data-type="indexterm" id="ix_comm"/>Rust version of the <code>comm</code> (<em>common</em>) utility, which will read two files and report the lines of text that are common to both and the lines that are unique to each.
+These are set operations where the common lines are the <em>intersection</em> of the two files and the unique lines are the <em>difference</em>.<a data-primary="intersection" data-type="indexterm" id="id1224"/><a data-primary="difference" data-type="indexterm" id="id1225"/><a data-primary="set operations" data-type="indexterm" id="id1226"/>
+If you are familiar with databases, you might also consider these as types of <em>join</em> operations.<a data-primary="join operations" data-type="indexterm" id="id1227"/></p>
+
+<p>You will learn how to:</p>
+
+<ul>
+<li>
+<p>Manually iterate the lines of a filehandle using <code>Iterator::next</code></p>
+</li>
+<li>
+<p><code>match</code> on combinations of possibilities using a tuple</p>
+</li>
+<li>
+<p>Use <code>std::cmp::Ordering</code> when comparing strings</p>
+</li>
+</ul>
+
+
+
+
+
+
+<section data-pdf-bookmark="How comm Works" data-type="sect1"><div class="sect1" id="id98">
+<h1>How comm Works</h1>
+
+<p>To show you what will be<a data-primary="comm (common) utility" data-secondary="how it works" data-type="indexterm" id="ix_commhow"/> expected of your program, I’ll start by reviewing part of the manual page for the <a data-primary="BSD version" data-secondary="comm utility" data-type="indexterm" id="id1228"/>BSD <code>comm</code> to see how the tool works:</p>
+<pre class="widows_25" data-type="programlisting">COMM(1)                   BSD General Commands Manual                  COMM(1)
+
+NAME
+     comm -- select or reject lines common to two files
+
+SYNOPSIS
+     comm [-123i] file1 file2
+
+DESCRIPTION
+     The comm utility reads file1 and file2, which should be sorted lexically,
+     and produces three text columns as output: lines only in file1; lines
+     only in file2; and lines in both files.
+
+     The filename ''-'' means the standard input.
+
+     The following options are available:
+
+     -1      Suppress printing of column 1.
+
+     -2      Suppress printing of column 2.
+
+     -3      Suppress printing of column 3.
+
+     -i      Case insensitive comparison of lines.
+
+     Each column will have a number of tab characters prepended to it equal to
+     the number of lower numbered columns that are being printed.  For exam-
+     ple, if column number two is being suppressed, lines printed in column
+     number one will not have any tabs preceding them, and lines printed in
+     column number three will have one.
+
+     The comm utility assumes that the files are lexically sorted; all charac-
+     ters participate in line comparisons.</pre>
+
+<p>The GNU version has some <a data-primary="GNU version" data-secondary="comm utility" data-type="indexterm" id="id1229"/>additional options but lacks a case-insensitive option:</p>
+
+<pre data-type="programlisting">$ comm --help
+Usage: comm [OPTION]... FILE1 FILE2
+Compare sorted files FILE1 and FILE2 line by line.
+
+When FILE1 or FILE2 (not both) is -, read standard input.
+
+With no options, produce three-column output.  Column one contains
+lines unique to FILE1, column two contains lines unique to FILE2,
+and column three contains lines common to both files.
+
+  -1              suppress column 1 (lines unique to FILE1)
+  -2              suppress column 2 (lines unique to FILE2)
+  -3              suppress column 3 (lines that appear in both files)
+
+  --check-order     check that the input is correctly sorted, even
+                      if all input lines are pairable
+  --nocheck-order   do not check that the input is correctly sorted
+  --output-delimiter=STR  separate columns with STR
+  --total           output a summary
+  -z, --zero-terminated    line delimiter is NUL, not newline
+      --help     display this help and exit
+      --version  output version information and exit
+
+Note, comparisons honor the rules specified by 'LC_COLLATE'.
+
+Examples:
+  comm -12 file1 file2  Print only lines present in both file1 and file2.
+  comm -3 file1 file2  Print lines in file1 not in file2, and vice versa.</pre>
+
+<p>At this point, you may be wondering exactly why you’d use this.
+Suppose you have a file containing a list of cities where your favorite band played on their last tour:</p>
+
+<pre data-type="programlisting">$ cd 10_commr/tests/inputs/
+$ cat cities1.txt
+Jackson
+Denton
+Cincinnati
+Boston
+Santa Fe
+Tucson</pre>
+
+<p>Another file lists the cities on their current tour:</p>
+
+<pre data-type="programlisting">$ cat cities2.txt
+San Francisco
+Denver
+Ypsilanti
+Denton
+Cincinnati
+Boston</pre>
+
+<p>You can use <code>comm</code> to find which cities occur in both sets by suppressing columns 1 (the lines unique to the first file) and 2 (the lines unique to the second file) and only showing column 3 (the lines common to both files).
+This is like an <em>inner join</em> in SQL, where only data that occurs in both inputs is shown.<a data-primary="inner joins" data-type="indexterm" id="id1230"/>
+Note that both files need to be sorted first:</p>
+
+<pre data-type="programlisting">$ comm -12 &lt;(sort cities1.txt) &lt;(sort cities2.txt)
+Boston
+Cincinnati
+Denton</pre>
+
+<p>If you wanted the cities the band played only on the first tour, you could suppress columns 2 and 3:</p>
+
+<pre data-type="programlisting">$ comm -23 &lt;(sort cities1.txt) &lt;(sort cities2.txt)
+Jackson
+Santa Fe
+Tucson</pre>
+
+<p>Finally, if you wanted the cities they played only on the second tour, you could suppress columns 1 and 3:</p>
+
+<pre data-type="programlisting">$ comm -13 &lt;(sort cities1.txt) &lt;(sort cities2.txt)
+Denver
+San Francisco
+Ypsilanti</pre>
+
+<p>The first or second file can be <code>STDIN</code>, as denoted by a filename consisting of a dash (<code>-</code>):</p>
+
+<pre data-type="programlisting">$ sort cities2.txt | comm -12 &lt;(sort cities1.txt) -
+Boston
+Cincinnati
+Denton</pre>
+
+<p>As with the GNU <code>comm</code>, only one of the inputs may be a dash with the challenge program.
+Note that BSD <code>comm</code> can perform case-insensitive comparisons when the <code>-i</code> flag is present.<a data-primary="case-insensitive comparisons" data-secondary="in BSD version of comm" data-type="indexterm" id="id1231"/>
+For instance, I can put the first tour cities in lowercase:</p>
+
+<pre data-type="programlisting">$ cat cities1_lower.txt
+jackson
+denton
+cincinnati
+boston
+santa fe
+tucson</pre>
+
+<p>and the second tour cities in uppercase:</p>
+
+<pre data-type="programlisting">$ cat cities2_upper.txt
+SAN FRANCISCO
+DENVER
+YPSILANTI
+DENTON
+CINCINNATI
+BOSTON</pre>
+
+<p>Then I can use the <code>-i</code> flag to find the cities in common:</p>
+
+<pre data-type="programlisting">$ comm -i -12 &lt;(sort cities1_lower.txt) &lt;(sort cities2_upper.txt)
+boston
+cincinnati
+denton</pre>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>I know the tour cities example is a trivial one, so I’ll give you another example drawn from my experience in bioinformatics, which is the intersection of computer science and biology.<a data-primary="bioinformatics, use of comm in" data-type="indexterm" id="id1232"/> Given a file of protein sequences, I can run an analysis that will group similar sequences into clusters. I can then use <code>comm</code> to compare the clustered proteins to the original list and find the proteins that failed to cluster. There may be something unique to these unclustered proteins that bears further analysis.</p>
+</div>
+
+<p>This is as much as the challenge program is expected to implement.
+One change from the BSD version is that I use the GNU version’s optional output column delimiter that defaults to a tab character, which is the normal output from <code>comm</code>.<a data-primary="delimiters" data-secondary="tab character, comm output delimiter" data-type="indexterm" id="id1233"/><a data-primary="tab character output delimiter" data-type="indexterm" id="id1234"/><a data-primary="comm (common) utility" data-secondary="how it works" data-startref="ix_commhow" data-type="indexterm" id="id1235"/></p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Getting Started" data-type="sect1"><div class="sect1" id="id157">
+<h1>Getting Started</h1>
+
+<p>The program in this chapter will be called <code>commr</code> (pronounced <em>comm-er</em>, which is basically how the British pronounce the word <em>comma</em>) for a Rust version of <code>comm</code>.<a data-primary="comm (common) utility" data-secondary="writing commr version" data-tertiary="getting started" data-type="indexterm" id="id1236"/>
+I suggest you use <strong><code>cargo new commr</code></strong> to start, then add the following dependencies to your <em>Cargo.toml</em> file:</p>
+
+<pre data-code-language="toml" data-type="programlisting"><code class="k">[dependencies]</code><code class="w"/>
+<code class="n">anyhow</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"1.0.79"</code><code class="w"/>
+<code class="n">clap</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">version</code><code class="w"> </code><code class="p">=</code><code class="w"> </code><code class="s2">"4.5.0"</code><code class="p">,</code><code class="w"> </code><code class="n">features</code><code class="w"> </code><code class="p">=</code><code class="w"> </code><code class="p">[</code><code class="s2">"derive"</code><code class="p">]</code><code class="w"> </code><code class="p">}</code><code class="w"/>
+
+<code class="k">[dev-dependencies]</code><code class="w"/>
+<code class="n">assert_cmd</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"2.0.13"</code><code class="w"/>
+<code class="n">predicates</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"3.0.4"</code><code class="w"/>
+<code class="n">pretty_assertions</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"1.4.0"</code><code class="w"/>
+<code class="n">rand</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"0.8.5"</code><code class="w"/></pre>
+
+<p>Copy my <em>10_commr/tests</em> directory into your project, and then run <strong><code>cargo test</code></strong> to run the tests, which should all fail.</p>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Defining the Arguments" data-type="sect2"><div class="sect2" id="id99">
+<h2>Defining the Arguments</h2>
+
+<p>No surprises here, but I suggest<a data-primary="comm (common) utility" data-secondary="writing commr version" data-tertiary="defining the arguments" data-type="indexterm" id="ix_commwrdefarg"/> you start by defining an <code>Args</code> struct:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[</code><code class="cp">derive(Debug)</code><code class="cp">]</code><code class="w">
+</code><code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code> </code><code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="n">file1</code><code>:</code><code> </code><code class="nb">String</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO1-1" id="co_boston_commons_CO1-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="n">file2</code><code>:</code><code> </code><code class="nb">String</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO1-2" id="co_boston_commons_CO1-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="n">show_col1</code><code>:</code><code> </code><code class="kt">bool</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO1-3" id="co_boston_commons_CO1-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+    </code><code class="n">show_col2</code><code>:</code><code> </code><code class="kt">bool</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO1-4" id="co_boston_commons_CO1-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+    </code><code class="n">show_col3</code><code>:</code><code> </code><code class="kt">bool</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO1-5" id="co_boston_commons_CO1-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+    </code><code class="n">insensitive</code><code>:</code><code> </code><code class="kt">bool</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO1-6" id="co_boston_commons_CO1-6"><img alt="6" src="assets/6.png"/></a><code class="w">
+    </code><code class="n">delimiter</code><code>:</code><code> </code><code class="nb">String</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO1-7" id="co_boston_commons_CO1-7"><img alt="7" src="assets/7.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_boston_commons_CO1-1" id="callout_boston_commons_CO1-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The first input filename is a <code>String</code>.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO1-2" id="callout_boston_commons_CO1-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The second input filename is a <code>String</code>.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO1-3" id="callout_boston_commons_CO1-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>A Boolean for whether or not to show the first column of output.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO1-4" id="callout_boston_commons_CO1-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>A Boolean for whether or not to show the second column of output.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO1-5" id="callout_boston_commons_CO1-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>A Boolean for whether or not to show the third column of output.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO1-6" id="callout_boston_commons_CO1-6"><img alt="6" src="assets/6.png"/></a></dt>
+<dd><p>A Boolean for whether or not to perform case-insensitive comparisons.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO1-7" id="callout_boston_commons_CO1-7"><img alt="7" src="assets/7.png"/></a></dt>
+<dd><p>The output column delimiter, which will default to a tab.</p></dd>
+</dl>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Normally I give my <code>Args</code> fields the same names as the arguments, but I don’t like the negative <em>suppress</em> verb, preferring instead the positive <em>show</em>. <a data-primary="Args struct" data-secondary="field names same as arguments" data-type="indexterm" id="id1237"/>I feel this leads to more readable code, as I will demonstrate later.</p>
+</div>
+
+<p>Either annotate the preceding for the <code>clap</code> derive pattern<a data-primary="derive pattern" data-secondary="using in commr program" data-type="indexterm" id="id1238"/> or fill in the missing parts of the following code to begin your <code>get_args</code> 
+<span class="keep-together">function:</span></p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">get_args</code><code class="p">()</code><code class="w"> </code>-&gt; <code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">matches</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code>::<code class="n">new</code><code class="p">(</code><code class="s">"commr"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">version</code><code class="p">(</code><code class="s">"0.1.0"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">author</code><code class="p">(</code><code class="s">"Ken Youens-Clark &lt;kyclark@gmail.com&gt;"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">about</code><code class="p">(</code><code class="s">"Rust version of `comm`"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="c1">// What goes here?</code>
+<code class="w">        </code><code class="p">.</code><code class="n">get_matches</code><code class="p">();</code><code class="w"/>
+
+<code class="w">    </code><code class="n">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">file1</code>: <code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">        </code><code class="n">file2</code>: <code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">        </code><code class="n">show_col1</code>: <code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">        </code><code class="n">show_col2</code>: <code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">        </code><code class="n">show_col3</code>: <code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">        </code><code class="n">insensitive</code>: <code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">        </code><code class="n">delimiter</code>: <code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Start your <code>main</code> function by pretty-printing the arguments:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">args</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">get_args</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{:#?}"</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Your program should be able to produce<a data-primary="usage statement" data-secondary="commr utility" data-type="indexterm" id="id1239"/> the following usage:</p>
+
+<pre data-type="programlisting">$ cargo run -- -h
+Rust version of `comm`
+
+Usage: commr [OPTIONS] &lt;FILE1&gt; &lt;FILE2&gt;
+
+Arguments:
+  &lt;FILE1&gt;  Input file 1
+  &lt;FILE2&gt;  Input file 2
+
+Options:
+  -1                              Suppress printing of column 1
+  -2                              Suppress printing of column 2
+  -3                              Suppress printing of column 3
+  -i                              Case-insensitive comparison of lines
+  -d, --output-delimiter &lt;DELIM&gt;  Output delimiter [default: "\t"]
+  -h, --help                      Print help
+  -V, --version                   Print version</pre>
+
+<p>If you run your program with no arguments, it should fail with a message that the two file arguments are required:</p>
+
+<pre data-type="programlisting">$ cargo run
+error: the following required arguments were not provided:
+  &lt;FILE1&gt;
+  &lt;FILE2&gt;
+
+Usage: commr &lt;FILE1&gt; &lt;FILE2&gt;
+
+For more information, try '--help'.</pre>
+
+<p>If you supply two positional arguments, you should get the following output:</p>
+
+<pre data-type="programlisting">$ cargo run -- tests/inputs/file1.txt tests/inputs/file2.txt
+Args {
+    file1: "tests/inputs/file1.txt", <a class="co" href="#callout_boston_commons_CO2-1" id="co_boston_commons_CO2-1"><img alt="1" src="assets/1.png"/></a>
+    file2: "tests/inputs/file2.txt",
+    show_col1: true, <a class="co" href="#callout_boston_commons_CO2-2" id="co_boston_commons_CO2-2"><img alt="2" src="assets/2.png"/></a>
+    show_col2: true,
+    show_col3: true,
+    insensitive: false,
+    delimiter: "\t",
+}</pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_boston_commons_CO2-1" id="callout_boston_commons_CO2-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The two positional arguments are parsed into <code>file1</code> and <code>file2</code>.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO2-2" id="callout_boston_commons_CO2-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>All the rest of the values use defaults, which are <code>true</code> for the Booleans and the tab character for the output delimiter.<a data-primary="tab character output delimiter" data-type="indexterm" id="id1240"/><a data-primary="delimiters" data-secondary="tab character, commr output delimiter" data-type="indexterm" id="id1241"/></p></dd>
+</dl>
+
+<p>Verify that you can set all the other arguments as well:</p>
+
+<pre data-type="programlisting">$ cargo run -- tests/inputs/file1.txt tests/inputs/file2.txt -123 -d , -i
+Args {
+    file1: "tests/inputs/file1.txt",
+    file2: "tests/inputs/file2.txt",
+    show_col1: false, <a class="co" href="#callout_boston_commons_CO3-1" id="co_boston_commons_CO3-1"><img alt="1" src="assets/1.png"/></a>
+    show_col2: false,
+    show_col3: false,
+    insensitive: true, <a class="co" href="#callout_boston_commons_CO3-2" id="co_boston_commons_CO3-2"><img alt="2" src="assets/2.png"/></a>
+    delimiter: ",", <a class="co" href="#callout_boston_commons_CO3-3" id="co_boston_commons_CO3-3"><img alt="3" src="assets/3.png"/></a>
+}</pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_boston_commons_CO3-1" id="callout_boston_commons_CO3-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <code>-123</code> sets each of the <em>show</em> values to <code>false</code>.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO3-2" id="callout_boston_commons_CO3-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <code>-i</code> sets <code>insensitive</code> to <code>true</code>.<a data-primary="insensitive flag" data-type="indexterm" id="id1242"/></p></dd>
+<dt><a class="co" href="#co_boston_commons_CO3-3" id="callout_boston_commons_CO3-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>The <code>-d</code> option sets the output delimiter to a comma (<code>,</code>).<a data-primary="comma (,) output delimiter" data-type="indexterm" id="id1243"/><a data-primary="delimiters" data-secondary="comma output delimiter, setting with -d option" data-type="indexterm" id="id1244"/></p></dd>
+</dl>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Stop reading and make your program match the preceding output.</p>
+</div>
+
+<p>Following is how I defined the arguments in my <code>get_args</code> and requires you add <code>use clap::{Arg, ArgAction, Command}</code>.
+I don’t have <a data-primary="get_args function" data-secondary="commr utility" data-type="indexterm" id="id1245"/>much to comment on here since it’s so similar to previous programs:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">get_args</code><code class="p">()</code><code class="w"> </code>-&gt; <code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">matches</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code>::<code class="n">new</code><code class="p">(</code><code class="s">"commr"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">version</code><code class="p">(</code><code class="s">"0.1.0"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">author</code><code class="p">(</code><code class="s">"Ken Youens-Clark &lt;kyclark@gmail.com&gt;"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">about</code><code class="p">(</code><code class="s">"Rust version of `comm`"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w"/>
+<code class="w">            </code><code class="n">Arg</code>::<code class="n">new</code><code class="p">(</code><code class="s">"file1"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">value_name</code><code class="p">(</code><code class="s">"FILE1"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"Input file 1"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">required</code><code class="p">(</code><code class="kc">true</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w"/>
+<code class="w">            </code><code class="n">Arg</code>::<code class="n">new</code><code class="p">(</code><code class="s">"file2"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">value_name</code><code class="p">(</code><code class="s">"FILE2"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"Input file 2"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">required</code><code class="p">(</code><code class="kc">true</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w"/>
+<code class="w">            </code><code class="n">Arg</code>::<code class="n">new</code><code class="p">(</code><code class="s">"suppress_col1"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">short</code><code class="p">(</code><code class="sc">'1'</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">action</code><code class="p">(</code><code class="n">ArgAction</code>::<code class="n">SetTrue</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"Suppress printing of column 1"</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w"/>
+<code class="w">            </code><code class="n">Arg</code>::<code class="n">new</code><code class="p">(</code><code class="s">"suppress_col2"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">short</code><code class="p">(</code><code class="sc">'2'</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">action</code><code class="p">(</code><code class="n">ArgAction</code>::<code class="n">SetTrue</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"Suppress printing of column 2"</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w"/>
+<code class="w">            </code><code class="n">Arg</code>::<code class="n">new</code><code class="p">(</code><code class="s">"suppress_col3"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">short</code><code class="p">(</code><code class="sc">'3'</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">action</code><code class="p">(</code><code class="n">ArgAction</code>::<code class="n">SetTrue</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"Suppress printing of column 3"</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w"/>
+<code class="w">            </code><code class="n">Arg</code>::<code class="n">new</code><code class="p">(</code><code class="s">"insensitive"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">short</code><code class="p">(</code><code class="sc">'i'</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">action</code><code class="p">(</code><code class="n">ArgAction</code>::<code class="n">SetTrue</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"Case-insensitive comparison of lines"</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w"/>
+<code class="w">            </code><code class="n">Arg</code>::<code class="n">new</code><code class="p">(</code><code class="s">"delimiter"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">short</code><code class="p">(</code><code class="sc">'d'</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">long</code><code class="p">(</code><code class="s">"output-delimiter"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">value_name</code><code class="p">(</code><code class="s">"DELIM"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"Output delimiter"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">default_value</code><code class="p">(</code><code class="s">"</code><code class="se">\t</code><code class="s">"</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">get_matches</code><code class="p">();</code><code class="w"/>
+
+<code class="w">    </code><code class="n">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">file1</code>: <code class="nc">matches</code><code class="p">.</code><code class="n">get_one</code><code class="p">(</code><code class="s">"file1"</code><code class="p">).</code><code class="n">cloned</code><code class="p">().</code><code class="n">unwrap</code><code class="p">(),</code><code class="w"/>
+<code class="w">        </code><code class="n">file2</code>: <code class="nc">matches</code><code class="p">.</code><code class="n">get_one</code><code class="p">(</code><code class="s">"file2"</code><code class="p">).</code><code class="n">cloned</code><code class="p">().</code><code class="n">unwrap</code><code class="p">(),</code><code class="w"/>
+<code class="w">        </code><code class="n">show_col1</code>: <code class="o">!</code><code class="n">matches</code><code class="p">.</code><code class="n">get_flag</code><code class="p">(</code><code class="s">"suppress_col1"</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="n">show_col2</code>: <code class="o">!</code><code class="n">matches</code><code class="p">.</code><code class="n">get_flag</code><code class="p">(</code><code class="s">"suppress_col2"</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="n">show_col3</code>: <code class="o">!</code><code class="n">matches</code><code class="p">.</code><code class="n">get_flag</code><code class="p">(</code><code class="s">"suppress_col3"</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="n">insensitive</code>: <code class="nc">matches</code><code class="p">.</code><code class="n">get_flag</code><code class="p">(</code><code class="s">"insensitive"</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="n">delimiter</code>: <code class="nc">matches</code><code class="p">.</code><code class="n">get_one</code><code class="p">(</code><code class="s">"delimiter"</code><code class="p">).</code><code class="n">cloned</code><code class="p">().</code><code class="n">unwrap</code><code class="p">(),</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>For the derive pattern, add <code>use clap::{ArgAction, Parser}</code> and annotate the <code>Args</code>.<a data-primary="derive pattern" data-secondary="using in commr program" data-type="indexterm" id="id1246"/><a data-primary="ArgAction::SetFalse" data-type="indexterm" id="id1247"/><a data-primary="suppress flag, inverting to show in Args" data-type="indexterm" id="id1248"/>
+Note that I use <code>ArgAction::SetFalse</code> to invert the meaning of the flag from <em>suppress</em> to <em>show</em> in the following code:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[derive(Debug, Parser)]</code><code class="w"/>
+<code class="cp">#[command(author, version, about)]</code><code class="w"/>
+<code class="sd">/// Rust version of `comm`</code>
+<code class="k">struct</code> <code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="sd">/// Input file 1</code>
+<code class="w">    </code><code class="cp">#[arg()]</code><code class="w"/>
+<code class="w">    </code><code class="n">file1</code>: <code class="nb">String</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Input file 2</code>
+<code class="w">    </code><code class="cp">#[arg()]</code><code class="w"/>
+<code class="w">    </code><code class="n">file2</code>: <code class="nb">String</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Suppress printing of column 1</code>
+<code class="w">    </code><code class="cp">#[arg(short('1'), action(ArgAction::SetFalse))]</code><code class="w"/>
+<code class="w">    </code><code class="n">show_col1</code>: <code class="kt">bool</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Suppress printing of column 2</code>
+<code class="w">    </code><code class="cp">#[arg(short('2'), action(ArgAction::SetFalse))]</code><code class="w"/>
+<code class="w">    </code><code class="n">show_col2</code>: <code class="kt">bool</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Suppress printing of column 3</code>
+<code class="w">    </code><code class="cp">#[arg(short('3'), action(ArgAction::SetFalse))]</code><code class="w"/>
+<code class="w">    </code><code class="n">show_col3</code>: <code class="kt">bool</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Case-insensitive comparison of lines</code>
+<code class="w">    </code><code class="cp">#[arg(short)]</code><code class="w"/>
+<code class="w">    </code><code class="n">insensitive</code>: <code class="kt">bool</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Output delimiter</code>
+<code class="w">    </code><code class="cp">#[arg(short, long(</code><code class="s">"output-delimiter"</code><code class="cp">), default_value = </code><code class="s">"</code><code class="se">\t</code><code class="s">"</code><code class="cp">)]</code><code class="w"/>
+<code class="w">    </code><code class="n">delimiter</code>: <code class="nb">String</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Validating and Opening the Input Files" data-type="sect2"><div class="sect2" id="id100">
+<h2>Validating and Opening the Input Files</h2>
+
+<p>It’s time to change the <code>main</code> function to call a <code>run</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">run</code><code class="p">(</code><code class="n">Args</code>::<code class="n">parse</code><code class="p">())</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"{e}"</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="n">std</code>::<code class="n">process</code>::<code class="n">exit</code><code class="p">(</code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>The next step is checking and opening the input files.<a data-primary="comm (common) utility" data-secondary="writing commr version" data-startref="ix_commwrdefarg" data-tertiary="defining the arguments" data-type="indexterm" id="id1249"/><a data-primary="input files" data-secondary="validating and opening in commr" data-type="indexterm" id="ix_infilvalop"/><a data-primary="comm (common) utility" data-secondary="writing commr version" data-tertiary="validating and opening input files" data-type="indexterm" id="ix_commwrvalopinfi"/>
+I suggest a modification to <a data-primary="open function" data-secondary="modifying for input files in commr" data-type="indexterm" id="id1250"/>the <code>open</code> function used in several previous chapters as follows:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">open</code><code class="p">(</code><code class="n">filename</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="nb">Box</code><code class="o">&lt;</code><code class="k">dyn</code><code class="w"> </code><code class="n">BufRead</code><code class="o">&gt;</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="k">match</code><code class="w"> </code><code class="n">filename</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="s">"</code><code class="s">-</code><code class="s">"</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="nb">Ok</code><code class="p">(</code><code class="nb">Box</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="n">BufReader</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="n">io</code><code>::</code><code class="n">stdin</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">)</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="n">_</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="nb">Ok</code><code class="p">(</code><code class="nb">Box</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="n">BufReader</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="w">
+</code><code class="w">            </code><code class="n">File</code><code>::</code><code class="n">open</code><code class="p">(</code><code class="n">filename</code><code class="p">)</code><code class="p">.</code><code class="n">map_err</code><code class="p">(</code><code class="o">|</code><code class="n">e</code><code class="o">|</code><code class="w"> </code><code class="n">anyhow</code><code class="o">!</code><code class="p">(</code><code class="s">"</code><code class="s">{filename}: {e}</code><code class="s">"</code><code class="p">)</code><code class="p">)</code><code class="o">?</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO4-1" id="co_boston_commons_CO4-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+        </code><code class="p">)</code><code class="p">)</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_boston_commons_CO4-1" id="callout_boston_commons_CO4-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Incorporate the <code>filename</code> into the error message.</p></dd>
+</dl>
+
+<p>This will <a data-primary="errors" data-secondary="incorporating filename in input file error messages for commr" data-type="indexterm" id="id1251"/>require you to expand your imports with the following:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">use</code><code class="w"> </code><code class="n">anyhow</code>::<code class="p">{</code><code class="n">anyhow</code><code class="p">,</code><code class="w"> </code><code class="nb">Result</code><code class="p">};</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code>::<code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">fs</code>::<code class="n">File</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">io</code>::<code class="p">{</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">BufRead</code><code class="p">,</code><code class="w"> </code><code class="n">BufReader</code><code class="p">},</code><code class="w"/>
+<code class="p">};</code><code class="w"/></pre>
+
+<p>As noted earlier, only one<a data-primary="- (dash or minus sign)" data-secondary="input filename in commr" data-type="indexterm" id="id1252"/> of the inputs is allowed to be a dash, for <code>STDIN</code>.
+You can use the following code for your <code>run</code> that will check the filenames and then open the files.<a data-primary="anyhow::bail macro" data-type="indexterm" id="id1253"/><a data-primary="bail! macro" data-type="indexterm" id="id1254"/>
+Be sure to add <code>use anyhow::bail</code> to your imports:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">file1</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="n">args</code><code class="p">.</code><code class="n">file1</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">file2</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="n">args</code><code class="p">.</code><code class="n">file2</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">file1</code><code class="w"> </code><code class="o">=</code><code class="o">=</code><code class="w"> </code><code class="s">"</code><code class="s">-</code><code class="s">"</code><code class="w"> </code><code class="o">&amp;</code><code class="o">&amp;</code><code class="w"> </code><code class="n">file2</code><code class="w"> </code><code class="o">=</code><code class="o">=</code><code class="w"> </code><code class="s">"</code><code class="s">-</code><code class="s">"</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO5-1" id="co_boston_commons_CO5-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+        </code><code class="n">bail</code><code class="o">!</code><code class="p">(</code><code class="s">r#"Both input files cannot be STDIN ("-")"#</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">_fh1</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">open</code><code class="p">(</code><code class="n">file1</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO5-2" id="co_boston_commons_CO5-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="n">_fh2</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">open</code><code class="p">(</code><code class="n">file2</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">r#"Opened "{file1}" and "{file2}""#</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO5-3" id="co_boston_commons_CO5-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+
+    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_boston_commons_CO5-1" id="callout_boston_commons_CO5-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Check that both of the filenames are not a dash (<code>-</code>).</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO5-2" id="callout_boston_commons_CO5-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Attempt to open the two input files.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO5-3" id="callout_boston_commons_CO5-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Print a message so you know what happened.</p></dd>
+</dl>
+
+<p>Your program should reject two <code>STDIN</code> arguments:</p>
+
+<pre data-type="programlisting">$ cargo run -- - -
+Both input files cannot be STDIN ("-")</pre>
+
+<p>It should be able to print the following for two good input files:</p>
+
+<pre data-type="programlisting">$ cargo run -- tests/inputs/file1.txt tests/inputs/file2.txt
+Opened "tests/inputs/file1.txt" and "tests/inputs/file2.txt"</pre>
+
+<p>It should reject a bad file for either argument, such as the nonexistent <em>blargh</em>:</p>
+
+<pre data-type="programlisting">$ cargo run -- tests/inputs/file1.txt <strong>blargh</strong>
+<strong>blargh: No such file or directory (os error 2)</strong></pre>
+
+<p>At this point, your program should pass all the tests for <strong><code>cargo test dies</code></strong> that check for missing or bad input arguments:</p>
+
+<pre data-type="programlisting">running 4 tests
+test dies_both_stdin ... ok
+test dies_no_args ... ok
+test dies_bad_file1 ... ok
+test dies_bad_file2 ... ok</pre>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Processing the Files" data-type="sect2"><div class="sect2" id="id101">
+<h2>Processing the Files</h2>
+
+<p>Your program can now validate all the arguments and open the input files, either of which may be <code>STDIN</code>.<a data-primary="comm (common) utility" data-secondary="writing commr version" data-startref="ix_commwrvalopinfi" data-tertiary="validating and opening input files" data-type="indexterm" id="id1255"/><a data-primary="input files" data-secondary="validating and opening in commr" data-startref="ix_infilvalop" data-type="indexterm" id="id1256"/><a data-primary="input files" data-secondary="processing in commr" data-type="indexterm" id="ix_infilproc"/><a data-primary="comm (common) utility" data-secondary="writing commr version" data-tertiary="processing the files" data-type="indexterm" id="ix_commwrprcfiil"/>
+Next, you need to iterate over the lines from each file to compare them.
+The files in <em>10_commr/tests/inputs</em> that are used in the tests are:</p>
+
+<ul>
+<li>
+<p><em>empty.txt</em>: an empty file</p>
+</li>
+<li>
+<p><em>blank.txt</em>: a file with one blank line</p>
+</li>
+<li>
+<p><em>file1.txt</em>: a file with four lines of text</p>
+</li>
+<li>
+<p><em>file2.txt</em>: a file with two lines of text</p>
+</li>
+</ul>
+
+<p>You may use <a href="https://oreil.ly/KhmCp"><code>BufRead::lines</code></a> to read files as it is not necessary to preserve line endings.<a data-primary="lines" data-secondary="reading without preserving line endings" data-type="indexterm" id="id1257"/><a data-primary="BufRead::lines function" data-type="indexterm" id="id1258"/>
+Start simply, perhaps using the <em>empty.txt</em> file and <em>file1.txt</em>.
+Try to get your program to reproduce the following output from <code>comm</code>:</p>
+
+<pre data-type="programlisting">$ cd tests/inputs/
+$ comm file1.txt empty.txt
+a
+b
+c
+d</pre>
+
+<p>Then reverse the argument order and ensure that you get the same output, but now in column 2, like this:</p>
+
+<pre data-type="programlisting">$ comm empty.txt file1.txt
+	a
+	b
+	c
+	d</pre>
+
+<p>Next, look at the output<a data-primary="BSD version" data-secondary="comm utility" data-type="indexterm" id="id1259"/> from the BSD version of <code>comm</code> using  <em>file1.txt</em> and <em>file2.txt</em>.
+The order of the lines shown in the following command is the expected output for the challenge program:</p>
+
+<pre data-type="programlisting">$ comm file1.txt file2.txt
+	B
+a
+b
+		c
+d</pre>
+
+<p>The GNU <code>comm</code> uses a different ordering for which lines to show first when they are not equal.<a data-primary="GNU version" data-secondary="comm utility" data-type="indexterm" id="id1260"/>
+Note that the line <em>B</em> is shown after <em>b</em>:</p>
+
+<pre data-type="programlisting">$ comm file1.txt file2.txt
+a
+b
+	<strong>B</strong>
+		c
+d</pre>
+
+<p>Next, consider how you will handle the <em>blank.txt</em> file that contains a single blank line.
+In the following output, notice that the blank line is shown first, then the two lines from <em>file2.txt</em>:</p>
+
+<pre data-type="programlisting">$ comm tests/inputs/blank.txt tests/inputs/file2.txt
+
+	B
+	c</pre>
+
+<p>I suggest you start by trying to read a line from each file.
+The documentation for 
+<span class="keep-together"><code>BufRead::lines</code></span> notes that it will return a <code>None</code> when it reaches the end of the file.
+Start with the empty file as one of the arguments to force your code to deal with having an uneven number of lines, where you will have to advance one of the filehandles while the other stays the same.
+When you use two nonempty files, you’ll have to consider how to read each of the files independently until you have matching lines.</p>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Stop here and finish your program using the test suite to guide you. I’ll see you on the flip side after you’ve written your solution.<a data-primary="comm (common) utility" data-secondary="writing commr version" data-startref="ix_commwrprcfiil" data-tertiary="processing the files" data-type="indexterm" id="id1261"/><a data-primary="input files" data-secondary="processing in commr" data-startref="ix_infilproc" data-type="indexterm" id="id1262"/></p>
+</div>
+</div></section>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Solution" data-type="sect1"><div class="sect1" id="id102">
+<h1>Solution</h1>
+
+<p>As always, I’ll stress that the only requirement for your code is to pass the test suite.<a data-primary="comm (common) utility" data-secondary="writing commr version" data-tertiary="solution" data-type="indexterm" id="ix_commwrsol"/>
+I doubt you will have written the same code as I did, but that’s what I find so fun and creative about coding.<a data-primary="iterators" data-secondary="creating to retrieve lines from filehandles in commr" data-type="indexterm" id="ix_itercommr"/>
+In my solution, I decided to create iterators to retrieve the lines from the filehandles.
+These iterators incorporate a closure to handle<a data-primary="case-insensitive comparisons" data-secondary="closure handling in commr" data-type="indexterm" id="id1263"/><a data-primary="closures" data-secondary="handling case-insensitive comparisons for iterators in commr" data-type="indexterm" id="id1264"/> case-insensitive comparisons:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">file1</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="n">args</code><code class="p">.</code><code class="n">file1</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">file2</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="n">args</code><code class="p">.</code><code class="n">file2</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">file1</code><code class="w"> </code><code class="o">=</code><code class="o">=</code><code class="w"> </code><code class="s">"</code><code class="s">-</code><code class="s">"</code><code class="w"> </code><code class="o">&amp;</code><code class="o">&amp;</code><code class="w"> </code><code class="n">file2</code><code class="w"> </code><code class="o">=</code><code class="o">=</code><code class="w"> </code><code class="s">"</code><code class="s">-</code><code class="s">"</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="n">bail</code><code class="o">!</code><code class="p">(</code><code class="s">r#"Both input files cannot be STDIN ("-")"#</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">case</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">|</code><code class="n">line</code><code>:</code><code> </code><code class="nb">String</code><code class="o">|</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO6-1" id="co_boston_commons_CO6-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+        </code><code class="k">if</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">insensitive</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="n">line</code><code class="p">.</code><code class="n">to_lowercase</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="n">line</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">lines1</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">open</code><code class="p">(</code><code class="n">file1</code><code class="p">)</code><code class="o">?</code><code class="p">.</code><code class="n">lines</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">map_while</code><code class="p">(</code><code class="nb">Result</code><code>::</code><code class="n">ok</code><code class="p">)</code><code class="p">.</code><code class="n">map</code><code class="p">(</code><code class="n">case</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO6-2" id="co_boston_commons_CO6-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">lines2</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">open</code><code class="p">(</code><code class="n">file2</code><code class="p">)</code><code class="o">?</code><code class="p">.</code><code class="n">lines</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">map_while</code><code class="p">(</code><code class="nb">Result</code><code>::</code><code class="n">ok</code><code class="p">)</code><code class="p">.</code><code class="n">map</code><code class="p">(</code><code class="n">case</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">line1</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">lines1</code><code class="p">.</code><code class="n">next</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO6-3" id="co_boston_commons_CO6-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="n">line2</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">lines2</code><code class="p">.</code><code class="n">next</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">line1 = {:?}</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="n">line1</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO6-4" id="co_boston_commons_CO6-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">line2 = {:?}</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="n">line2</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_boston_commons_CO6-1" id="callout_boston_commons_CO6-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Create a closure to lowercase each line of text when <code>args.insensitive</code> is <code>true</code>.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO6-2" id="callout_boston_commons_CO6-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Open the files, create iterators that remove errors, and then map the lines through the <code>case</code> closure.<a data-primary="case closure" data-type="indexterm" id="id1265"/></p></dd>
+<dt><a class="co" href="#co_boston_commons_CO6-3" id="callout_boston_commons_CO6-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>The <a href="https://oreil.ly/7yJEJ"><code>Iterator::next</code> method</a> advances an iterator and returns the next value. Here, it will retrieve the first line from a filehandle.<a data-primary="Iterator::next function" data-type="indexterm" id="id1266"/></p></dd>
+<dt><a class="co" href="#co_boston_commons_CO6-4" id="callout_boston_commons_CO6-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Print the first line from each file.</p></dd>
+</dl>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>In the preceding code, I used the function <code>Result::ok</code> rather than writing a closure <code>|line| line.ok()</code>. They both accomplish the same thing, but the first is shorter.<a data-primary="Result::ok function" data-type="indexterm" id="id1267"/></p>
+</div>
+
+<p>As I suggested, I’ll start with one of the files being empty.
+Moving to the root directory of the chapter, I ran the program with the following input files:</p>
+
+<pre data-type="programlisting">$ cd ../..
+$ cargo run -- tests/inputs/file1.txt tests/inputs/empty.txt
+line1 = Some("a")
+line2 = None</pre>
+
+<p>That led me to think about how I can move through the lines of each iterator based on the four different combinations of <code>Some(line)</code> and <code>None</code> that I can get from two iterators.<a data-primary="tuples" data-type="indexterm" id="id1268"/>
+In the following code, I place the possibilities inside a <a href="https://oreil.ly/Cmywl">tuple</a>, which is a finite heterogeneous sequence surrounded by parentheses:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">line1</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">lines1</code><code class="p">.</code><code class="n">next</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO7-1" id="co_boston_commons_CO7-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">line2</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">lines2</code><code class="p">.</code><code class="n">next</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="k">while</code><code class="w"> </code><code class="n">line1</code><code class="p">.</code><code class="n">is_some</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="o">|</code><code class="o">|</code><code class="w"> </code><code class="n">line2</code><code class="p">.</code><code class="n">is_some</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO7-2" id="co_boston_commons_CO7-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+        </code><code class="k">match</code><code class="w"> </code><code class="p">(</code><code class="o">&amp;</code><code class="n">line1</code><code class="p">,</code><code class="w"> </code><code class="o">&amp;</code><code class="n">line2</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO7-3" id="co_boston_commons_CO7-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+            </code><code class="p">(</code><code class="nb">Some</code><code class="p">(</code><code class="n">_</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">_</code><code class="p">)</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO7-4" id="co_boston_commons_CO7-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+                </code><code class="n">line1</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">lines1</code><code class="p">.</code><code class="n">next</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                </code><code class="n">line2</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">lines2</code><code class="p">.</code><code class="n">next</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w">
+</code><code class="w">            </code><code class="p">(</code><code class="nb">Some</code><code class="p">(</code><code class="n">_</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><code class="nb">None</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO7-5" id="co_boston_commons_CO7-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+                </code><code class="n">line1</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">lines1</code><code class="p">.</code><code class="n">next</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w">
+</code><code class="w">            </code><code class="p">(</code><code class="nb">None</code><code class="p">,</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">_</code><code class="p">)</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO7-6" id="co_boston_commons_CO7-6"><img alt="6" src="assets/6.png"/></a><code class="w">
+                </code><code class="n">line2</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">lines2</code><code class="p">.</code><code class="n">next</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w">
+</code><code class="w">            </code><code class="n">_</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO7-7" id="co_boston_commons_CO7-7"><img alt="7" src="assets/7.png"/></a><code class="w">
+        </code><code class="p">}</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_boston_commons_CO7-1" id="callout_boston_commons_CO7-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Make the line variables mutable.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO7-2" id="callout_boston_commons_CO7-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Execute the loop as long as one of the filehandles produces a line.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO7-3" id="callout_boston_commons_CO7-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Compare all possible combinations of the two line variables for two variants.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO7-4" id="callout_boston_commons_CO7-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>When both are <code>Some</code> values, use <code>Iterator::next</code> to retrieve the next line from both filehandles.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO7-5" id="callout_boston_commons_CO7-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>When there is only the first value, ask for the next line from the first filehandle.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO7-6" id="callout_boston_commons_CO7-6"><img alt="6" src="assets/6.png"/></a></dt>
+<dd><p>Do the same for the second filehandle.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO7-7" id="callout_boston_commons_CO7-7"><img alt="7" src="assets/7.png"/></a></dt>
+<dd><p>Do nothing for any other condition.</p></dd>
+</dl>
+
+<p>When I have only one value from the first or second file, I should print the value in the first or second column, respectively.<a data-primary="iterators" data-secondary="creating to retrieve lines from filehandles in commr" data-startref="ix_itercommr" data-type="indexterm" id="id1269"/>
+When I have two values from the files and they are the same, I should print a value in column 3.
+When I have two values and the first value is less than the second, I should print the first value in column 1; otherwise, I should print the second value in column 2.
+To understand this last point, 
+<span class="keep-together">consider</span> the following two input files, which I’ll place side by side so you can imagine how the code will read the lines:</p>
+
+<pre data-type="programlisting">$ cat tests/inputs/file1.txt          $ cat tests/inputs/file2.txt
+a                                     B
+b                                     c
+c
+d</pre>
+
+<p>To help you see the output from BSD <code>comm</code>, I will pipe <a data-primary="sed utility" data-type="indexterm" id="id1270"/>the output into <code>sed</code> (<em>stream editor</em>) to replace each tab character (<code>\t</code>) with the string <code>---&gt;</code> to make it clear which columns are being printed:</p>
+
+<pre data-type="programlisting">$ comm tests/inputs/file1.txt tests/inputs/file2.txt | sed "s/\t/---&gt;/g" <a class="co" href="#callout_boston_commons_CO8-1" id="co_boston_commons_CO8-1"><img alt="1" src="assets/1.png"/></a>
+---&gt;B
+a
+b
+---&gt;---&gt;c
+d</pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_boston_commons_CO8-1" id="callout_boston_commons_CO8-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <code>sed</code> command <code>s//</code> will <em>substitute</em> values, replacing the string between the first pair of slashes with the string between the second pair. The final <code>g</code> is the <em>global</em> flag to substitute every occurrence.<a data-primary="sed utility" data-secondary="s// substitution command" data-type="indexterm" id="id1271"/></p></dd>
+</dl>
+
+<p>Now imagine your code reads the first line from each input and has <em>a</em> from <em>file1.txt</em> and <em>B</em> from <em>file2.txt</em>.
+They are not equal, so the question is which to print.
+The goal is to mimic BSD <code>comm</code>, so I know that the <em>B</em> should come first and be printed in the second column.
+When I compare <em>a</em> and <em>B</em>, I find that <em>B</em> is less than <em>a</em> when they are ordered by their <em>code point</em>, or numerical value.<a data-primary="code point, ordering by" data-type="indexterm" id="id1272"/>
+To help you see this, I’ve included a program in <em>util/ascii</em> that will show you a range of the ASCII table starting at the first printable character.<a data-primary="ASCII" data-secondary="range of ASCII table starting at first printable character" data-type="indexterm" id="id1273"/>
+Note that <em>B</em> has a value of 66 while <em>a</em> is 97:</p>
+
+<pre class="widows_orphans_33" data-type="programlisting"> 33: !	 52: 4	 71: G	 90: Z	109: m
+ 34: "	 53: 5	 72: H	 91: [	110: n
+ 35: #	 54: 6	 73: I	 92: \	111: o
+ 36: $	 55: 7	 74: J	 93: ]	112: p
+ 37: %	 56: 8	 75: K	 94: ^	113: q
+ 38: &amp;	 57: 9	 76: L	 95: _	114: r
+ 39: '	 58: :	 77: M	 96: `	115: s
+ 40: (	 59: ;	 78: N	 97: a	116: t
+ 41: )	 60: &lt;	 79: O	 98: b	117: u
+ 42: *	 61: =	 80: P	 99: c	118: v
+ 43: +	 62: &gt;	 81: Q	100: d	119: w
+ 44: ,	 63: ?	 82: R	101: e	120: x
+ 45: -	 64: @	 83: S	102: f	121: y
+ 46: .	 65: A	 84: T	103: g	122: z
+ 47: /	 66: B	 85: U	104: h	123: {
+ 48: 0	 67: C	 86: V	105: i	124: |
+ 49: 1	 68: D	 87: W	106: j	125: }
+ 50: 2	 69: E	 88: X	107: k	126: ~
+ 51: 3	 70: F	 89: Y	108: l	127: DEL</pre>
+
+<p>To mimic BSD <code>comm</code>, I should print the <em>lower</em> value (<em>B</em>) first and draw another value from that file for the next iteration; the GNU version does the opposite.
+In the following code, I’m concerned only with the ordering, and I’ll handle the indentation in a moment.<a data-primary="std::cmp::Ordering::*" data-type="indexterm" id="id1274"/>
+Note that you should add <code>use std::cmp::Ordering::*</code> to your imports for this code:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">line1</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">lines1</code><code class="p">.</code><code class="n">next</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">line2</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">lines2</code><code class="p">.</code><code class="n">next</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="k">while</code><code class="w"> </code><code class="n">line1</code><code class="p">.</code><code class="n">is_some</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="o">|</code><code class="o">|</code><code class="w"> </code><code class="n">line2</code><code class="p">.</code><code class="n">is_some</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="k">match</code><code class="w"> </code><code class="p">(</code><code class="o">&amp;</code><code class="n">line1</code><code class="p">,</code><code class="w"> </code><code class="o">&amp;</code><code class="n">line2</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="p">(</code><code class="nb">Some</code><code class="p">(</code><code class="n">val1</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">val2</code><code class="p">)</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="k">match</code><code class="w"> </code><code class="n">val1</code><code class="p">.</code><code class="n">cmp</code><code class="p">(</code><code class="n">val2</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO9-1" id="co_boston_commons_CO9-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+                </code><code class="n">Equal</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO9-2" id="co_boston_commons_CO9-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+                    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{val1}</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                    </code><code class="n">line1</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">lines1</code><code class="p">.</code><code class="n">next</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                    </code><code class="n">line2</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">lines2</code><code class="p">.</code><code class="n">next</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                </code><code class="p">}</code><code class="w">
+</code><code class="w">                </code><code class="n">Less</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO9-3" id="co_boston_commons_CO9-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+                    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{val1}</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                    </code><code class="n">line1</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">lines1</code><code class="p">.</code><code class="n">next</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                </code><code class="p">}</code><code class="w">
+</code><code class="w">                </code><code class="n">Greater</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO9-4" id="co_boston_commons_CO9-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+                    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{val2}</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                    </code><code class="n">line2</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">lines2</code><code class="p">.</code><code class="n">next</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                </code><code class="p">}</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="p">(</code><code class="nb">Some</code><code class="p">(</code><code class="n">val1</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><code class="nb">None</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{val1}</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO9-5" id="co_boston_commons_CO9-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+                </code><code class="n">line1</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">lines1</code><code class="p">.</code><code class="n">next</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w">
+</code><code class="w">            </code><code class="p">(</code><code class="nb">None</code><code class="p">,</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">val2</code><code class="p">)</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{val2}</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO9-6" id="co_boston_commons_CO9-6"><img alt="6" src="assets/6.png"/></a><code class="w">
+                </code><code class="n">line2</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">lines2</code><code class="p">.</code><code class="n">next</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w">
+</code><code class="w">            </code><code class="n">_</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_boston_commons_CO9-1" id="callout_boston_commons_CO9-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Use <a href="https://oreil.ly/cTw3P"><code>Ord::cmp</code></a> to compare the first value to the second. This will return an <code>enum</code> variant of<a data-primary="Ord::cmp function" data-type="indexterm" id="id1275"/> <a href="https://oreil.ly/ytvJ9"><code>std::cmp::Ordering</code></a>.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO9-2" id="callout_boston_commons_CO9-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>When the two values are equal, print the first and get values from each of the files.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO9-3" id="callout_boston_commons_CO9-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>When the value from the first file is less than the value from the second file, print the first and request the next value from the first file.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO9-4" id="callout_boston_commons_CO9-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>When the first value is greater than the second, print the value from the second file and request the next value from the second file.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO9-5" id="callout_boston_commons_CO9-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>When there is a value only from the first file, print it and continue requesting values from the first file.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO9-6" id="callout_boston_commons_CO9-6"><img alt="6" src="assets/6.png"/></a></dt>
+<dd><p>When there is a value only from the second file, print it and continue requesting values from the second file.</p></dd>
+</dl>
+
+<p>If I run this code using a nonempty file and an empty file, it works:</p>
+
+<pre data-type="programlisting">$ cargo run -- tests/inputs/file1.txt tests/inputs/empty.txt
+a
+b
+c
+d</pre>
+
+<p>If I use <em>file1.txt</em> and <em>file2.txt</em>, it’s not far from the expected output:</p>
+
+<pre data-type="programlisting">$ cargo run -- tests/inputs/file1.txt tests/inputs/file2.txt
+B
+a
+b
+c
+d</pre>
+
+<p>I decided to create an <code>enum</code> called <code>Column</code> to represent the column where the value should be printed.<a data-primary="Column enum" data-type="indexterm" id="id1276"/>
+Each variant holds a <code>&amp;str</code>, which requires a lifetime annotation.
+You can place the following at the top of <em>src/main.rs</em>, near your <code>Args</code> declaration.<a data-primary="lifetime specifiers for variables" data-secondary="&amp;str variable" data-type="indexterm" id="id1277"/>
+Be sure to add <code>use crate::Column::*</code> to<a data-primary="crate::Column::*" data-type="indexterm" id="id1278"/> your import so you can reference <code>Col1</code> instead of 
+<span class="keep-together"><code>Column::Col1</code>:</span></p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">enum</code> <code class="nc">Column</code><code class="o">&lt;'</code><code class="na">a</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">Col1</code><code class="p">(</code><code class="o">&amp;'</code><code class="na">a</code><code class="w"> </code><code class="kt">str</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="n">Col2</code><code class="p">(</code><code class="o">&amp;'</code><code class="na">a</code><code class="w"> </code><code class="kt">str</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="n">Col3</code><code class="p">(</code><code class="o">&amp;'</code><code class="na">a</code><code class="w"> </code><code class="kt">str</code><code class="p">),</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p class="pagebreak-before">Next, I created a closure called <code>print</code> to handle the printing of the output.
+The following<a data-primary="print closure" data-type="indexterm" id="id1279"/> code belongs in the <code>run</code> function:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">print</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">|</code><code class="n">col</code><code>:</code><code> </code><code class="nc">Column</code><code class="o">|</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">columns</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="p">]</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO10-1" id="co_boston_commons_CO10-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+        </code><code class="k">match</code><code class="w"> </code><code class="n">col</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="n">Col1</code><code class="p">(</code><code class="n">val</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="k">if</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">show_col1</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO10-2" id="co_boston_commons_CO10-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+                    </code><code class="n">columns</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="n">val</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                </code><code class="p">}</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w">
+</code><code class="w">            </code><code class="n">Col2</code><code class="p">(</code><code class="n">val</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="k">if</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">show_col2</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO10-3" id="co_boston_commons_CO10-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+                    </code><code class="k">if</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">show_col1</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                        </code><code class="n">columns</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="s">"</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                    </code><code class="p">}</code><code class="w">
+</code><code class="w">                    </code><code class="n">columns</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="n">val</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                </code><code class="p">}</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w">
+</code><code class="w">            </code><code class="n">Col3</code><code class="p">(</code><code class="n">val</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="k">if</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">show_col3</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO10-4" id="co_boston_commons_CO10-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+                    </code><code class="k">if</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">show_col1</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                        </code><code class="n">columns</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="s">"</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                    </code><code class="p">}</code><code class="w">
+</code><code class="w">                    </code><code class="k">if</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">show_col2</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                        </code><code class="n">columns</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="s">"</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                    </code><code class="p">}</code><code class="w">
+</code><code class="w">                    </code><code class="n">columns</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="n">val</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                </code><code class="p">}</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="o">!</code><code class="n">columns</code><code class="p">.</code><code class="n">is_empty</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO10-5" id="co_boston_commons_CO10-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+            </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{}</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="n">columns</code><code class="p">.</code><code class="n">join</code><code class="p">(</code><code class="o">&amp;</code><code class="n">args</code><code class="p">.</code><code class="n">delimiter</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="p">;</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_boston_commons_CO10-1" id="callout_boston_commons_CO10-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Create a mutable vector to hold the output columns.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO10-2" id="callout_boston_commons_CO10-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Given text for column 1, add the value only if the column is shown.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO10-3" id="callout_boston_commons_CO10-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Given text for column 2, add the values for the two columns only if they are shown.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO10-4" id="callout_boston_commons_CO10-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Given text for column 3, add the values for the three columns only if they are shown.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO10-5" id="callout_boston_commons_CO10-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>If there are columns to print, join them on the output delimiter.</p></dd>
+</dl>
+<div data-type="tip"><h6>Tip</h6>
+<p>Originally I used the field <code>suppress_col1</code>, which had me writing <code>if !args.suppress_col1</code>, a double negative that is much harder to comprehend. In general, I would recommend using positive names like <em>do_something</em> rather than <em>dont_do_something</em>.</p>
+</div>
+
+<p>Here is how I incorporate the <code>print</code> closure:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">line1</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">lines1</code><code class="p">.</code><code class="n">next</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO11-1" id="co_boston_commons_CO11-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">line2</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">lines2</code><code class="p">.</code><code class="n">next</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="k">while</code><code class="w"> </code><code class="n">line1</code><code class="p">.</code><code class="n">is_some</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="o">|</code><code class="o">|</code><code class="w"> </code><code class="n">line2</code><code class="p">.</code><code class="n">is_some</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="k">match</code><code class="w"> </code><code class="p">(</code><code class="o">&amp;</code><code class="n">line1</code><code class="p">,</code><code class="w"> </code><code class="o">&amp;</code><code class="n">line2</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="p">(</code><code class="nb">Some</code><code class="p">(</code><code class="n">val1</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">val2</code><code class="p">)</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="k">match</code><code class="w"> </code><code class="n">val1</code><code class="p">.</code><code class="n">cmp</code><code class="p">(</code><code class="n">val2</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="n">Equal</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                    </code><code class="n">print</code><code class="p">(</code><code class="n">Col3</code><code class="p">(</code><code class="n">val1</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO11-2" id="co_boston_commons_CO11-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+                    </code><code class="n">line1</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">lines1</code><code class="p">.</code><code class="n">next</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                    </code><code class="n">line2</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">lines2</code><code class="p">.</code><code class="n">next</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                </code><code class="p">}</code><code class="w">
+</code><code class="w">                </code><code class="n">Less</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                    </code><code class="n">print</code><code class="p">(</code><code class="n">Col1</code><code class="p">(</code><code class="n">val1</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO11-3" id="co_boston_commons_CO11-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+                    </code><code class="n">line1</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">lines1</code><code class="p">.</code><code class="n">next</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                </code><code class="p">}</code><code class="w">
+</code><code class="w">                </code><code class="n">Greater</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                    </code><code class="n">print</code><code class="p">(</code><code class="n">Col2</code><code class="p">(</code><code class="n">val2</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO11-4" id="co_boston_commons_CO11-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+                    </code><code class="n">line2</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">lines2</code><code class="p">.</code><code class="n">next</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                </code><code class="p">}</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="p">(</code><code class="nb">Some</code><code class="p">(</code><code class="n">val1</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><code class="nb">None</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="n">print</code><code class="p">(</code><code class="n">Col1</code><code class="p">(</code><code class="n">val1</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO11-5" id="co_boston_commons_CO11-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+                </code><code class="n">line1</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">lines1</code><code class="p">.</code><code class="n">next</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w">
+</code><code class="w">            </code><code class="p">(</code><code class="nb">None</code><code class="p">,</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">val2</code><code class="p">)</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="n">print</code><code class="p">(</code><code class="n">Col2</code><code class="p">(</code><code class="n">val2</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_boston_commons_CO11-6" id="co_boston_commons_CO11-6"><img alt="6" src="assets/6.png"/></a><code class="w">
+                </code><code class="n">line2</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">lines2</code><code class="p">.</code><code class="n">next</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w">
+</code><code class="w">            </code><code class="n">_</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_boston_commons_CO11-1" id="callout_boston_commons_CO11-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Draw the initial values from the two input files.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO11-2" id="callout_boston_commons_CO11-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>When the values are the same, print one of them in column 3.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO11-3" id="callout_boston_commons_CO11-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>When the first value is less than the second, print the first value in column 1.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO11-4" id="callout_boston_commons_CO11-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>When the first value is greater than the second, print the second value in col­umn 2.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO11-5" id="callout_boston_commons_CO11-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>When there is a value only from the first file, print it in column 1.</p></dd>
+<dt><a class="co" href="#co_boston_commons_CO11-6" id="callout_boston_commons_CO11-6"><img alt="6" src="assets/6.png"/></a></dt>
+<dd><p>When there is a value only from the second file, print it in column 2.</p></dd>
+</dl>
+
+<p>I like having the option to<a data-primary="delimiters" data-secondary="changing tab output delimiter in commr" data-type="indexterm" id="id1280"/> change the output delimiter from a tab to something more visible:</p>
+
+<pre data-type="programlisting">$ cargo run -- -d="---&gt;" tests/inputs/file1.txt tests/inputs/file2.txt
+---&gt;B
+a
+b
+---&gt;---&gt;c
+d</pre>
+
+<p>With these changes, all the tests pass.<a data-primary="comm (common) utility" data-secondary="writing commr version" data-startref="ix_commwrsol" data-tertiary="solution" data-type="indexterm" id="id1281"/></p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Going Further" data-type="sect1"><div class="sect1" id="id158">
+<h1>Going Further</h1>
+
+<p>The version I presented mimics the BSD version of <code>comm</code>.
+Alter the program to match the GNU output, and also add the additional options from that version.<a data-primary="comm (common) utility" data-secondary="writing commr version" data-tertiary="going further" data-type="indexterm" id="id1282"/>
+Be sure you update the test suite and test files to verify that your program works exactly like the GNU version.</p>
+
+<p>Change the column suppression flags to selection flags, so <code>-12</code> would mean <em>show the first two columns only</em>.
+Without any column selections, all the columns should be shown.
+This is similar to how the <code>wcr</code> program works, where the default is to show all the columns for lines, words, and characters, and the selection of any of those columns suppresses those not selected.
+Update the tests to verify that your program works correctly.</p>
+
+<p>As I noted in the chapter introduction, <code>comm</code> performs basic join operations on two files, which is similar to the <code>join</code> program.
+Run <strong><code>man join</code></strong> to read the manual page for that program, and use your experience from writing <code>commr</code> to write a Rust version.
+I would suggest the ingenious name <code>joinr</code>.
+Generate input files, and then use <code>join</code> to create the output files you can use to verify that your version maintains fidelity to the original tool.</p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Summary" data-type="sect1"><div class="sect1" id="id103">
+<h1>Summary</h1>
+
+<p>Until I wrote this version of <code>comm</code>, I had to look at the manual page every time to remember what the flags meant.
+I also imagined it to be a very complicated program, but I find the solution quite simple and elegant.
+Consider what you learned:</p>
+
+<ul>
+<li>
+<p>You can choose when to advance any iterator by using <code>Iterator::next</code>. For instance, when used with a filehandle, you can manually select the next line.</p>
+</li>
+<li>
+<p>You can use <code>match</code> on combinations of possibilities by grouping them into a tuple.</p>
+</li>
+<li>
+<p>You can use the <code>cmp</code> method of the <code>Ord</code> trait to compare one value to another. The result is a variant of <code>std::cmp::Ordering</code>.</p>
+</li>
+<li>
+<p>You can create an <code>enum</code> called <code>Column</code> where the variants can hold a <code>&amp;str</code> value as long as you include lifetime annotations.<a data-primary="comm (common) utility" data-startref="ix_comm" data-type="indexterm" id="id1283"/></p>
+</li>
+</ul>
+
+<p>In the next chapter, you’ll learn how to move to a line or byte position in a file.</p>
+</div></section>
+</div></section></body></html>

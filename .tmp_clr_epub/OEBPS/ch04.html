@@ -1,0 +1,1024 @@
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Head Aches</title><link href="epub.css" rel="stylesheet" type="text/css"/>
+<meta content="urn:uuid:e80a1ec8-ed8e-40f7-ba3d-26a647960341" name="Adept.expected.resource"/></head><body data-type="book"><section data-pdf-bookmark="Chapter 4. Head Aches" data-type="chapter" epub:type="chapter"><div class="chapter" id="ch04">
+<h1><span class="label">Chapter 4. </span>Head Aches</h1>
+
+<blockquote>
+<p>
+Stand on your own head for a change / Give me some skin to call my own
+</p>
+<p data-type="attribution">
+They Might Be Giants, “Stand on Your Own Head” (1988)
+</p>
+</blockquote>
+
+<p>The challenge in this chapter is to implement the <code>head</code> program, which will print the first few lines or bytes of one or more files.<a data-primary="head program" data-type="indexterm" id="ix_head"/>
+This is a good way to peek at the contents of a regular text file and is often a much better choice than <code>cat</code>.<a data-primary="cat (concatenate) command" data-secondary="head command versus" data-type="indexterm" id="id567"/><a data-primary="head program" data-secondary="cat versus" data-type="indexterm" id="id568"/>
+When faced with a directory of something like output files from some process, using <code>head</code> can help you quickly scan for potential problems.
+It’s particularly useful when dealing with extremely large files, as it will only read the first few bytes or lines of a file (as opposed to <code>cat</code>, which will always read the entire file).</p>
+
+<p>In this chapter, you will learn how to do the following:</p>
+
+<ul>
+<li>
+<p>Create optional command-line arguments that accept numeric values</p>
+</li>
+<li>
+<p>Convert between types using <code>as</code></p>
+</li>
+<li>
+<p>Use <code>take</code> on an iterator or a filehandle</p>
+</li>
+<li>
+<p>Preserve line endings while reading a filehandle</p>
+</li>
+<li>
+<p>Read bytes versus characters from a filehandle</p>
+</li>
+<li>
+<p>Use the turbofish operator</p>
+</li>
+</ul>
+
+
+
+
+
+
+<section data-pdf-bookmark="How head Works" data-type="sect1"><div class="sect1" id="id150">
+<h1>How head Works</h1>
+
+<p>I’ll start with an overview of <code>head</code> so you know what’s expected of your program.<a data-primary="head program" data-secondary="how it works" data-type="indexterm" id="ix_headhow"/>
+There are many implementations of the original AT&amp;T Unix operating system, such as Berkeley <a data-primary="BSD version" data-secondary="head program" data-type="indexterm" id="id569"/>Standard Distribution (BSD), SunOS/Solaris, HP-UX, and Linux.
+Most of these operating systems have some version of a <code>head</code> program that will default to showing the first 10 lines of 1 or more files.
+Most will probably have options <code>-n</code> to control the number of lines shown and <code>-c</code> to instead show some number of bytes.
+The BSD version has only these two options, which I can see via <strong><code>man head</code></strong>:</p>
+
+<pre data-type="programlisting">HEAD(1)                   BSD General Commands Manual                  HEAD(1)
+
+NAME
+     head -- display first lines of a file
+
+SYNOPSIS
+     head [-n count | -c bytes] [file ...]
+
+DESCRIPTION
+     This filter displays the first count lines or bytes of each of the speci-
+     fied files, or of the standard input if no files are specified.  If count
+     is omitted it defaults to 10.
+
+     If more than a single file is specified, each file is preceded by a
+     header consisting of the string ''==&gt; XXX &lt;=='' where ''XXX'' is the name
+     of the file.
+
+EXIT STATUS
+     The head utility exits 0 on success, and &gt;0 if an error occurs.
+
+SEE ALSO
+     tail(1)
+
+HISTORY
+     The head command appeared in PWB UNIX.
+
+BSD                              June 6, 1993                              BSD</pre>
+
+<p>With the GNU <a data-primary="GNU version" data-secondary="head program" data-type="indexterm" id="id570"/>version, I can run <strong><code>head --help</code></strong> to read the usage:</p>
+
+<pre data-type="programlisting">Usage: head [OPTION]... [FILE]...
+Print the first 10 lines of each FILE to standard output.
+With more than one FILE, precede each with a header giving the file name.
+With no FILE, or when FILE is -, read standard input.
+
+Mandatory arguments to long options are mandatory for short options too.
+  -c, --bytes=[-]K         print the first K bytes of each file;
+                             with the leading '-', print all but the last
+                             K bytes of each file
+  -n, --lines=[-]K         print the first K lines instead of the first 10;
+                             with the leading '-', print all but the last
+                             K lines of each file
+  -q, --quiet, --silent    never print headers giving file names
+  -v, --verbose            always print headers giving file names
+      --help     display this help and exit
+      --version  output version information and exit
+
+K may have a multiplier suffix:
+b 512, kB 1000, K 1024, MB 1000*1000, M 1024*1024,
+GB 1000*1000*1000, G 1024*1024*1024, and so on for T, P, E, Z, Y.</pre>
+
+<p>Note that the GNU version can specify negative numbers for <code>-n</code> and <code>-c</code> and with suffixes like <code>K</code>, <code>M</code>, etc., which the challenge program will not implement.
+In both the BSD and GNU versions, the files are optional positional arguments that will read <code>STDIN</code> by default or when a filename is a dash.</p>
+
+<p>To demonstrate how <code>head</code> works, I’ll use the files found in <em>04_headr/tests/inputs</em>:</p>
+
+<ul>
+<li>
+<p><em>empty.txt</em>: an empty file</p>
+</li>
+<li>
+<p><em>one.txt</em>: a file with one line of text</p>
+</li>
+<li>
+<p><em>two.txt</em>: a file with two lines of text</p>
+</li>
+<li>
+<p><em>three.txt</em>: a file with three lines of text and Windows line endings</p>
+</li>
+<li>
+<p><em>twelve.txt</em>: a file with 12 lines of text</p>
+</li>
+</ul>
+
+<p>Given an empty file, there is no output, which you can verify with <strong><code>head tests/inputs/empty.txt</code></strong>.
+As mentioned, <code>head</code> will print the first 10 lines of a file by default:</p>
+
+<pre data-type="programlisting">$ head tests/inputs/twelve.txt
+one
+two
+three
+four
+five
+six
+seven
+eight
+nine
+ten</pre>
+
+<p>The <code>-n</code> option allows you to control the number of lines that are shown.
+For instance, I can choose to show only the first two lines with the following command:</p>
+
+<pre data-type="programlisting">$ head -n 2 tests/inputs/twelve.txt
+one
+two</pre>
+
+<p>The <code>-c</code> option shows only the given number of bytes from a file.
+For instance, I can show just the first two bytes:</p>
+
+<pre data-type="programlisting">$ head -c 2 tests/inputs/twelve.txt
+on</pre>
+
+<p>Oddly, the GNU version will allow you to provide both <code>-n</code> and <code>-c</code> and defaults to showing bytes.
+The BSD version will reject both arguments:</p>
+
+<pre data-type="programlisting">$ head -n 1 -c 2 tests/inputs/one.txt
+head: can't combine line and byte counts</pre>
+
+<p>Any value for <code>-n</code> or <code>-c</code> that is not a positive integer will generate an error that will halt the program, and the error message will include the illegal value:</p>
+
+<pre data-type="programlisting">$ head -n 0 tests/inputs/one.txt
+head: illegal line count -- 0
+$ head -c foo tests/inputs/one.txt
+head: illegal byte count -- foo</pre>
+
+<p>When there are multiple arguments, <code>head</code> adds a header and inserts a blank line between each file.
+Notice in the following output that the first character in <em>tests​/⁠inputs/one.txt</em> is an <em>Ö</em>, a silly multibyte character I inserted to force the program to discern between bytes and characters:</p>
+
+<pre data-type="programlisting">$ head -n 1 tests/inputs/*.txt
+==&gt; tests/inputs/empty.txt &lt;==
+
+==&gt; tests/inputs/one.txt &lt;==
+Öne line, four words.
+
+==&gt; tests/inputs/three.txt &lt;==
+Three
+
+==&gt; tests/inputs/twelve.txt &lt;==
+one
+
+==&gt; tests/inputs/two.txt &lt;==
+Two lines.</pre>
+
+<p>With no file arguments, <code>head</code> will read from <code>STDIN</code>:</p>
+
+<pre data-type="programlisting">$ cat tests/inputs/twelve.txt | head -n 2
+one
+two</pre>
+
+<p>As with <code>cat</code> in <a data-type="xref" href="ch03.html#ch03">Chapter 3</a>, any nonexistent or unreadable file is skipped and a warning is printed to <code>STDERR</code>.
+In the following command, I will use <em>blargh</em> as a nonexistent file and will create an unreadable file called <em>cant-touch-this</em>:</p>
+
+<pre data-type="programlisting">$ touch cant-touch-this &amp;&amp; chmod 000 cant-touch-this
+$ head blargh cant-touch-this tests/inputs/one.txt
+<strong>head: blargh: No such file or directory</strong>
+<strong>head: cant-touch-this: Permission denied</strong>
+==&gt; tests/inputs/one.txt &lt;==
+Öne line, four words.</pre>
+
+<p>This is as much as this chapter’s challenge program will need to implement.<a data-primary="head program" data-secondary="how it works" data-startref="ix_headhow" data-type="indexterm" id="id571"/></p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Getting Started" data-type="sect1"><div class="sect1" id="id38">
+<h1>Getting Started</h1>
+
+<p>You might have anticipated that the program I want you to write will be called <code>headr</code> (pronounced <em>head-er</em>).<a data-primary="head program" data-secondary="writing headr version" data-tertiary="getting started" data-type="indexterm" id="ix_headwrstrt"/>
+Start by running <strong><code>cargo new headr</code></strong>, then add the following dependencies to your <em>Cargo.toml</em>:</p>
+
+<pre data-code-language="toml" data-type="programlisting"><code class="k">[dependencies]</code><code class="w"/>
+<code class="n">anyhow</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"1.0.79"</code><code class="w"/>
+<code class="n">clap</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">version</code><code class="w"> </code><code class="p">=</code><code class="w"> </code><code class="s2">"4.5.0"</code><code class="p">,</code><code class="w"> </code><code class="n">features</code><code class="w"> </code><code class="p">=</code><code class="w"> </code><code class="p">[</code><code class="s2">"derive"</code><code class="p">]</code><code class="w"> </code><code class="p">}</code><code class="w"/>
+
+<code class="k">[dev-dependencies]</code><code class="w"/>
+<code class="n">assert_cmd</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"2.0.13"</code><code class="w"/>
+<code class="n">predicates</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"3.0.4"</code><code class="w"/>
+<code class="n">pretty_assertions</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"1.4.0"</code><code class="w"/>
+<code class="n">rand</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"0.8.5"</code><code class="w"/></pre>
+
+<p>Copy my <em>04_headr/tests</em> directory into your project directory, and then run <strong><code>cargo test</code></strong>.
+All the tests should fail.
+Your mission, should you choose to accept it, is to write a program that will pass these tests.
+I propose you begin <em>src/main.rs</em> with the following <a data-primary="Args struct" data-secondary="headr program" data-type="indexterm" id="id572"/>code to represent the program’s three parameters with an <code>Args</code> struct:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[</code><code class="cp">derive(Debug)</code><code class="cp">]</code><code class="w">
+</code><code class="k">struct</code><code> </code><code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="n">files</code><code>:</code><code> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO1-1" id="co_head_aches_CO1-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="n">lines</code><code>:</code><code> </code><code class="kt">u64</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO1-2" id="co_head_aches_CO1-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="n">bytes</code><code>:</code><code> </code><code class="nb">Option</code><code class="o">&lt;</code><code class="kt">u64</code><code class="o">&gt;</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO1-3" id="co_head_aches_CO1-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_head_aches_CO1-1" id="callout_head_aches_CO1-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p><code>files</code> will be a vector of strings.<a data-primary="files argument" data-type="indexterm" id="id573"/></p></dd>
+<dt><a class="co" href="#co_head_aches_CO1-2" id="callout_head_aches_CO1-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The number of <code>lines</code> to print will be of the type <a href="https://oreil.ly/fY3qc"><code>u64</code></a>.<a data-primary="lines argument" data-type="indexterm" id="id574"/></p></dd>
+<dt><a class="co" href="#co_head_aches_CO1-3" id="callout_head_aches_CO1-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p><code>bytes</code> will be an optional <code>u64</code>.<a data-primary="bytes" data-secondary="bytes argument in headr" data-type="indexterm" id="id575"/></p></dd>
+</dl>
+<div data-type="tip"><h6>Tip</h6>
+<p>All the command-line arguments for this program are optional because <code>files</code> should default to a dash (<code>-</code>), <code>lines</code> will default to <code>10</code>, and <code>bytes</code> can be left out. <a data-primary="- (dash or minus sign)" data-secondary="files argument defaulting to in headr" data-type="indexterm" id="id576"/><a data-primary="optional arguments" data-secondary="files, lines, and bytes" data-type="indexterm" id="id577"/></p>
+</div>
+
+<p>The primitive <code>u64</code> is an unsigned integer that uses 8 bytes of memory and is similar to a <code>usize</code>, which is a pointer-sized unsigned integer type with a size that varies from 4 bytes on a 32-bit operating system to 8 bytes on a 64-bit system.<a data-primary="u64 type" data-type="indexterm" id="id578"/><a data-primary="usize type" data-type="indexterm" id="id579"/><a data-primary="integers" data-secondary="types in Rust" data-type="indexterm" id="id580"/>
+Rust also has an <code>isize</code> type, which is a pointer-sized signed integer that you would need to represent negative numbers as the GNU version does.<a data-primary="isize type" data-type="indexterm" id="id581"/><a data-primary="signed integers" data-type="indexterm" id="id582"/><a data-primary="unsigned integers" data-type="indexterm" id="id583"/>
+Since you only want to store positive numbers à la the BSD version, you can stick with an unsigned type.
+Note the other Rust types of <code>u32</code>/<code>i32</code> (unsigned/signed 32-bit integer) and <code>u64</code>/<code>i64</code> (unsigned/signed 64-bit integer) if you want finer control over how large these values can be.</p>
+
+<p>The <code>lines</code> and <code>bytes</code> parameters will be used in functions that expect the types <code>usize</code> and <code>u64</code>, so later we’ll discuss how to convert between these types.
+Your program<a data-primary="Option type" data-type="indexterm" id="id584"/> should use <code>10</code> as the default value for <code>lines</code>, but <code>bytes</code> will be an <a href="https://oreil.ly/WkWZs"><code>Option</code></a>, which I first introduced in <a data-type="xref" href="ch02.html#ch02">Chapter 2</a>.
+This means that <code>bytes</code> will either be <code>Some&lt;u64&gt;</code> if the user provides a valid value or <code>None</code> if they do not.<a data-primary="Some type" data-type="indexterm" id="id585"/><a data-primary="None type" data-type="indexterm" id="id586"/></p>
+
+<p>I challenge you to parse the command-line arguments into this struct however you like.
+To use the derive pattern,<a data-primary="derive pattern" data-secondary="using headr program" data-type="indexterm" id="id587"/> annotate the preceding <code>Args</code> accordingly.<a data-primary="builder pattern" data-secondary="using headr program" data-type="indexterm" id="id588"/>
+If you prefer to follow the builder pattern, consider writing a <code>get_args</code> function with the following outline:<a data-primary="get_args function" data-type="indexterm" id="id589"/></p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">get_args</code><code class="p">()</code><code class="w"> </code>-&gt; <code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">matches</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code>::<code class="n">new</code><code class="p">(</code><code class="s">"headr"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">version</code><code class="p">(</code><code class="s">"0.1.0"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">author</code><code class="p">(</code><code class="s">"Ken Youens-Clark &lt;kyclark@gmail.com&gt;"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">about</code><code class="p">(</code><code class="s">"Rust version of `head`"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="c1">// What goes here?</code>
+<code class="w">        </code><code class="p">.</code><code class="n">get_matches</code><code class="p">();</code><code class="w"/>
+
+<code class="w">    </code><code class="n">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">files</code>: <code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">        </code><code class="n">lines</code>: <code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">        </code><code class="n">bytes</code>: <code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Update <code>main</code> to parse and pretty-print the arguments:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">args</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Args</code>::<code class="n">parse</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{:#?}"</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>See if <a data-primary="Args::parse function" data-type="indexterm" id="id590"/><a data-primary="println! macro" data-type="indexterm" id="id591"/>you can get your program to print a usage like the following.<a data-primary="GNU version" data-secondary="head program" data-type="indexterm" id="id592"/>
+Note that I use the short and long names from the GNU version:</p>
+
+<pre data-type="programlisting">$ cargo run -- -h
+Rust version of `head`
+
+Usage: headr [OPTIONS] [FILE]...
+
+Arguments:
+  [FILE]...  Input file(s) [default: -]
+
+Options:
+  -n, --lines &lt;LINES&gt;  Number of lines [default: 10]
+  -c, --bytes &lt;BYTES&gt;  Number of bytes
+  -h, --help           Print help
+  -V, --version        Print version</pre>
+
+<p>Run the program with no inputs and verify the defaults are correctly set:</p>
+
+<pre data-type="programlisting">$ cargo run
+Args {
+    files: [
+        "-", <a class="co" href="#callout_head_aches_CO2-1" id="co_head_aches_CO2-1"><img alt="1" src="assets/1.png"/></a>
+    ],
+    lines: 10, <a class="co" href="#callout_head_aches_CO2-2" id="co_head_aches_CO2-2"><img alt="2" src="assets/2.png"/></a>
+    bytes: None, <a class="co" href="#callout_head_aches_CO2-3" id="co_head_aches_CO2-3"><img alt="3" src="assets/3.png"/></a>
+}</pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_head_aches_CO2-1" id="callout_head_aches_CO2-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p><code>files</code> should default to a dash (<code>-</code>) as the filename.</p></dd>
+<dt><a class="co" href="#co_head_aches_CO2-2" id="callout_head_aches_CO2-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The number of <code>lines</code> should default to <code>10</code>.</p></dd>
+<dt><a class="co" href="#co_head_aches_CO2-3" id="callout_head_aches_CO2-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p><code>bytes</code> should be <code>None</code>.</p></dd>
+</dl>
+
+<p>Now run the program with arguments and ensure they are correctly parsed:</p>
+
+<pre data-type="programlisting">$ cargo run -- -n 3 tests/inputs/one.txt
+Args {
+    files: [
+        "tests/inputs/one.txt", <a class="co" href="#callout_head_aches_CO3-1" id="co_head_aches_CO3-1"><img alt="1" src="assets/1.png"/></a>
+    ],
+    lines: 3, <a class="co" href="#callout_head_aches_CO3-2" id="co_head_aches_CO3-2"><img alt="2" src="assets/2.png"/></a>
+    bytes: None, <a class="co" href="#callout_head_aches_CO3-3" id="co_head_aches_CO3-3"><img alt="3" src="assets/3.png"/></a>
+}</pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_head_aches_CO3-1" id="callout_head_aches_CO3-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The positional argument <em>tests/inputs/one.txt</em> is parsed as one of the <code>files</code>.</p></dd>
+<dt><a class="co" href="#co_head_aches_CO3-2" id="callout_head_aches_CO3-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <code>-n</code> option for <code>lines</code> sets this to <code>3</code>.</p></dd>
+<dt><a class="co" href="#co_head_aches_CO3-3" id="callout_head_aches_CO3-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>The <code>-b</code> option for <code>bytes</code> defaults to <code>None</code>.</p></dd>
+</dl>
+
+<p>If I provide more than one positional argument, they will all go into <code>files</code>, and the <code>-c</code> argument will go into <code>bytes</code>.
+In the following command, I’m again relying on the <code>bash</code> shell to expand the file glob <code>*.txt</code> into all the files ending in <em>.txt</em>.<a data-primary="file globs" data-secondary="expanding" data-type="indexterm" id="id593"/><a data-primary="bash shell" data-secondary="expanding file glob" data-type="indexterm" id="id594"/><a data-primary="Windows" data-secondary="expanding file glob with PowerShell" data-type="indexterm" id="id595"/>
+PowerShell users should refer to the equivalent use of <code>Get-ChildItem</code> shown in the section <a data-type="xref" href="ch03.html#iterating_thru_file_args">“Iterating Through the File Arguments”</a>:</p>
+
+<pre data-type="programlisting">$ cargo run -- -c 4 tests/inputs/*.txt
+Args {
+    files: [
+        "tests/inputs/empty.txt", <a class="co" href="#callout_head_aches_CO4-1" id="co_head_aches_CO4-1"><img alt="1" src="assets/1.png"/></a>
+        "tests/inputs/one.txt",
+        "tests/inputs/three.txt",
+        "tests/inputs/twelve.txt",
+        "tests/inputs/two.txt",
+    ],
+    lines: 10, <a class="co" href="#callout_head_aches_CO4-2" id="co_head_aches_CO4-2"><img alt="2" src="assets/2.png"/></a>
+    bytes: Some( <a class="co" href="#callout_head_aches_CO4-3" id="co_head_aches_CO4-3"><img alt="3" src="assets/3.png"/></a>
+        4,
+    ),
+}</pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_head_aches_CO4-1" id="callout_head_aches_CO4-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>There are four files ending in <em>.txt</em>.</p></dd>
+<dt><a class="co" href="#co_head_aches_CO4-2" id="callout_head_aches_CO4-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p><code>lines</code> is still set to the default value of <code>10</code>.</p></dd>
+<dt><a class="co" href="#co_head_aches_CO4-3" id="callout_head_aches_CO4-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>The <code>-c 4</code> results in the <code>bytes</code> now being <code>Some(4)</code>.</p></dd>
+</dl>
+
+<p>Any value for <code>-n</code> or <code>-c</code> that cannot be parsed into a positive integer should cause the program to halt with an error.<a data-primary="clap::value_parser" data-type="indexterm" id="id596"/>
+Use <a href="https://oreil.ly/GHQ9h"><code>clap::value_parser</code></a> to ensure that the integer arguments are valid and convert them to numbers:</p>
+
+<pre data-type="programlisting">$ cargo run -- -n blargh tests/inputs/one.txt
+error: invalid value 'blargh' for '--lines &lt;LINES&gt;':
+invalid digit found in string
+$ cargo run -- -c 0 tests/inputs/one.txt
+error: invalid value '0' for '--bytes &lt;BYTES&gt;':
+0 is not in 1..18446744073709551615</pre>
+
+<p>The program should disallow the use of both <code>-n</code> and <code>-c</code>:</p>
+
+<pre data-type="programlisting">$ cargo run -- -n 1 -c 1 tests/inputs/one.txt
+error: the argument '--lines &lt;LINES&gt;' cannot be used with '--bytes &lt;BYTES&gt;'
+
+Usage: headr --lines &lt;LINES&gt; &lt;FILE&gt;...</pre>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Just parsing and validating the arguments is a challenge, but I know you can do it.<a data-primary="cargo test dies command" data-type="indexterm" id="id597"/> Stop reading here and get your program to pass all the tests included with <strong><code>cargo test dies</code></strong>:</p>
+
+<pre data-type="programlisting">running 3 tests
+test dies_bad_lines ... ok
+test dies_bad_bytes ... ok
+test dies_bytes_and_lines ... ok</pre>
+</div>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Defining the Arguments" data-type="sect2"><div class="sect2" id="id39">
+<h2>Defining the Arguments</h2>
+
+<p>Welcome back.
+I will first show the builder pattern<a data-primary="head program" data-secondary="writing headr version" data-startref="ix_headwrstrt" data-tertiary="getting started" data-type="indexterm" id="id598"/><a data-primary="builder pattern" data-secondary="using headr program" data-type="indexterm" id="id599"/> with a <code>get_args</code> function as in the previous chapter.<a data-primary="errors" data-secondary="converting strings into" data-startref="ix_errcnvstr" data-type="indexterm" id="id600"/><a data-primary="strings" data-secondary="converting into error messages" data-startref="ix_strcnverr" data-type="indexterm" id="id601"/><a data-primary="head program" data-secondary="writing headr version" data-tertiary="defining the arguments" data-type="indexterm" id="ix_headwrdefarg"/>
+Note that the two optional arguments, <code>lines</code> and <code>bytes</code>, accept numeric values.
+This is different from the optional arguments implemented in <a data-type="xref" href="ch03.html#ch03">Chapter 3</a> that are used as Boolean flags.
+Note that the following code requires <code>use clap::{Arg, Command}</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">get_args</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">matches</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">headr</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">version</code><code class="p">(</code><code class="s">"</code><code class="s">0.1.0</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">author</code><code class="p">(</code><code class="s">"</code><code class="s">Ken Youens-Clark &lt;kyclark@gmail.com&gt;</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">about</code><code class="p">(</code><code class="s">"</code><code class="s">Rust version of `head`</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w">
+</code><code class="w">            </code><code class="n">Arg</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">lines</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO5-1" id="co_head_aches_CO5-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+                </code><code class="p">.</code><code class="n">short</code><code class="p">(</code><code class="sc">'n'</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">long</code><code class="p">(</code><code class="s">"</code><code class="s">lines</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">value_name</code><code class="p">(</code><code class="s">"</code><code class="s">LINES</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"</code><code class="s">Number of lines</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">value_parser</code><code class="p">(</code><code class="n">clap</code><code>::</code><code class="n">value_parser</code><code class="o">!</code><code class="p">(</code><code class="kt">u64</code><code class="p">)</code><code class="p">.</code><code class="n">range</code><code class="p">(</code><code class="mi">1</code><code class="o">..</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">default_value</code><code class="p">(</code><code class="s">"</code><code class="s">10</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w">
+</code><code class="w">            </code><code class="n">Arg</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">bytes</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO5-2" id="co_head_aches_CO5-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+                </code><code class="p">.</code><code class="n">short</code><code class="p">(</code><code class="sc">'c'</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">long</code><code class="p">(</code><code class="s">"</code><code class="s">bytes</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">value_name</code><code class="p">(</code><code class="s">"</code><code class="s">BYTES</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">conflicts_with</code><code class="p">(</code><code class="s">"</code><code class="s">lines</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">value_parser</code><code class="p">(</code><code class="n">clap</code><code>::</code><code class="n">value_parser</code><code class="o">!</code><code class="p">(</code><code class="kt">u64</code><code class="p">)</code><code class="p">.</code><code class="n">range</code><code class="p">(</code><code class="mi">1</code><code class="o">..</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"</code><code class="s">Number of bytes</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w">
+</code><code class="w">            </code><code class="n">Arg</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">files</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO5-3" id="co_head_aches_CO5-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+                </code><code class="p">.</code><code class="n">value_name</code><code class="p">(</code><code class="s">"</code><code class="s">FILE</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"</code><code class="s">Input file(s)</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">num_args</code><code class="p">(</code><code class="mi">0</code><code class="o">..</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">default_value</code><code class="p">(</code><code class="s">"</code><code class="s">-</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">get_matches</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="n">Args</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="n">files</code><code>:</code><code> </code><code class="nc">matches</code><code class="p">.</code><code class="n">get_many</code><code class="p">(</code><code class="s">"</code><code class="s">files</code><code class="s">"</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">cloned</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">collect</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="n">lines</code><code>:</code><code> </code><code class="nc">matches</code><code class="p">.</code><code class="n">get_one</code><code class="p">(</code><code class="s">"</code><code class="s">lines</code><code class="s">"</code><code class="p">)</code><code class="p">.</code><code class="n">cloned</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="n">bytes</code><code>:</code><code> </code><code class="nc">matches</code><code class="p">.</code><code class="n">get_one</code><code class="p">(</code><code class="s">"</code><code class="s">bytes</code><code class="s">"</code><code class="p">)</code><code class="p">.</code><code class="n">cloned</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_head_aches_CO5-1" id="callout_head_aches_CO5-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <code>lines</code> option takes a value and defaults to <code>10</code>.</p></dd>
+<dt><a class="co" href="#co_head_aches_CO5-2" id="callout_head_aches_CO5-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <code>bytes</code> option takes a value, and it conflicts with the <code>lines</code> parameter so that they are mutually exclusive.</p></dd>
+<dt><a class="co" href="#co_head_aches_CO5-3" id="callout_head_aches_CO5-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>The <code>files</code> parameter is positional, takes zero or more values, and defaults to a dash (<code>-</code>).</p></dd>
+</dl>
+
+<p>Alternatively, the <code>clap</code> derive pattern requires<a data-primary="derive pattern" data-secondary="using headr program" data-type="indexterm" id="id602"/> annotating the <code>Args</code> struct:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[derive(Parser, Debug)]</code><code class="w"/>
+<code class="cp">#[command(author, version, about)]</code><code class="w"/>
+<code class="sd">/// Rust version of `head`</code>
+<code class="k">struct</code> <code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="sd">/// Input file(s)</code>
+<code class="w">    </code><code class="cp">#[arg(default_value = </code><code class="s">"-"</code><code class="cp">, value_name = </code><code class="s">"FILE"</code><code class="cp">)]</code><code class="w"/>
+<code class="w">    </code><code class="n">files</code>: <code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Number of lines</code>
+<code class="w">    </code><code class="cp">#[arg(</code>
+<code class="cp">        short('n'),</code>
+<code class="cp">        long,</code>
+<code class="cp">        default_value = </code><code class="s">"10"</code><code class="cp">,</code>
+<code class="cp">        value_name = </code><code class="s">"LINES"</code><code class="cp">,</code>
+<code class="cp">        value_parser = clap::value_parser!(u64).range(1..)</code>
+<code class="cp">    )]</code><code class="w"/>
+<code class="w">    </code><code class="n">lines</code>: <code class="kt">u64</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Number of bytes</code>
+<code class="w">    </code><code class="cp">#[arg(</code>
+<code class="cp">        short('c'),</code>
+<code class="cp">        long,</code>
+<code class="cp">        value_name = </code><code class="s">"BYTES"</code><code class="cp">,</code>
+<code class="cp">        conflicts_with(</code><code class="s">"lines"</code><code class="cp">),</code>
+<code class="cp">        value_parser = clap::value_parser!(u64).range(1..)</code>
+<code class="cp">    )]</code><code class="w"/>
+<code class="w">    </code><code class="n">bytes</code>: <code class="nb">Option</code><code class="o">&lt;</code><code class="kt">u64</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+<div data-type="tip"><h6>Tip</h6>
+<p>In the<a data-primary="derive pattern" data-type="indexterm" id="id603"/> derive pattern, the default <a href="https://oreil.ly/uUZJN"><code>Arg::long</code></a> value will be the name of the struct field, for example, <em>lines</em> and <em>bytes</em>. The default value for <a href="https://oreil.ly/fZl0Q"><code>Arg::short</code></a> will be the first letter of the struct field, so <em>l</em> or <em>b</em>. I specify the short names <em>n</em> and <em>c</em>, respectively, to match the original tool.<a data-primary="Arg::short value" data-type="indexterm" id="id604"/><a data-primary="Arg::long value" data-type="indexterm" id="id605"/><a data-primary="long and short formats, Arg arguments in clap::derive pattern" data-type="indexterm" id="id606"/></p>
+</div>
+
+<p>It’s quite a bit of work to validate all the user input, but now I have some assurance that I can proceed with good data.<a data-primary="head program" data-secondary="writing headr version" data-startref="ix_headwrdefarg" data-tertiary="defining the arguments" data-type="indexterm" id="id607"/></p>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Processing the Input Files" data-type="sect2"><div class="sect2" id="id40">
+<h2>Processing the Input Files</h2>
+
+<p>I recommend that you have your <code>main</code> call a <code>run</code> function.
+Be sure<a data-primary="head program" data-secondary="writing headr version" data-tertiary="processing input files" data-type="indexterm" id="ix_headwrinpt"/> to add 
+<span class="keep-together"><code>use anyhow::Result</code></span> for the following:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">run</code><code class="p">(</code><code class="n">Args</code>::<code class="n">parse</code><code class="p">())</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"{e}"</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="n">std</code>::<code class="n">process</code>::<code class="n">exit</code><code class="p">(</code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">fn</code> <code class="nf">run</code><code class="p">(</code><code class="n">_args</code>: <code class="nc">Args</code><code class="p">)</code><code class="w"> </code>-&gt; <code class="nb">Result</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(())</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>This challenge program should <a data-primary="open function" data-secondary="for headr input files" data-secondary-sortas="headr" data-type="indexterm" id="id608"/>handle the input files as in <a data-type="xref" href="ch03.html#ch03">Chapter 3</a>, so I suggest you add the same <code>open</code> function:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">open</code><code class="p">(</code><code class="n">filename</code>: <code class="kp">&amp;</code><code class="kt">str</code><code class="p">)</code><code class="w"> </code>-&gt; <code class="nb">Result</code><code class="o">&lt;</code><code class="nb">Box</code><code class="o">&lt;</code><code class="k">dyn</code><code class="w"> </code><code class="n">BufRead</code><code class="o">&gt;&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">match</code><code class="w"> </code><code class="n">filename</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="s">"-"</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">Ok</code><code class="p">(</code><code class="nb">Box</code>::<code class="n">new</code><code class="p">(</code><code class="n">BufReader</code>::<code class="n">new</code><code class="p">(</code><code class="n">io</code>::<code class="n">stdin</code><code class="p">()))),</code><code class="w"/>
+<code class="w">        </code><code class="n">_</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">Ok</code><code class="p">(</code><code class="nb">Box</code>::<code class="n">new</code><code class="p">(</code><code class="n">BufReader</code>::<code class="n">new</code><code class="p">(</code><code class="n">File</code>::<code class="n">open</code><code class="p">(</code><code class="n">filename</code><code class="p">)</code><code class="o">?</code><code class="p">))),</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Be sure to add all <a data-primary="std::fs::File" data-type="indexterm" id="id609"/><a data-primary="std::io" data-type="indexterm" id="id610"/>these additional dependencies:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">use</code><code class="w"> </code><code class="n">std</code>::<code class="n">fs</code>::<code class="n">File</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code>::<code class="n">io</code>::<code class="p">{</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">BufRead</code><code class="p">,</code><code class="w"> </code><code class="n">BufReader</code><code class="p">};</code><code class="w"/></pre>
+
+<p>Expand your <code>run</code> function to try <a data-primary="run function" data-secondary="headr program" data-type="indexterm" id="id611"/>opening the files, printing errors as you encounter them:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">filename</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">files</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO6-1" id="co_head_aches_CO6-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+        </code><code class="k">match</code><code class="w"> </code><code class="n">open</code><code class="p">(</code><code class="o">&amp;</code><code class="n">filename</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO6-2" id="co_head_aches_CO6-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+            </code><code class="nb">Err</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"</code><code class="s">{filename}: {err}</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO6-3" id="co_head_aches_CO6-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+            </code><code class="nb">Ok</code><code class="p">(</code><code class="n">_</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">Opened {filename}</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO6-4" id="co_head_aches_CO6-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_head_aches_CO6-1" id="callout_head_aches_CO6-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Iterate through each of the filenames.</p></dd>
+<dt><a class="co" href="#co_head_aches_CO6-2" id="callout_head_aches_CO6-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Attempt to open the given file.</p></dd>
+<dt><a class="co" href="#co_head_aches_CO6-3" id="callout_head_aches_CO6-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Print errors to <code>STDERR</code>.</p></dd>
+<dt><a class="co" href="#co_head_aches_CO6-4" id="callout_head_aches_CO6-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Print a message that the file was successfully opened.</p></dd>
+</dl>
+
+<p>Run your program with a good file and a bad file to ensure it seems to work.
+In the following command, <em>blargh</em> represents a nonexistent file:</p>
+
+<pre data-type="programlisting">$ cargo run -- <strong>blargh</strong> tests/inputs/one.txt
+<strong>blargh: No such file or directory (os error 2)</strong>
+Opened tests/inputs/one.txt</pre>
+
+<p>Without looking ahead to my solution, figure out how to read the lines and then the bytes of a given file.
+Next, add the headers separating multiple file arguments.
+Look closely at the error output from the original <code>head</code> program when handling invalid files, noticing that readable files have a header first and then the file output, but invalid files only print an error.<a data-primary="errors" data-secondary="input file, in headr program" data-type="indexterm" id="id612"/>
+Additionally, there is an extra blank line separating the output for the valid files:</p>
+
+<pre data-type="programlisting">$ head -n 1 tests/inputs/one.txt <strong>blargh</strong> tests/inputs/two.txt
+==&gt; tests/inputs/one.txt &lt;==
+Öne line, four words.
+<strong>head: blargh: No such file or directory</strong>
+
+==&gt; tests/inputs/two.txt &lt;==
+Two lines.</pre>
+
+<p>I’ve <a data-primary="file command" data-type="indexterm" id="id613"/>specifically designed some challenging inputs for you to consider.
+To see what you face, use the <code>file</code> command to report file type information:</p>
+
+<pre data-type="programlisting">$ file tests/inputs/*.txt
+tests/inputs/empty.txt:  empty <a class="co" href="#callout_head_aches_CO7-1" id="co_head_aches_CO7-1"><img alt="1" src="assets/1.png"/></a>
+tests/inputs/one.txt:    UTF-8 Unicode text <a class="co" href="#callout_head_aches_CO7-2" id="co_head_aches_CO7-2"><img alt="2" src="assets/2.png"/></a>
+tests/inputs/three.txt:  ASCII text, with CRLF, LF line terminators <a class="co" href="#callout_head_aches_CO7-3" id="co_head_aches_CO7-3"><img alt="3" src="assets/3.png"/></a>
+tests/inputs/twelve.txt: ASCII text <a class="co" href="#callout_head_aches_CO7-4" id="co_head_aches_CO7-4"><img alt="4" src="assets/4.png"/></a>
+tests/inputs/two.txt:    ASCII text <a class="co" href="#callout_head_aches_CO7-5" id="co_head_aches_CO7-5"><img alt="5" src="assets/5.png"/></a></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_head_aches_CO7-1" id="callout_head_aches_CO7-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>This is an empty file just to ensure your program doesn’t fall over.</p></dd>
+<dt><a class="co" href="#co_head_aches_CO7-2" id="callout_head_aches_CO7-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>This file contains Unicode, as I put an umlaut over the <em>O</em> in <em>Őne</em> to force you to consider the differences between bytes and characters.</p></dd>
+<dt><a class="co" href="#co_head_aches_CO7-3" id="callout_head_aches_CO7-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>This file has Windows-style line endings.</p></dd>
+<dt><a class="co" href="#co_head_aches_CO7-4" id="callout_head_aches_CO7-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>This file has 12 lines to ensure the default of 10 lines is shown.</p></dd>
+<dt><a class="co" href="#co_head_aches_CO7-5" id="callout_head_aches_CO7-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>This file has Unix-style line endings.</p></dd>
+</dl>
+<div data-type="tip"><h6>Tip</h6>
+<p>On Windows, the newline is the combination of the carriage return and the line feed, often shown as CRLF or <code>\r\n</code>. <a data-primary="newlines" data-secondary="on Windows and Unix" data-secondary-sortas="Windows" data-type="indexterm" id="id614"/><a data-primary="Windows" data-secondary="newlines" data-type="indexterm" id="id615"/><a data-primary="Unix" data-secondary="newlines" data-type="indexterm" id="id616"/>On Unix platforms, only the newline is used, so LF or <code>\n</code>. These line endings must be preserved in the output from your program, so you will have to find a way to read the lines in a file without removing the line endings.<a data-primary="head program" data-secondary="writing headr version" data-startref="ix_headwrinpt" data-tertiary="processing input files" data-type="indexterm" id="id617"/></p>
+</div>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Reading Bytes Versus Characters" data-type="sect2"><div class="sect2" id="id41">
+<h2>Reading Bytes Versus Characters</h2>
+
+<p>Before continuing, you should understand the difference between reading <em>bytes</em> and <em>characters</em> from a file.<a data-primary="head program" data-secondary="writing headr version" data-tertiary="reading bytes versus characters" data-type="indexterm" id="id618"/><a data-primary="characters versus bytes, reading" data-type="indexterm" id="id619"/><a data-primary="bytes versus characters, reading" data-type="indexterm" id="id620"/>
+In the early 1960s, the American Standard Code for Information Interchange (ASCII, pronounced <em>as-key</em>) table of 128 characters represented all possible text elements in computing.<a data-primary="ASCII" data-type="indexterm" id="id621"/>
+It takes only seven bits (2<sup>7</sup> = 128) to represent this many characters.
+Usually a byte consists of eight bits, so the notion of byte and character were interchangeable.</p>
+
+<p>Since the creation of Unicode (Universal Coded Character Set) to represent all the writing systems of the world (and even emojis), some characters may require up to four bytes.<a data-primary="Unicode" data-type="indexterm" id="id622"/>
+The Unicode standard defines several ways to encode characters, including UTF-8 (Unicode Transformation Format using eight bits).<a data-primary="UTF-8 character encoding" data-type="indexterm" id="id623"/>
+As noted, the file <em>tests​/⁠inputs/one.txt</em> begins with the character <em>Ő</em>, which is two bytes long in UTF-8.
+If you want <code>head</code> to show you this one character, you must request two bytes:</p>
+
+<pre data-type="programlisting">$ head -c 2 tests/inputs/one.txt
+Ö</pre>
+
+<p>If you ask <code>head</code> to select just the first byte from this file, you get the byte value <code>195</code>, which is not a valid UTF-8 string.
+The output is a special character that indicates a problem converting a character into Unicode:</p>
+
+<pre data-type="programlisting">$ head -c 1 tests/inputs/one.txt
+�</pre>
+
+<p>The challenge program is expected to re-create this behavior.
+This is not an easy program to write, but you should be able to use <a href="https://oreil.ly/PpLCr"><code>std::io</code></a>, <a href="https://oreil.ly/VtAdj"><code>std::fs::File</code></a>, and <a href="https://oreil.ly/bznCz"><code>std::io::BufReader</code></a> to figure out how to read bytes and lines from each of the files.<a data-primary="std::io::BufReader trait" data-type="indexterm" id="id624"/><a data-primary="BufRead trait" data-type="indexterm" id="id625"/><a data-primary="std::io" data-type="indexterm" id="id626"/><a data-primary="String type" data-secondary="valid UTF-8-encoded string" data-type="indexterm" id="id627"/>
+Note that in Rust, a <a href="https://oreil.ly/X32Yh"><code>String</code></a> must be a valid UTF-8-encoded string, and so the method <a href="https://oreil.ly/Bs4Zl"><code>String::from_utf8_lossy</code></a> might prove useful.
+I’ve included a full set of tests in <em>tests/cli.rs</em> that you should have copied into your source tree.<a data-primary="String::from_utf8_lossy function" data-type="indexterm" id="id628"/></p>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Stop reading here and finish the program. Use <strong><code>cargo test</code></strong> frequently to check your progress. Do your best to pass all the tests before looking at my solution.</p>
+</div>
+</div></section>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Solution" data-type="sect1"><div class="sect1" id="id203">
+<h1>Solution</h1>
+
+<p>This challenge proved more interesting than I anticipated.
+I thought it would be little more than a variation on <code>cat</code>, but it turned out to be quite a bit more difficult.
+I’ll walk you through how I arrived at my solution.</p>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Reading a File Line by Line" data-type="sect2"><div class="sect2" id="id42">
+<h2>Reading a File Line by Line</h2>
+
+<p>After opening<a data-primary="head program" data-secondary="writing headr version" data-tertiary="reading a file line by line" data-type="indexterm" id="id629"/><a data-primary="files" data-secondary="reading line by line" data-type="indexterm" id="id630"/> the valid files, I started by reading lines from the filehandle.
+I decided to modify some code from <a data-type="xref" href="ch03.html#ch03">Chapter 3</a>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">filename</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">files</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="k">match</code><code class="w"> </code><code class="n">open</code><code class="p">(</code><code class="o">&amp;</code><code class="n">filename</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="nb">Err</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"</code><code class="s">{filename}: {err}</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="nb">Ok</code><code class="p">(</code><code class="n">file</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="k">for</code><code class="w"> </code><code class="n">line</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">file</code><code class="p">.</code><code class="n">lines</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">take</code><code class="p">(</code><code class="n">args</code><code class="p">.</code><code class="n">lines</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">usize</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO8-1" id="co_head_aches_CO8-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+                    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{}</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="n">line</code><code class="o">?</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO8-2" id="co_head_aches_CO8-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+                </code><code class="p">}</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_head_aches_CO8-1" id="callout_head_aches_CO8-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Use <a href="https://oreil.ly/OjTMN"><code>Iterator::take</code></a> to select the desired number of lines from the filehandle.<a data-primary="Iterator::take function" data-type="indexterm" id="id631"/></p></dd>
+<dt><a class="co" href="#co_head_aches_CO8-2" id="callout_head_aches_CO8-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Print the line to the console.</p></dd>
+</dl>
+<div data-type="tip"><h6>Tip</h6>
+<p>The <code>Iterator::take</code> method expects its argument to be the type <code>usize</code>, but I have a <code>u64</code>. I <em>cast</em> or convert the value using the <a href="https://oreil.ly/X7cc9"><code>as</code> keyword</a>.<a data-primary="types" data-secondary="casting" data-type="indexterm" id="id632"/><a data-primary="casting" data-type="indexterm" id="id633"/><a data-primary="as keyword" data-type="indexterm" id="id634"/></p>
+</div>
+
+<p>I think this is a fun solution because it uses the <code>Iterator::take</code> method to select the desired number of lines.
+I can run the program to select one line from a file, and it appears to work well:</p>
+
+<pre data-type="programlisting">$ cargo run -- -n 1 tests/inputs/twelve.txt
+one</pre>
+
+<p>If I run <strong><code>cargo test</code></strong>, the program passes almost half the tests, which seems pretty good for having implemented only a small portion of the specifications; however, it’s failing all the tests that use the Windows-encoded input file.
+To fix this problem, I have a confession to make.</p>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Preserving Line Endings While Reading a File" data-type="sect2"><div class="sect2" id="id43">
+<h2>Preserving Line Endings While Reading a File</h2>
+
+<p>I hate to break<a data-primary="head program" data-secondary="writing headr version" data-tertiary="preserving line endings when reading a file" data-type="indexterm" id="id635"/><a data-primary="lines" data-secondary="preserving line endings while reading a file" data-type="indexterm" id="id636"/> it to you, dear reader, but the <code>catr</code> program in <a data-type="xref" href="ch03.html#ch03">Chapter 3</a> does not completely replicate the original <code>cat</code> program because it uses <a href="https://oreil.ly/KhmCp"><code>BufRead::lines</code></a> to read the input files.<a data-primary="BufRead::lines function" data-type="indexterm" id="id637"/>
+The documentation for that function says, “Each string returned will <em>not</em> have a newline byte (the <code>0xA</code> byte) or CRLF (<code>0xD</code>, <code>0xA</code> bytes) at the end.”
+I hope you’ll forgive me because I wanted to show you how easy it can be to read the lines of a file, but you should be aware that the <code>catr</code> program replaces Windows CRLF line endings with Unix-style newlines.</p>
+
+<p>To fix this, I must instead use <a href="https://oreil.ly/aJFkc"><code>BufRead::read_line</code></a>, which, according to the documentation, “will read bytes from the underlying stream until the newline delimiter (the <code>0xA</code> byte) or EOF is found.<a data-primary="BufRead::read_line function" data-type="indexterm" id="id638"/><a data-primary="EOF (end of file)" data-type="indexterm" id="id639"/> Once found, all bytes up to, and including, the delimiter (if found) will be appended to <code>buf</code>.”<sup><a data-type="noteref" href="ch04.html#id640" id="id640-marker">1</a></sup>
+Following is a version that will preserve the original line endings.
+With these changes, the program will pass more tests than it fails:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">filename</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">files</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="k">match</code><code class="w"> </code><code class="n">open</code><code class="p">(</code><code class="o">&amp;</code><code class="n">filename</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="nb">Err</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"</code><code class="s">{filename}: {err}</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="nb">Ok</code><code class="p">(</code><code class="k">mut</code><code class="w"> </code><code class="n">file</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO9-1" id="co_head_aches_CO9-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+                </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">line</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">String</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO9-2" id="co_head_aches_CO9-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+                </code><code class="k">for</code><code class="w"> </code><code class="n">_</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="mi">0</code><code class="o">..</code><code class="n">args</code><code class="p">.</code><code class="n">lines</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO9-3" id="co_head_aches_CO9-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+                    </code><code class="kd">let</code><code class="w"> </code><code class="n">bytes</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">file</code><code class="p">.</code><code class="n">read_line</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">line</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO9-4" id="co_head_aches_CO9-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+                    </code><code class="k">if</code><code class="w"> </code><code class="n">bytes</code><code class="w"> </code><code class="o">=</code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO9-5" id="co_head_aches_CO9-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+                        </code><code class="k">break</code><code class="p">;</code><code class="w">
+</code><code class="w">                    </code><code class="p">}</code><code class="w">
+</code><code class="w">                    </code><code class="fm">print!</code><code class="p">(</code><code class="s">"</code><code class="s">{line}</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO9-6" id="co_head_aches_CO9-6"><img alt="6" src="assets/6.png"/></a><code class="w">
+                    </code><code class="n">line</code><code class="p">.</code><code class="n">clear</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO9-7" id="co_head_aches_CO9-7"><img alt="7" src="assets/7.png"/></a><code class="w">
+                </code><code class="p">}</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_head_aches_CO9-1" id="callout_head_aches_CO9-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Accept the filehandle as a mutable value.</p></dd>
+<dt><a class="co" href="#co_head_aches_CO9-2" id="callout_head_aches_CO9-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Use <a href="https://oreil.ly/Lg0D2"><code>String::new</code></a> to create a new, empty mutable string buffer to hold each line.<a data-primary="String::new function" data-type="indexterm" id="id641"/></p></dd>
+<dt><a class="co" href="#co_head_aches_CO9-3" id="callout_head_aches_CO9-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Use <code>for</code> to iterate through a <a href="https://oreil.ly/gA0sx"><code>std::ops::Range</code></a> to count up from zero to the requested number of lines. The variable name <code>_</code> indicates I do not intend to use it.<a data-primary="std::ops::Range structs" data-type="indexterm" id="id642"/><a data-primary="Range structs" data-type="indexterm" id="id643"/><a data-primary="for loops" data-type="indexterm" id="id644"/></p></dd>
+<dt><a class="co" href="#co_head_aches_CO9-4" id="callout_head_aches_CO9-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Use <a href="https://oreil.ly/aJFkc"><code>BufRead::read_line</code></a> to read the next line into the string buffer.</p></dd>
+<dt><a class="co" href="#co_head_aches_CO9-5" id="callout_head_aches_CO9-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>The filehandle will return zero bytes when it reaches the end of the file, so <a href="https://oreil.ly/UG54e"><code>break</code></a> out of the loop.<a data-primary="break keyword" data-type="indexterm" id="id645"/></p></dd>
+<dt><a class="co" href="#co_head_aches_CO9-6" id="callout_head_aches_CO9-6"><img alt="6" src="assets/6.png"/></a></dt>
+<dd><p>Print the line, including the original line ending.<a data-primary="String::clear function" data-type="indexterm" id="id646"/></p></dd>
+<dt><a class="co" href="#co_head_aches_CO9-7" id="callout_head_aches_CO9-7"><img alt="7" src="assets/7.png"/></a></dt>
+<dd><p>Use <a href="https://oreil.ly/IpZ2x"><code>String::clear</code></a> to empty the line buffer.</p></dd>
+</dl>
+
+<p>If I run <strong><code>cargo test</code></strong> at this point, the program will pass almost all the tests for reading lines and will fail all those for reading bytes and handling multiple files.</p>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Reading Bytes from a File" data-type="sect2"><div class="sect2" id="id44">
+<h2>Reading Bytes from a File</h2>
+
+<p>Next, I’ll handle reading bytes from a file.<a data-primary="head program" data-secondary="writing headr version" data-tertiary="reading bytes from a file" data-type="indexterm" id="ix_headwrrdbyt"/><a data-primary="files" data-secondary="reading bytes from with headr" data-type="indexterm" id="ix_filerdbyt"/><a data-primary="bytes" data-secondary="reading from a file" data-type="indexterm" id="ix_byterd"/>
+After I attempt to open the file, I check to see if <code>args.bytes</code> is <code>Some</code> number of bytes; otherwise, I’ll use the preceding code that reads lines.
+For the following code, be sure to add <code>use std::io::Read</code> to your imports:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">for</code><code class="w"> </code><code class="n">filename</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">files</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="k">match</code><code class="w"> </code><code class="n">open</code><code class="p">(</code><code class="o">&amp;</code><code class="n">filename</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="nb">Err</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"</code><code class="s">{filename}: {err}</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="nb">Ok</code><code class="p">(</code><code class="k">mut</code><code class="w"> </code><code class="n">file</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">num_bytes</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">bytes</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO10-1" id="co_head_aches_CO10-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+                </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">buffer</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="mi">0</code><code class="p">;</code><code class="w"> </code><code class="n">num_bytes</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">usize</code><code class="p">]</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO10-2" id="co_head_aches_CO10-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+                </code><code class="kd">let</code><code class="w"> </code><code class="n">bytes_read</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">file</code><code class="p">.</code><code class="n">read</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">buffer</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO10-3" id="co_head_aches_CO10-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+                </code><code class="fm">print!</code><code class="p">(</code><code class="w">
+</code><code class="w">                    </code><code class="s">"</code><code class="s">{}</code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">                    </code><code class="nb">String</code><code>::</code><code class="n">from_utf8_lossy</code><code class="p">(</code><code class="o">&amp;</code><code class="n">buffer</code><code class="p">[</code><code class="o">..</code><code class="n">bytes_read</code><code class="p">]</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO10-4" id="co_head_aches_CO10-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+                </code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="o">..</code><code class="p">.</code><code class="w"> </code><code class="c1">// Same as before
+</code><code class="w">            </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="p">;</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_head_aches_CO10-1" id="callout_head_aches_CO10-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Use pattern matching to check if <code>args.bytes</code> is <code>Some</code> number of bytes to read.<a data-primary="take method (std::io::Read)" data-type="indexterm" id="id647"/></p></dd>
+<dt><a class="co" href="#co_head_aches_CO10-2" id="callout_head_aches_CO10-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Create a mutable buffer of a fixed length <code>num_bytes</code> filled with zeros to hold the bytes read from the file.<a data-primary="std::io::Read trait" data-type="indexterm" id="id648"/></p></dd>
+<dt><a class="co" href="#co_head_aches_CO10-3" id="callout_head_aches_CO10-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Read bytes from the filehandle into the buffer. The value <code>bytes_read</code> will contain the number of bytes that were read, which may be fewer than the number 
+<span class="keep-together">requested</span>.</p></dd>
+<dt><a class="co" href="#co_head_aches_CO10-4" id="callout_head_aches_CO10-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Convert the selected bytes into a string, which may not be valid UTF-8. Note the range operation to select only the bytes actually read.</p></dd>
+</dl>
+
+<p>As you saw in the case of selecting only part of a multibyte character, converting bytes to characters could fail because strings in Rust must be valid UTF-8.<a data-primary="String::from_utf8_lossy function" data-type="indexterm" id="id649"/><a data-primary="String::from_utf8 function" data-type="indexterm" id="id650"/><a data-primary="UTF-8 character encoding" data-secondary="String type and" data-type="indexterm" id="id651"/>
+The <a href="https://oreil.ly/Ps3jV"><code>String::from_utf8</code> function</a> will return an <code>Ok</code> only if the string is valid, but <a href="https://oreil.ly/Bs4Zl"><code>String::from_utf8_lossy</code></a> will convert invalid UTF-8 sequences to the <em>unknown</em> or <em>replacement</em> character:</p>
+
+<pre data-type="programlisting">$ cargo run -- -c 1 tests/inputs/one.txt
+�</pre>
+
+<p class="pagebreak-before">Let me show you another, much worse, way to read the bytes from a file.
+You can read the entire file into a string, convert that into a vector of bytes, and then select the first <code>num_bytes</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">contents</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">String</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO11-1" id="co_head_aches_CO11-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+</code><code class="n">file</code><code class="p">.</code><code class="n">read_to_string</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">contents</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"> </code><code class="c1">// Danger here </code><a class="co" href="#callout_head_aches_CO11-2" id="co_head_aches_CO11-2"><img alt="2" src="assets/2.png"/></a><code class="c1">
+</code><code class="kd">let</code><code class="w"> </code><code class="n">bytes</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">contents</code><code class="p">.</code><code class="n">as_bytes</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO11-3" id="co_head_aches_CO11-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+</code><code class="fm">print!</code><code class="p">(</code><code class="w">
+</code><code class="w">    </code><code class="s">"</code><code class="s">{}</code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">    </code><code class="nb">String</code><code>::</code><code class="n">from_utf8_lossy</code><code class="p">(</code><code class="o">&amp;</code><code class="n">bytes</code><code class="p">[</code><code class="o">..</code><code class="n">num_bytes</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">usize</code><code class="p">]</code><code class="p">)</code><code class="w"> </code><code class="c1">// More danger </code><a class="co" href="#callout_head_aches_CO11-4" id="co_head_aches_CO11-4"><img alt="4" src="assets/4.png"/></a><code class="c1">
+</code><code class="p">)</code><code class="p">;</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_head_aches_CO11-1" id="callout_head_aches_CO11-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Create a new string buffer to hold the contents of the file.</p></dd>
+<dt><a class="co" href="#co_head_aches_CO11-2" id="callout_head_aches_CO11-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Read the entire file contents into the string buffer.</p></dd>
+<dt><a class="co" href="#co_head_aches_CO11-3" id="callout_head_aches_CO11-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Use <a href="https://oreil.ly/JaIiI"><code>str::as_bytes</code></a> to convert the contents into bytes (<code>u8</code> or unsigned 8-bit 
+<span class="keep-together">integers).</span><a data-primary="str::as_bytes function" data-type="indexterm" id="id652"/></p></dd>
+<dt><a class="co" href="#co_head_aches_CO11-4" id="callout_head_aches_CO11-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Use <code>String::from_utf8_lossy</code> to turn a slice of <code>bytes</code> into a string.</p></dd>
+</dl>
+
+<p>As I’ve noted before, this approach can crash your program or computer if the file’s size exceeds the amount of memory on your machine.
+Another serious problem with the preceding code is that it assumes the slice operation <code>bytes[..num_bytes]</code> will succeed.
+If you use this code with an empty file, for instance, you’ll be asking for bytes that don’t exist.
+This will cause your program to panic and exit immediately with an error message:<a data-primary="RUST_BACKTRACE=1 environment variable" data-type="indexterm" id="id653"/><a data-primary="backtrace, displaying" data-type="indexterm" id="id654"/></p>
+
+<pre data-type="programlisting">$ cargo run -- -c 1 tests/inputs/empty.txt
+thread 'main' panicked at src/main.rs:53:55:
+range end index 1 out of range for slice of length 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace</pre>
+
+<p>Following is a safe—and perhaps the shortest—way to read the desired number of bytes from a file.
+Be sure to add the trait <code>use std::io::Read</code> to your imports:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="kd">let</code><code class="w"> </code><code class="n">bytes</code>: <code class="nb">Result</code><code class="o">&lt;</code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">_</code><code class="o">&gt;</code><code class="p">,</code><code class="w"> </code><code class="n">_</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">file</code><code class="p">.</code><code class="n">bytes</code><code class="p">().</code><code class="n">take</code><code class="p">(</code><code class="n">num_bytes</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">usize</code><code class="p">).</code><code class="n">collect</code><code class="p">();</code><code class="w"/>
+<code class="fm">print!</code><code class="p">(</code><code class="s">"{}"</code><code class="p">,</code><code class="w"> </code><code class="nb">String</code>::<code class="n">from_utf8_lossy</code><code class="p">(</code><code class="o">&amp;</code><code class="n">bytes</code><code class="o">?</code><code class="p">));</code><code class="w"/></pre>
+
+<p class="pagebreak-after">In the preceding code, the type annotation <code>Result&lt;Vec&lt;_&gt;, _&gt;</code> is necessary as the compiler infers the type of <code>bytes</code> as a slice, which has an unknown size.
+I must indicate I want a <code>Vec</code>, which is a smart pointer to heap-allocated memory.<a data-primary="_ (underscore)" data-secondary="indicating partial type annotation" data-type="indexterm" id="id655"/>
+The underscores (<code>_</code>) indicate partial type annotation, causing the compiler to infer the types.<a data-primary="types" data-secondary="inferring" data-type="indexterm" id="id656"/>
+Without any type annotation for <code>bytes</code>, the compiler complains thusly:</p>
+
+<pre data-type="programlisting">error[E0277]: the size for values of type `[u8]` cannot be known at
+compilation time
+  --&gt; src/main.rs:50:59
+   |
+95 |                     print!("{}", String::from_utf8_lossy(&amp;bytes?));
+   |                                                          ^^^^^^^ doesn't
+   |                                        have a size known at compile-time
+   |
+   = help: the trait `Sized` is not implemented for `[u8]`
+   = note: all local variables must have a statically known size
+   = help: unsized locals are gated as an unstable feature</pre>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>You’ve now seen that the underscore (<code>_</code>) serves various functions.<a data-primary="_ (underscore)" data-secondary="various uses in Rust" data-type="indexterm" id="id657"/> As the prefix or name of a variable, it shows the compiler you don’t want to use the value. In a <code>match</code> arm, it is the wildcard for handling any case. When used in a type annotation, it tells the compiler to infer the type.</p>
+</div>
+
+<p>You can also indicate the type information on the righthand side of the expression using the <a href="https://turbo.fish"><em>turbofish</em></a> operator (<code>::&lt;&gt;</code>).
+Often it’s a matter of style whether you indicate the type on the lefthand or righthand side, but later you will see examples where the turbofish is required for some expressions.<a data-primary="turbofish operator (::&lt;&gt;)" data-type="indexterm" id="id658"/><a data-primary="::&lt;&gt; (turbofish) operator" data-type="indexterm" id="id659"/>
+Here’s what the previous example would look like with the type indicated with the turbofish instead:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="kd">let</code><code class="w"> </code><code class="n">bytes</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">file</code><code class="w">
+</code><code class="w">    </code><code class="p">.</code><code class="n">bytes</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">    </code><code class="p">.</code><code class="n">take</code><code class="p">(</code><code class="n">num_bytes</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">usize</code><code class="p">)</code><code class="w">
+</code><code class="w">    </code><code class="p">.</code><code class="n">collect</code><code>:</code><code>:</code><strong><code class="o">&lt;</code><code class="nb">Result</code><code class="o">&lt;</code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">_</code><code class="o">&gt;</code><code class="p">,</code><code class="w"> </code><code class="n">_</code><code class="o">&gt;</code><code class="o">&gt;</code></strong><code class="p">(</code><code class="p">)</code><code class="p">;</code></pre>
+
+<p>The unknown character produced by <code>String::from_utf8_lossy</code> (<code>b'\xef\xbf\xbd'</code>) is not exactly the same output produced by the BSD <code>head</code> (<code>b'\xc3'</code>), making this somewhat difficult to test.<a data-primary="String::from_utf8_lossy function" data-type="indexterm" id="id660"/>
+If you look at the <code>run</code> helper function in <em>tests/cli.rs</em>, you’ll see that I read the expected value (the output from <code>head</code>) and used the same function to convert what could be invalid UTF-8 so that I can compare the two outputs.
+The <code>run_stdin</code> function works similarly:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="p">[</code><code class="o">&amp;</code><code class="kt">str</code><code class="p">]</code><code class="p">,</code><code class="w"> </code><code class="n">expected_file</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="c1">// Extra work here due to lossy UTF
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">file</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">File</code><code>::</code><code class="n">open</code><code class="p">(</code><code class="n">expected_file</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">buffer</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Vec</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="n">file</code><code class="p">.</code><code class="n">read_to_end</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">buffer</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">expected</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">String</code><code>::</code><code class="n">from_utf8_lossy</code><code class="p">(</code><code class="o">&amp;</code><code class="n">buffer</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO12-1" id="co_head_aches_CO12-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+
+    </code><code class="kd">let</code><code class="w"> </code><code class="n">output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code>::</code><code class="n">cargo_bin</code><code class="p">(</code><code class="n">PRG</code><code class="p">)</code><code class="o">?</code><code class="p">.</code><code class="n">args</code><code class="p">(</code><code class="n">args</code><code class="p">)</code><code class="p">.</code><code class="n">output</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"</code><code class="s">fail</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="fm">assert!</code><code class="p">(</code><code class="n">output</code><code class="p">.</code><code class="n">status</code><code class="p">.</code><code class="n">success</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="nb">String</code><code>::</code><code class="n">from_utf8_lossy</code><code class="p">(</code><code class="o">&amp;</code><code class="n">output</code><code class="p">.</code><code class="n">stdout</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><code class="n">expected</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO12-2" id="co_head_aches_CO12-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+
+    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_head_aches_CO12-1" id="callout_head_aches_CO12-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Handle any invalid UTF-8 in <code>expected_file</code>.</p></dd>
+<dt><a class="co" href="#co_head_aches_CO12-2" id="callout_head_aches_CO12-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Compare the output and expected values as lossy strings.<a data-primary="head program" data-secondary="writing headr version" data-startref="ix_headwrrdbyt" data-tertiary="reading bytes from a file" data-type="indexterm" id="id661"/><a data-primary="files" data-secondary="reading bytes from with headr" data-type="indexterm" id="id662"/><a data-primary="bytes" data-secondary="reading from a file" data-startref="ix_byterd" data-type="indexterm" id="id663"/></p></dd>
+</dl>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Printing the File Separators" data-type="sect2"><div class="sect2" id="id45">
+<h2>Printing the File Separators</h2>
+
+<p>The last piece to handle is the separators between multiple files.
+As noted before, valid files have a header that puts the filename inside <code>==&gt;</code> and <code>&lt;==</code> markers.<a data-primary="files" data-secondary="printing file separators" data-type="indexterm" id="id664"/><a data-primary="head program" data-secondary="writing headr version" data-tertiary="printing file separators" data-type="indexterm" id="id665"/>
+Files after the first have an additional newline at the beginning to visually separate the output.<a data-primary="Iterator::enumerate function" data-type="indexterm" id="id666"/>
+This means I will need to know the file number that I’m handling, which I can get by using the <a href="https://oreil.ly/gXM7q"><code>Iterator::enumerate</code> method</a>.
+Following is the final version of my <code>run</code> function that will pass all the tests:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">num_files</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">files</code><code class="p">.</code><code class="n">len</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO13-1" id="co_head_aches_CO13-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+
+    </code><code class="k">for</code><code class="w"> </code><code class="p">(</code><code class="n">file_num</code><code class="p">,</code><code class="w"> </code><code class="n">filename</code><code class="p">)</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">files</code><code class="p">.</code><code class="n">iter</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">enumerate</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO13-2" id="co_head_aches_CO13-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+        </code><code class="k">match</code><code class="w"> </code><code class="n">open</code><code class="p">(</code><code class="n">filename</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="nb">Err</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"</code><code class="s">{filename}: {err}</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="nb">Ok</code><code class="p">(</code><code class="k">mut</code><code class="w"> </code><code class="n">file</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="k">if</code><code class="w"> </code><code class="n">num_files</code><code class="w"> </code><code class="o">&gt;</code><code class="w"> </code><code class="mi">1</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO13-3" id="co_head_aches_CO13-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+                    </code><code class="fm">println!</code><code class="p">(</code><code class="w">
+</code><code class="w">                        </code><code class="s">"</code><code class="s">{}==&gt; {filename} &lt;==</code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">                        </code><code class="k">if</code><code class="w"> </code><code class="n">file_num</code><code class="w"> </code><code class="o">&gt;</code><code class="w"> </code><code class="mi">0</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="s">"</code><code class="se">\n</code><code class="s">"</code><code class="w"> </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="s">"</code><code class="s">"</code><code class="w"> </code><code class="p">}</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_head_aches_CO13-4" id="co_head_aches_CO13-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+                    </code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                </code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="w">                </code><code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">num_bytes</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">bytes</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">buffer</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="mi">0</code><code class="p">;</code><code class="w"> </code><code class="n">num_bytes</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">usize</code><code class="p">]</code><code class="p">;</code><code class="w">
+</code><code class="w">                    </code><code class="kd">let</code><code class="w"> </code><code class="n">bytes_read</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">file</code><code class="p">.</code><code class="n">read</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">buffer</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w">
+</code><code class="w">                    </code><code class="fm">print!</code><code class="p">(</code><code class="w">
+</code><code class="w">                        </code><code class="s">"</code><code class="s">{}</code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">                        </code><code class="nb">String</code><code>::</code><code class="n">from_utf8_lossy</code><code class="p">(</code><code class="o">&amp;</code><code class="n">buffer</code><code class="p">[</code><code class="o">..</code><code class="n">bytes_read</code><code class="p">]</code><code class="p">)</code><code class="w">
+</code><code class="w">                    </code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">line</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">String</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                    </code><code class="k">for</code><code class="w"> </code><code class="n">_</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="mi">0</code><code class="o">..</code><code class="n">args</code><code class="p">.</code><code class="n">lines</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                        </code><code class="kd">let</code><code class="w"> </code><code class="n">bytes</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">file</code><code class="p">.</code><code class="n">read_line</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">line</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w">
+</code><code class="w">                        </code><code class="k">if</code><code class="w"> </code><code class="n">bytes</code><code class="w"> </code><code class="o">=</code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                            </code><code class="k">break</code><code class="p">;</code><code class="w">
+</code><code class="w">                        </code><code class="p">}</code><code class="w">
+</code><code class="w">                        </code><code class="fm">print!</code><code class="p">(</code><code class="s">"</code><code class="s">{line}</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                        </code><code class="n">line</code><code class="p">.</code><code class="n">clear</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                    </code><code class="p">}</code><code class="w">
+</code><code class="w">                </code><code class="p">}</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_head_aches_CO13-1" id="callout_head_aches_CO13-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Use the <a href="https://oreil.ly/e0wqL"><code>Vec::len</code> method</a> to get the number of files.<a data-primary="Vec::len method" data-type="indexterm" id="id667"/></p></dd>
+<dt><a class="co" href="#co_head_aches_CO13-2" id="callout_head_aches_CO13-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Use the <code>Iterator::enumerate</code> method to track the file number and 
+<span class="keep-together">filenames.</span></p></dd>
+<dt><a class="co" href="#co_head_aches_CO13-3" id="callout_head_aches_CO13-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Only print headers when there are multiple files.</p></dd>
+<dt><a class="co" href="#co_head_aches_CO13-4" id="callout_head_aches_CO13-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Print a newline when <code>file_num</code> is greater than <code>0</code>, which indicates the first file.</p></dd>
+</dl>
+</div></section>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Going Further" data-type="sect1"><div class="sect1" id="id46">
+<h1>Going Further</h1>
+
+<p>There’s no reason to stop this party now.
+Consider implementing how the GNU <code>head</code> handles numeric values with suffixes and negative values.<a data-primary="head program" data-secondary="writing headr version" data-tertiary="going further" data-type="indexterm" id="id668"/>
+For instance, <code>-c=1K</code> means print the first 1,024 bytes of the file, and <code>-n=-3</code> means print all but the last three lines of the file.
+You’ll need to change <code>lines</code> and <code>bytes</code> to signed integer values to store both positive and negative numbers.
+Be sure to run the GNU <code>head</code> with these arguments, capture the output to test files, and write tests to cover the new features you add.</p>
+
+<p>You could also add an option for selecting characters in addition to bytes.
+You can use the <a href="https://oreil.ly/Yohiw"><code>String::chars</code> function</a> to split a string into characters.<a data-primary="String::chars function" data-type="indexterm" id="id669"/>
+Finally, copy the test input file with the Windows line endings (<em>tests/inputs/three.txt</em>) to the tests for <a data-type="xref" href="ch03.html#ch03">Chapter 3</a>.
+Edit the <em>mk-outs.sh</em> for that program to incorporate this file, and then expand the tests and program to ensure that line endings are preserved.</p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Summary" data-type="sect1"><div class="sect1" id="id47">
+<h1>Summary</h1>
+
+<p>This chapter dove into some fairly sticky subjects, such as converting types like string inputs to a <code>u64</code> and then casting these to <code>usize</code>.
+If you still feel confused, just know that you won’t always.
+If you keep reading the docs and writing more code, it will eventually make sense.</p>
+
+<p>Here are some things you accomplished in this chapter:</p>
+
+<ul>
+<li>
+<p>You learned to create optional parameters that can take values. Previously, the options were flags.</p>
+</li>
+<li>
+<p>You saw that all command-line arguments are strings and used <code>clap</code> to attempt the conversion of a string like <code>"3"</code> into the number <code>3</code>.</p>
+</li>
+<li>
+<p>You learned to convert types using the <code>as</code> keyword.</p>
+</li>
+<li>
+<p>You found that using <code>_</code> as the name or prefix of a variable is a way to indicate to the compiler that you don’t intend to use the value. When used in a type annotation, it tells the compiler to infer the type.</p>
+</li>
+<li>
+<p>You learned how to use <code>BufRead::read_line</code> to preserve line endings while reading a filehandle.</p>
+</li>
+<li>
+<p>You found that the <code>take</code> method works on both iterators and filehandles to limit the number of elements you select.</p>
+</li>
+<li>
+<p>You learned to indicate type information on the lefthand side of an assignment or on the righthand side using the turbofish operator.</p>
+</li>
+</ul>
+
+<p>In the next chapter, you’ll learn more about Rust iterators and how to break input into lines, bytes, and characters.<a data-primary="head program" data-startref="ix_head" data-type="indexterm" id="id670"/></p>
+</div></section>
+<div data-type="footnotes"><p data-type="footnote" id="id640"><sup><a href="ch04.html#id640-marker">1</a></sup> EOF is an acronym for <em>end of file</em>.</p></div></div></section></body></html>

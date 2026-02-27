@@ -1,0 +1,1291 @@
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>On the Catwalk</title><link href="epub.css" rel="stylesheet" type="text/css"/>
+<meta content="urn:uuid:e80a1ec8-ed8e-40f7-ba3d-26a647960341" name="Adept.expected.resource"/></head><body data-type="book"><section data-pdf-bookmark="Chapter 3. On the Catwalk" data-type="chapter" epub:type="chapter"><div class="chapter" id="ch03">
+<h1><span class="label">Chapter 3. </span>On the Catwalk</h1>
+
+<blockquote>
+<p>
+When you are alone / You are the cat, you are the phone / You are an animal
+</p>
+<p data-type="attribution">
+They Might Be Giants, “Don’t Let’s Start” (1986)
+</p>
+</blockquote>
+
+<p>In this chapter, the challenge is to write a clone of <code>cat</code>, which is so named because it can con<em>cat</em>enate many files into one file.<a data-primary="cat (concatenate) command" data-type="indexterm" id="ix_cat"/>
+That is, given files <em>a</em>, <em>b</em>, and <em>c</em>, you could execute <code>cat a b c &gt; all</code> to stream all the lines from these three files and redirect them into a file called <em>all</em>.
+The program will accept a couple of different options to prefix each line with the line number.</p>
+
+<p>You’ll learn how to do the following:</p>
+
+<ul>
+<li>
+<p>Use testing-first development</p>
+</li>
+<li>
+<p>Test for the existence of a file</p>
+</li>
+<li>
+<p>Create a random string for a filename that does not exist</p>
+</li>
+<li>
+<p>Read regular files or <code>STDIN</code> (pronounced <em>standard in</em>)</p>
+</li>
+<li>
+<p>Use <code>eprintln!</code> to print to <code>STDERR</code> and <code>format!</code> to format a string</p>
+</li>
+<li>
+<p>Write a test that provides input on <code>STDIN</code></p>
+</li>
+<li>
+<p>Define mutually exclusive arguments</p>
+</li>
+<li>
+<p>Use the <code>enumerate</code> method of an iterator</p>
+</li>
+</ul>
+
+
+
+
+
+
+<section data-pdf-bookmark="How cat Works" data-type="sect1"><div class="sect1" id="id26">
+<h1>How cat Works</h1>
+
+<p>I’ll start by showing how <code>cat</code> works so that you know what is expected of the challenge.<a data-primary="cat (concatenate) command" data-secondary="how it works" data-type="indexterm" id="ix_cathow"/>
+The BSD version of <code>cat</code> does not print the usage for the <code>-h|--help</code> flags, so I must use <strong><code>man cat</code></strong> to read the manual page.<a data-primary="man cat command" data-type="indexterm" id="id462"/><a data-primary="BSD version" data-secondary="cat utility" data-type="indexterm" id="id463"/>
+For such a limited program, it has a 
+<span class="keep-together">surprising</span> number of options, but the challenge program will implement only a subset of these:</p>
+
+<pre data-type="programlisting">CAT(1)                    BSD General Commands Manual                   CAT(1)
+
+NAME
+     cat -- concatenate and print files
+
+SYNOPSIS
+     cat [-benstuv] [file ...]
+
+DESCRIPTION
+     The cat utility reads files sequentially, writing them to the standard
+     output.  The file operands are processed in command-line order.  If file
+     is a single dash ('-') or absent, cat reads from the standard input.  If
+     file is a UNIX domain socket, cat connects to it and then reads it until
+     EOF.  This complements the UNIX domain binding capability available in
+     inetd(8).
+
+     The options are as follows:
+
+     -b      Number the non-blank output lines, starting at 1.
+
+     -e      Display non-printing characters (see the -v option), and display
+             a dollar sign ('$') at the end of each line.
+
+     -n      Number the output lines, starting at 1.
+
+     -s      Squeeze multiple adjacent empty lines, causing the output to be
+             single spaced.
+
+     -t      Display non-printing characters (see the -v option), and display
+             tab characters as '^I'.
+
+     -u      Disable output buffering.
+
+     -v      Display non-printing characters so they are visible.  Control
+             characters print as '^X' for control-X; the delete character
+             (octal 0177) prints as '^?'.  Non-ASCII characters (with the high
+             bit set) are printed as 'M-' (for meta) followed by the character
+             for the low 7 bits.
+
+EXIT STATUS
+     The cat utility exits 0 on success, and &gt;0 if an error occurs.</pre>
+
+<p>Throughout the book I will also show the GNU versions of programs so that you can consider how the programs can vary and to provide inspiration for how you might expand beyond the solutions I present.<a data-primary="GNU version" data-secondary="cat command" data-type="indexterm" id="id464"/>
+Note that the GNU version does respond to <code>--help</code>, as will the solution you will write:</p>
+
+<pre data-type="programlisting">$ cat --help
+Usage: cat [OPTION]... [FILE]...
+Concatenate FILE(s), or standard input, to standard output.
+
+  -A, --show-all           equivalent to -vET
+  -b, --number-nonblank    number nonempty output lines, overrides -n
+  -e                       equivalent to -vE
+  -E, --show-ends          display $ at end of each line
+  -n, --number             number all output lines
+  -s, --squeeze-blank      suppress repeated empty output lines
+  -t                       equivalent to -vT
+  -T, --show-tabs          display TAB characters as ^I
+  -u                       (ignored)
+  -v, --show-nonprinting   use ^ and M- notation, except for LFD and TAB
+      --help     display this help and exit
+      --version  output version information and exit
+
+With no FILE, or when FILE is -, read standard input.
+
+Examples:
+  cat f - g  Output f's contents, then standard input, then g's contents.
+  cat        Copy standard input to standard output.
+
+GNU coreutils online help: &lt;http://www.gnu.org/software/coreutils/&gt;
+For complete documentation, run: info coreutils 'cat invocation'</pre>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>The BSD version predates the GNU version, so the latter implements all the same short flags to be compatible. <a data-primary="flags" data-secondary="- for short names and ‐‐ for long names of" data-type="indexterm" id="id465"/>As is typical of GNU programs, it also offers long flag aliases like <code>--number</code> for <code>-n</code> and <code>--number-nonblank</code> for <code>-b</code>. I will show you how to offer both options, like the GNU version.</p>
+</div>
+
+<p>For the challenge program, you will implement only the options <code>-b|--number​-⁠non⁠blank</code> and <code>-n|--number</code>.
+I will also show you how to read regular files and 
+<span class="keep-together"><code>STDIN</code> when</span> given a filename argument of a dash (<code>-</code>).<a data-primary="- (dash or minus sign)" data-secondary="filename argument, reading with cat" data-type="indexterm" id="id466"/>
+To demonstrate <code>cat</code>, I’ll use some files that I have included in the <em>03_catr</em> directory of the repository.
+Change into that 
+<span class="keep-together">directory:</span></p>
+
+<pre data-type="programlisting">$ cd 03_catr</pre>
+
+<p>The <em>tests/inputs</em> directory contains four files for testing:</p>
+
+<ul>
+<li>
+<p><em>empty.txt</em>: an empty file</p>
+</li>
+<li>
+<p><em>fox.txt</em>: a single line of text</p>
+</li>
+<li>
+<p><em>spiders.txt</em>: a haiku by Kobayashi Issa with three lines of text</p>
+</li>
+<li>
+<p><em>the-bustle.txt</em>: a lovely poem by Emily Dickinson that has two four-line stanzas of text separated by one blank line</p>
+</li>
+</ul>
+
+<p>Empty files are common, if useless.
+The following command produces no output, so we’ll expect our program to do the same:</p>
+
+<pre data-type="programlisting">$ cat tests/inputs/empty.txt</pre>
+
+<p>Next, I’ll run <code>cat</code> on a file with one line of text:</p>
+
+<pre data-type="programlisting">$ cat tests/inputs/fox.txt
+The quick brown fox jumps over the lazy dog.</pre>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>I have already used <code>cat</code> several times in this book to print the contents of a single file, as in the preceding command.<a data-primary="cat (concatenate) command" data-secondary="printing contents of a file" data-type="indexterm" id="id467"/> This is another common usage of the program outside of its original intent of concatenating files.</p>
+</div>
+
+<p>The <code>-n|--number</code> and <code>-b|--number-nonblank</code> flags will both number the lines. The line number is right-justified in a field six characters wide followed by a tab character and then the line of text.
+To distinguish the tab character, I can use the <code>-t</code> option to display nonprinting characters so that the tab shows as <code>^I</code>, but note that the challenge program is not expected to do this.
+In the <a data-primary="| (pipe) symbol" data-secondary="using to connect STDOUT and STDIN for commands" data-type="indexterm" id="id468"/><a data-primary="STDIN" data-secondary="connecting to STDOUT for another command" data-type="indexterm" id="id469"/><a data-primary="STDOUT" data-secondary="connecting to STDIN for another command" data-type="indexterm" id="id470"/>following command, I use the Unix pipe (<code>|</code>) to connect <code>STDOUT</code> from the first command to <code>STDIN</code> in the second command:</p>
+
+<pre data-type="programlisting">$ cat -n tests/inputs/fox.txt | cat -t
+     1^IThe quick brown fox jumps over the lazy dog.</pre>
+
+<p>The <em>spiders.txt</em> file has three lines of text that should be numbered with the <code>-n</code> option:</p>
+
+<pre data-type="programlisting">$ cat -n tests/inputs/spiders.txt
+     1	Don't worry, spiders,
+     2	I keep house
+     3	casually.</pre>
+
+<p>The difference between <code>-n</code> (on the left) and <code>-b</code> (on the right) is apparent only with <em>the-bustle.txt</em>, as the latter will number only nonblank lines:</p>
+
+<pre data-type="programlisting">$ cat -n tests/inputs/the-bustle.txt    $ cat -b tests/inputs/the-bustle.txt
+     1	The bustle in a house                1	The bustle in a house
+     2	The morning after death              2	The morning after death
+     3	Is solemnest of industries           3	Is solemnest of industries
+     4	Enacted upon earth,—                 4	Enacted upon earth,—
+     5
+     6	The sweeping up the heart,           5	The sweeping up the heart,
+     7	And putting love away                6	And putting love away
+     8	We shall not want to use again       7	We shall not want to use again
+     9	Until eternity.                      8	Until eternity.</pre>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Oddly, you can use <code>-b</code> and <code>-n</code> together, and the <code>-b</code> option takes precedence. The challenge program will allow only one or the other.</p>
+</div>
+
+<p>In the following example, I’m using <em>blargh</em> to represent a nonexistent file.
+I create the file <em>cant-touch-this</em> using the <code>touch</code> command and use the <code>chmod</code> command to set permissions that make it unreadable.<a data-primary="touch command" data-type="indexterm" id="id471"/><a data-primary="chmod command" data-type="indexterm" id="id472"/>
+(You’ll learn more about what the <code>000</code> means in <a data-type="xref" href="ch14.html#ch14">Chapter 14</a> when you write a Rust version of <code>ls</code>.)
+When <code>cat</code> encounters any file that does not exist or cannot be opened, it will print a message to <code>STDERR</code> and move to the next file:</p>
+
+<pre data-type="programlisting">$ touch cant-touch-this &amp;&amp; chmod 000 cant-touch-this
+$ cat tests/inputs/fox.txt <strong>blargh</strong> tests/inputs/spiders.txt <strong>cant-touch-this</strong>
+The quick brown fox jumps over the lazy dog. <a class="co" href="#callout_on_the_catwalk_CO1-1" id="co_on_the_catwalk_CO1-1"><img alt="1" src="assets/1.png"/></a>
+<strong>cat: blargh: No such file or directory</strong> <a class="co" href="#callout_on_the_catwalk_CO1-2" id="co_on_the_catwalk_CO1-2"><img alt="2" src="assets/2.png"/></a>
+Don't worry, spiders, <a class="co" href="#callout_on_the_catwalk_CO1-3" id="co_on_the_catwalk_CO1-3"><img alt="3" src="assets/3.png"/></a>
+I keep house
+casually.
+<strong>cat: cant-touch-this: Permission denied</strong> <a class="co" href="#callout_on_the_catwalk_CO1-4" id="co_on_the_catwalk_CO1-4"><img alt="4" src="assets/4.png"/></a></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_on_the_catwalk_CO1-1" id="callout_on_the_catwalk_CO1-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>This is the output from the first file.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO1-2" id="callout_on_the_catwalk_CO1-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>This is the error for a nonexistent file.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO1-3" id="callout_on_the_catwalk_CO1-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>This is the output from the third file.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO1-4" id="callout_on_the_catwalk_CO1-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>This is the error for an unreadable file.</p></dd>
+</dl>
+
+<p>Finally, I’ll run <code>cat</code> with all the files.
+Notice in the following output that the BSD version starts renumbering the lines for each file, which is the implementation expected by the tests.
+The GNU version of <code>cat</code> keeps incrementing the line counter over all the files.</p>
+
+<pre data-type="programlisting">$ cd tests/inputs <a class="co" href="#callout_on_the_catwalk_CO2-1" id="co_on_the_catwalk_CO2-1"><img alt="1" src="assets/1.png"/></a>
+$ cat -n empty.txt fox.txt spiders.txt the-bustle.txt <a class="co" href="#callout_on_the_catwalk_CO2-2" id="co_on_the_catwalk_CO2-2"><img alt="2" src="assets/2.png"/></a>
+     1	The quick brown fox jumps over the lazy dog.
+     1	Don't worry, spiders,
+     2	I keep house
+     3	casually.
+     1	The bustle in a house
+     2	The morning after death
+     3	Is solemnest of industries
+     4	Enacted upon earth,—
+     5
+     6	The sweeping up the heart,
+     7	And putting love away
+     8	We shall not want to use again
+     9	Until eternity.</pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_on_the_catwalk_CO2-1" id="callout_on_the_catwalk_CO2-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Change into the <em>tests/inputs</em> directory.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO2-2" id="callout_on_the_catwalk_CO2-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Run <code>cat</code> with all the files and the <code>-n</code> option to number the lines.</p></dd>
+</dl>
+
+<p>If you look at the <em>mk-outs.sh</em> script used to generate the test cases, you’ll see I execute <code>cat</code> with all these files, individually and together, as regular files and through <code>STDIN</code>, using no flags and with the <code>-n</code> and <code>-b</code> flags.
+I capture all the outputs to various files in the <em>tests/expected</em> directory to use in testing.<a data-primary="cat (concatenate) command" data-secondary="how it works" data-startref="ix_cathow" data-type="indexterm" id="id473"/></p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Getting Started" data-type="sect1"><div class="sect1" id="id27">
+<h1>Getting Started</h1>
+
+<p>The challenge program you write should be called <code>catr</code> (pronounced <em>cat-er</em>) for a Rust version of <code>cat</code>.<a data-primary="cat (concatenate) command" data-secondary="writing catr version" data-tertiary="getting started" data-type="indexterm" id="id474"/><a data-primary="cargo new catr command" data-type="indexterm" id="id475"/><a data-primary="rand crate" data-type="indexterm" id="id476"/>
+I suggest you begin with <strong><code>cargo new catr</code></strong> to start a new application.
+You’ll use all the same external crates as in <a data-type="xref" href="ch02.html#ch02">Chapter 2</a>, plus the <a href="https://oreil.ly/HJOPg"><code>rand</code> crate</a> to create random values for testing.
+Update your <em>Cargo.toml</em> to add the following dependencies:</p>
+
+<pre data-code-language="toml" data-type="programlisting"><code class="k">[dependencies]</code><code class="w"/>
+<code class="n">anyhow</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"1.0.79"</code><code class="w"/>
+<code class="n">clap</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">version</code><code class="w"> </code><code class="p">=</code><code class="w"> </code><code class="s2">"4.5.0"</code><code class="p">,</code><code class="w"> </code><code class="n">features</code><code class="w"> </code><code class="p">=</code><code class="w"> </code><code class="p">[</code><code class="s2">"derive"</code><code class="p">]</code><code class="w"> </code><code class="p">}</code><code class="w"/>
+
+<code class="k">[dev-dependencies]</code><code class="w"/>
+<code class="n">assert_cmd</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"2.0.13"</code><code class="w"/>
+<code class="n">predicates</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"3.0.4"</code><code class="w"/>
+<code class="n">pretty_assertions</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"1.4.0"</code><code class="w"/>
+<code class="n">rand</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"0.8.5"</code><code class="w"/></pre>
+
+<p>You’re going to write the whole challenge program yourself later, but first I’m going to coach you through the things you need to know.</p>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Starting with Tests" data-type="sect2"><div class="sect2" id="id28">
+<h2>Starting with Tests</h2>
+
+<p>So far in this book, I’ve shown you how to write tests after writing the programs to get you used to the idea of testing and to practice the basics of the Rust language.<a data-primary="cat (concatenate) command" data-secondary="writing catr version" data-tertiary="starting with tests" data-type="indexterm" id="ix_catwrstart"/>
+Starting with this chapter, I want you to think about the tests before you start writing the program.
+Tests force you to consider the program’s requirements and how you will verify that the program works as expected.<a data-primary="test-driven development (TDD)" data-type="indexterm" id="id477"/>
+Ultimately, I want to draw your attention to <em>test-driven development</em> (TDD) as described in <a href="https://oreil.ly/Aved3">a book by that title</a> written by Kent Beck (Addison-Wesley).
+TDD advises we write the tests <em>before</em> writing the code, as shown in <a data-type="xref" href="#fig_3.1">Figure 3-1</a>.
+Technically, TDD involves writing tests as you add each feature, and I will demonstrate this technique in later 
+<span class="keep-together">chapters</span>.
+Because I’ve written all the tests for the program, you might consider this more like <em>test-first development</em>.<a data-primary="test-first development" data-type="indexterm" id="id478"/>
+Regardless of how and when the tests are written, the point is to emphasize testing at the beginning of the process.
+Once your program passes the tests, you can use the tests to improve and refactor your code, perhaps by reducing the lines of code or by finding a faster implementation.</p>
+
+<figure><div class="figure" id="fig_3.1">
+<img alt="clru 0301" src="assets/clru_0301.png"/>
+<h6><span class="label">Figure 3-1. </span>The test-driven development cycle starts with writing a test and then the code that passes it.</h6>
+</div></figure>
+
+<p>Copy the <em>03_catr/tests</em> directory into your new <em>catr</em> directory.
+Don’t copy anything but the tests, as you will write the rest of the code yourself.
+On a Unix-type system, you can copy this directory and its contents using the <code>cp</code> command <a data-primary="cp command" data-type="indexterm" id="id479"/>with the <em>recursive</em> <code>-r</code> option:</p>
+
+<pre data-type="programlisting">$ cd catr
+$ cp -r ~/command-line-rust/03_catr/tests .</pre>
+
+<p>Your project directory should have a structure like this:</p>
+
+<pre data-type="programlisting">$ tree -L 2
+.
+├── Cargo.toml
+├── src
+│   └── main.rs
+└── tests
+    ├── cli.rs
+    ├── expected
+    └── inputs</pre>
+
+<p>Run <strong><code>cargo test</code></strong> to download the dependencies, compile your program, and run the tests, all of which should fail.
+Starting with this chapter, I’ll get you started with the basics of setting up each program, give you the info you need to write the program, and let you finish writing it using the tests to guide you.<a data-primary="cat (concatenate) command" data-secondary="writing catr version" data-startref="ix_catwrstart" data-tertiary="starting with tests" data-type="indexterm" id="id480"/></p>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Defining the Parameters" data-type="sect2"><div class="sect2" id="id29">
+<h2>Defining the Parameters</h2>
+
+<p>Let’s start by representing the command-line parameters for <code>catr</code> with a struct called <code>Args</code>. <a data-primary="cat (concatenate) command" data-secondary="writing catr version" data-tertiary="defining parameters" data-type="indexterm" id="ix_catwrdefpar"/>Specifically, the program requires a list of input filenames and two Boolean flags for numbering the lines of output.<a data-primary="Args struct" data-type="indexterm" id="id481"/>
+Add the following struct to <em>src/main.rs</em>.
+I recommend placing this near the top after any <code>use</code> statements:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[</code><code class="cp">derive(Debug)</code><code class="cp">]</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO3-1" id="co_on_the_catwalk_CO3-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+</code><code class="k">struct</code><code> </code><code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO3-2" id="co_on_the_catwalk_CO3-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="n">files</code><code>:</code><code> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO3-3" id="co_on_the_catwalk_CO3-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+    </code><code class="n">number_lines</code><code>:</code><code> </code><code class="kt">bool</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO3-4" id="co_on_the_catwalk_CO3-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+    </code><code class="n">number_nonblank_lines</code><code>:</code><code> </code><code class="kt">bool</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO3-5" id="co_on_the_catwalk_CO3-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_on_the_catwalk_CO3-1" id="callout_on_the_catwalk_CO3-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <a href="https://oreil.ly/Lr8JE"><code>derive</code> macro</a> adds the <a href="https://oreil.ly/cEl5P"><code>Debug</code> trait</a> so the struct can be printed.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO3-2" id="callout_on_the_catwalk_CO3-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Define a struct called <code>Args</code>.<a data-primary="derive macros" data-type="indexterm" id="id482"/><a data-primary="Debug trait" data-type="indexterm" id="id483"/></p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO3-3" id="callout_on_the_catwalk_CO3-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>The <code>files</code> will be a vector of strings.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO3-4" id="callout_on_the_catwalk_CO3-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>This is a Boolean value to indicate whether or not to print the line numbers.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO3-5" id="callout_on_the_catwalk_CO3-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>This is a Boolean to control printing line numbers only for nonblank lines.</p></dd>
+</dl>
+
+<p>If you would like to use the <code>clap</code> derive pattern, then you can add the necessary annotations to the preceding struct.<a data-primary="derive pattern" data-secondary="using in catr program" data-type="indexterm" id="id484"/>
+If you prefer the builder pattern, I suggest that you write a function called <code>get_args</code> with the following skeleton.<a data-primary="builder pattern" data-secondary="using in catr program" data-type="indexterm" id="id485"/><a data-primary="get_args function" data-secondary="catr program" data-type="indexterm" id="id486"/>
+Use what you learned from <a data-type="xref" href="ch02.html#ch02">Chapter 2</a> to complete this function on your own:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">get_args</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO4-1" id="co_on_the_catwalk_CO4-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="n">matches</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">catr</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">version</code><code class="p">(</code><code class="s">"</code><code class="s">0.1.0</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">author</code><code class="p">(</code><code class="s">"</code><code class="s">Ken Youens-Clark &lt;kyclark@gmail.com&gt;</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">about</code><code class="p">(</code><code class="s">"</code><code class="s">Rust version of `cat`</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="c1">// What goes here? </code><a class="co" href="#callout_on_the_catwalk_CO4-2" id="co_on_the_catwalk_CO4-2"><img alt="2" src="assets/2.png"/></a><code class="c1">
+</code><code class="w">        </code><code class="p">.</code><code class="n">get_matches</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="n">Args</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO4-3" id="co_on_the_catwalk_CO4-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+        </code><code class="n">files</code><code>:</code><code> </code><code class="o">..</code><code class="p">.</code><code class="w">
+</code><code class="w">        </code><code class="n">number_lines</code><code>:</code><code> </code><code class="o">..</code><code class="p">.</code><code class="w">
+</code><code class="w">        </code><code class="n">number_nonblank_lines</code><code>:</code><code> </code><code class="o">..</code><code class="p">.</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_on_the_catwalk_CO4-1" id="callout_on_the_catwalk_CO4-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>This function returns an <code>Args</code> struct.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO4-2" id="callout_on_the_catwalk_CO4-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Define the program’s arguments here.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO4-3" id="callout_on_the_catwalk_CO4-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Return an <code>Args</code> struct using the supplied values.</p></dd>
+</dl>
+
+<p>Update the <code>main</code> function to the following code:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">main</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">args</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">get_args</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO5-1" id="co_on_the_catwalk_CO5-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{args:#?}</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO5-2" id="co_on_the_catwalk_CO5-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_on_the_catwalk_CO5-1" id="callout_on_the_catwalk_CO5-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Attempt to parse the command-line arguments.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO5-2" id="callout_on_the_catwalk_CO5-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Pretty-print the arguments.</p></dd>
+</dl>
+
+<p>When run with the <code>-h</code> or <code>--help</code> flags, your program should print a usage like this:</p>
+
+<pre data-type="programlisting">$ cargo run -- --help
+Rust version of `cat`
+
+Usage: catr [OPTIONS] [FILE]...
+
+Arguments:
+  [FILE]...  Input file(s) [default: -]
+
+Options:
+  -n, --number           Number lines
+  -b, --number-nonblank  Number non-blank lines
+  -h, --help             Print help
+  -V, --version          Print version</pre>
+
+<p>With no arguments, your program should print the <code>Args</code> like this:</p>
+
+<pre data-type="programlisting">$ cargo run
+Args {
+    files: [ <a class="co" href="#callout_on_the_catwalk_CO6-1" id="co_on_the_catwalk_CO6-1"><img alt="1" src="assets/1.png"/></a>
+        "-",
+    ],
+    number_lines: false, <a class="co" href="#callout_on_the_catwalk_CO6-2" id="co_on_the_catwalk_CO6-2"><img alt="2" src="assets/2.png"/></a>
+    number_nonblank_lines: false,
+}</pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_on_the_catwalk_CO6-1" id="callout_on_the_catwalk_CO6-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <code>files</code> argument should default to a vector containing a single dash (<code>-</code>) for <code>STDIN</code>.<a data-primary="files argument" data-secondary="catr program" data-type="indexterm" id="id487"/></p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO6-2" id="callout_on_the_catwalk_CO6-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The Boolean arguments should both default to <code>false</code>.</p></dd>
+</dl>
+
+<p class="pagebreak-before">Run it with some arguments and be sure the arguments are parsed correctly:</p>
+
+<pre data-type="programlisting">$ cargo run -- -n tests/inputs/fox.txt
+Args {
+    files: [
+        "tests/inputs/fox.txt", <a class="co" href="#callout_on_the_catwalk_CO7-1" id="co_on_the_catwalk_CO7-1"><img alt="1" src="assets/1.png"/></a>
+    ],
+    number_lines: true, <a class="co" href="#callout_on_the_catwalk_CO7-2" id="co_on_the_catwalk_CO7-2"><img alt="2" src="assets/2.png"/></a>
+    number_nonblank_lines: false,
+}</pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_on_the_catwalk_CO7-1" id="callout_on_the_catwalk_CO7-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The positional file argument is parsed into the <code>files</code>.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO7-2" id="callout_on_the_catwalk_CO7-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <code>-n</code> option causes <code>number_lines</code> to be <code>true</code>.</p></dd>
+</dl>
+
+<p>While the BSD version will allow both <code>-n</code> and <code>-b</code>, the challenge program should consider<a data-primary="BSD version" data-secondary="cat utility" data-type="indexterm" id="id488"/> these to be mutually exclusive and generate an error when they’re used together:</p>
+
+<pre data-type="programlisting">$ cargo run -- -b -n tests/inputs/fox.txt
+error: the argument '--number-nonblank' cannot be used with '--number'
+
+Usage: catr --number-nonblank &lt;FILE&gt;...
+
+For more information, try '--help'.</pre>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Stop reading here and get your program working as described so far. Seriously! I want you to try writing your version of this before you read ahead. Your program should also pass <strong><code>cargo test usage</code></strong>. I’ll wait here until you finish.</p>
+</div>
+
+<p>All set?
+Compare what you have to my <code>get_args</code> function.
+Be sure to add <code>use clap::{Arg, ArgAction, Command}</code> to your imports for the following<a data-primary="get_args function" data-secondary="catr program" data-type="indexterm" id="id489"/> code:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">get_args</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">matches</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">catr</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">version</code><code class="p">(</code><code class="s">"</code><code class="s">0.1.0</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">author</code><code class="p">(</code><code class="s">"</code><code class="s">Ken Youens-Clark &lt;kyclark@gmail.com&gt;</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">about</code><code class="p">(</code><code class="s">"</code><code class="s">Rust version of `cat`</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w">
+</code><code class="w">            </code><code class="n">Arg</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">files</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO8-1" id="co_on_the_catwalk_CO8-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+                </code><code class="p">.</code><code class="n">value_name</code><code class="p">(</code><code class="s">"</code><code class="s">FILE</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"</code><code class="s">Input file(s)</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">num_args</code><code class="p">(</code><code class="mi">1</code><code class="o">..</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">default_value</code><code class="p">(</code><code class="s">"</code><code class="s">-</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w">
+</code><code class="w">            </code><code class="n">Arg</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">number</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO8-2" id="co_on_the_catwalk_CO8-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+                </code><code class="p">.</code><code class="n">short</code><code class="p">(</code><code class="sc">'n'</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">long</code><code class="p">(</code><code class="s">"</code><code class="s">number</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"</code><code class="s">Number lines</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">action</code><code class="p">(</code><code class="n">ArgAction</code><code>::</code><code class="n">SetTrue</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">conflicts_with</code><code class="p">(</code><code class="s">"</code><code class="s">number_nonblank</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w">
+</code><code class="w">            </code><code class="n">Arg</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">number_nonblank</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO8-3" id="co_on_the_catwalk_CO8-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+                </code><code class="p">.</code><code class="n">short</code><code class="p">(</code><code class="sc">'b'</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">long</code><code class="p">(</code><code class="s">"</code><code class="s">number-nonblank</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"</code><code class="s">Number non-blank lines</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">action</code><code class="p">(</code><code class="n">ArgAction</code><code>::</code><code class="n">SetTrue</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">get_matches</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="n">Args</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="n">files</code><code>:</code><code> </code><code class="nc">matches</code><code class="p">.</code><code class="n">get_many</code><code class="p">(</code><code class="s">"</code><code class="s">files</code><code class="s">"</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">cloned</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">collect</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO8-4" id="co_on_the_catwalk_CO8-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+        </code><code class="n">number_lines</code><code>:</code><code> </code><code class="nc">matches</code><code class="p">.</code><code class="n">get_flag</code><code class="p">(</code><code class="s">"</code><code class="s">number</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO8-5" id="co_on_the_catwalk_CO8-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+        </code><code class="n">number_nonblank_lines</code><code>:</code><code> </code><code class="nc">matches</code><code class="p">.</code><code class="n">get_flag</code><code class="p">(</code><code class="s">"</code><code class="s">number_nonblank</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_on_the_catwalk_CO8-1" id="callout_on_the_catwalk_CO8-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>This positional argument is for the files and is required to have at least one value that defaults to a dash (<code>-</code>).</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO8-2" id="callout_on_the_catwalk_CO8-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>This is an option that has a short name <code>-n</code> and a long name <code>--number</code>. When present, it will tell the program to print line numbers.<a data-primary="lines" data-secondary="printing line numbers in catr" data-type="indexterm" id="id490"/> It cannot occur in conjunction with <code>-b</code>.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO8-3" id="callout_on_the_catwalk_CO8-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>The <code>-b|--number-nonblank</code> flag controls whether or not to print line numbers for nonblank lines.<a data-primary="-b|--number-nonblank flag" data-primary-sortas="b|" data-type="indexterm" id="id491"/></p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO8-4" id="callout_on_the_catwalk_CO8-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Because at least one value is required, it should be safe to call <code>Option::unwrap</code>.<a data-primary="Option::unwrap function" data-type="indexterm" id="id492"/> Note that <code>Iterator::collect</code> returns a <code>Vec</code> due to type inference.<a data-primary="Iterator::collect function" data-type="indexterm" id="id493"/></p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO8-5" id="callout_on_the_catwalk_CO8-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>The two Boolean options are set using <code>ArgMatches::get_flag</code>.<a data-primary="ArgMatches::get_flag function" data-type="indexterm" id="id494"/></p></dd>
+</dl>
+<div data-type="tip"><h6>Tip</h6>
+<p>Optional arguments have short and/or long names, but posi­tional ones do not. <a data-primary="optional arguments" data-secondary="defining before or after positional arguments" data-type="indexterm" id="id495"/><a data-primary="positional arguments" data-secondary="defining with min_values" data-type="indexterm" id="id496"/>You can define optional arguments before or after positional arguments.</p>
+</div>
+
+<p>For the <code>clap</code> derive pattern<a data-primary="Args struct" data-secondary="updating for clap derive in catr" data-type="indexterm" id="id497"/><a data-primary="derive pattern" data-secondary="using in catr program" data-type="indexterm" id="id498"/>, update the <code>Args</code> struct as follows:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">use</code><code class="w"> </code><code class="n">clap</code>::<code class="n">Parser</code><code class="p">;</code><code class="w"/>
+
+<code class="cp">#[derive(Debug, Parser)]</code><code class="w"/>
+<code class="cp">#[command(author, version, about)]</code><code class="w"/>
+<code class="sd">/// Rust version of `cat`</code>
+<code class="k">struct</code> <code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="sd">/// Input file(s)</code>
+<code class="w">    </code><code class="cp">#[arg(value_name = </code><code class="s">"FILE"</code><code class="cp">, default_value = </code><code class="s">"-"</code><code class="cp">)]</code><code class="w"/>
+<code class="w">    </code><code class="n">files</code>: <code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Number lines</code>
+<code class="w">    </code><code class="cp">#[arg(</code>
+<code class="cp">        short('n'),</code>
+<code class="cp">        long(</code><code class="s">"number"</code><code class="cp">),</code>
+<code class="cp">        conflicts_with(</code><code class="s">"number_nonblank_lines"</code><code class="cp">)</code>
+<code class="cp">    )]</code><code class="w"/>
+<code class="w">    </code><code class="n">number_lines</code>: <code class="kt">bool</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Number non-blank lines</code>
+<code class="w">    </code><code class="cp">#[arg(short('b'), long(</code><code class="s">"number-nonblank"</code><code class="cp">))]</code><code class="w"/>
+<code class="w">    </code><code class="n">number_nonblank_lines</code>: <code class="kt">bool</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Then <a data-primary="Args::parse function" data-type="indexterm" id="id499"/>change the <code>main</code> function to call <code>Args::parse()</code> instead of <code>get_args()</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">args</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Args</code>::<code class="n">parse</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{args:#?}"</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Execute <strong><code>cargo test</code></strong> to see the failing test output, but don’t despair.
+You will soon rejoice in a fully passing test suite.<a data-primary="cat (concatenate) command" data-secondary="writing catr version" data-startref="ix_catwrdefpar" data-tertiary="defining parameters" data-type="indexterm" id="id500"/></p>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Iterating Through the File Arguments" data-type="sect2"><div class="sect2" id="iterating_thru_file_args">
+<h2>Iterating Through the File Arguments</h2>
+
+<p>Now that you have validated all the arguments, you are ready to process the files and create the correct output.<a data-primary="files" data-secondary="iterating through file arguments in catr" data-type="indexterm" id="ix_filecatr"/><a data-primary="cat (concatenate) command" data-secondary="writing catr version" data-tertiary="iterating through file arguments" data-type="indexterm" id="id501"/>
+Next, I suggest you write a function called <code>run</code> that will accept the <code>Args</code> struct and return a <code>Result</code>.
+There are two important reasons for this:</p>
+<ol>
+<li>
+<p>I want to separate the parsing of command-line arguments from their use in the logic of the program. This makes it easier for you to choose the derive or builder patterns of <code>clap</code> or replace it with some other code.</p>
+</li>
+<li>
+<p>We are now moving into territory where code can fail. I want to use the <code>?</code> operator to call other functions that return a <code>Result</code> and pass any errors back to the caller, which requires that my calling function also return a <code>Result</code>.</p>
+</li>
+
+</ol>
+
+<p>Add <code>use anyhow::Result</code> and the following code to <em>src/main.rs</em>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">_args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO9-1" id="co_on_the_catwalk_CO9-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO9-2" id="co_on_the_catwalk_CO9-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_on_the_catwalk_CO9-1" id="callout_on_the_catwalk_CO9-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The function takes the <code>Args</code> struct and returns a <code>Result</code>.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO9-2" id="callout_on_the_catwalk_CO9-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Implicitly return an <code>Ok</code> containing the unit type.</p></dd>
+</dl>
+
+<p>If you want to use the <code>get_args</code> builder<a data-primary="builder pattern" data-secondary="using in catr program" data-type="indexterm" id="id502"/> pattern, change the <code>main</code> function to the 
+<span class="keep-together">following</span>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">main</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">run</code><code class="p">(</code><code class="n">get_args</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO10-1" id="co_on_the_catwalk_CO10-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+        </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"</code><code class="s">{e}</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO10-2" id="co_on_the_catwalk_CO10-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+        </code><code class="n">std</code><code>::</code><code class="n">process</code><code>::</code><code class="n">exit</code><code class="p">(</code><code class="mi">1</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO10-3" id="co_on_the_catwalk_CO10-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+    </code><code class="p">}</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_on_the_catwalk_CO10-1" id="callout_on_the_catwalk_CO10-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Call <code>run</code> with the results of <code>get_args</code> and catch the <code>Err</code> variant.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO10-2" id="callout_on_the_catwalk_CO10-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Print the error message <code>e</code> to <code>STDERR</code>.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO10-3" id="callout_on_the_catwalk_CO10-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Exit the program with a nonzero value to indicate an error.</p></dd>
+</dl>
+
+<p>If you want to use <a data-primary="derive pattern" data-secondary="using in catr program" data-type="indexterm" id="id503"/>the derive pattern, the code is almost identical:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">main</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">run</code><code class="p">(</code><code class="n">Args</code><code>::</code><code class="n">parse</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO11-1" id="co_on_the_catwalk_CO11-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+        </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"</code><code class="s">{e}</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="n">std</code><code>::</code><code class="n">process</code><code>::</code><code class="n">exit</code><code class="p">(</code><code class="mi">1</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_on_the_catwalk_CO11-1" id="callout_on_the_catwalk_CO11-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Change <code>get_args</code> to <code>Args::parse</code>.</p></dd>
+</dl>
+
+<p>Next, modify the <code>run</code> function to print each 
+<span class="keep-together">filename:</span></p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">filename</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">files</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO12-1" id="co_on_the_catwalk_CO12-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+        </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{filename}</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO12-2" id="co_on_the_catwalk_CO12-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_on_the_catwalk_CO12-1" id="callout_on_the_catwalk_CO12-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Iterate through each filename.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO12-2" id="callout_on_the_catwalk_CO12-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Print the filename.</p></dd>
+</dl>
+
+<p>Run the program with some input files.
+In the<a data-primary="file globs" data-secondary="expanding" data-type="indexterm" id="id504"/><a data-primary="glob pattern, handling by bash shell" data-type="indexterm" id="id505"/><a data-primary="bash shell" data-secondary="expanding file glob" data-type="indexterm" id="id506"/> following example, the <code>bash</code> shell will expand the file glob<sup><a data-type="noteref" href="ch03.html#id507" id="id507-marker">1</a></sup> <code>*.txt</code> into all filenames that end with the extension <em>.txt</em>:</p>
+
+<pre data-type="programlisting">$ cargo run -- tests/inputs/*.txt
+tests/inputs/empty.txt
+tests/inputs/fox.txt
+tests/inputs/spiders.txt
+tests/inputs/the-bustle.txt</pre>
+
+<p>Windows PowerShell can expand <a data-primary="Windows" data-secondary="expanding file glob with PowerShell" data-type="indexterm" id="id508"/>file globs using <code>Get-ChildItem</code>:</p>
+
+<pre data-type="programlisting">&gt; cargo run -q -- -n (Get-ChildItem .\tests\inputs\*.txt)
+C:\Users\kyclark\work\command-line-rust\03_catr\tests\inputs\empty.txt
+C:\Users\kyclark\work\command-line-rust\03_catr\tests\inputs\fox.txt
+C:\Users\kyclark\work\command-line-rust\03_catr\tests\inputs\spiders.txt
+C:\Users\kyclark\work\command-line-rust\03_catr\tests\inputs\the-bustle.txt</pre>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Opening a File or STDIN" data-type="sect2"><div class="sect2" id="id31">
+<h2>Opening a File or STDIN</h2>
+
+<p>The next step is to try to open each filename.<a data-primary="files" data-secondary="iterating through file arguments in catr" data-startref="ix_filecatr" data-type="indexterm" id="id509"/>
+When the filename is a dash, you should open <code>STDIN</code>; otherwise, attempt to open the given filename and handle errors.<a data-primary="files" data-secondary="opening a file or STDIN with catr program" data-type="indexterm" id="ix_fileopn"/><a data-primary="STDIN" data-secondary="opening with catr program" data-type="indexterm" id="ix_STDIN"/><a data-primary="cat (concatenate) command" data-secondary="writing catr version" data-tertiary="opening a file or STDIN" data-type="indexterm" id="ix_catwropen"/>
+For the following code, you will need to expand your imports with the 
+<span class="keep-together">following:</span></p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">use</code><code class="w"> </code><code class="n">std</code>::<code class="n">fs</code>::<code class="n">File</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code>::<code class="n">io</code>::<code class="p">{</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">BufRead</code><code class="p">,</code><code class="w"> </code><code class="n">BufReader</code><code class="p">};</code><code class="w"/></pre>
+
+<p>This next step is a bit tricky, so I will provide an <code>open</code> function for you to use.
+In the following code, I’m using the <code>match</code> keyword, which is similar to a <code>switch</code> statement in C.<a data-primary="match keyword" data-type="indexterm" id="id510"/>
+Specifically, I’m matching on whether the given filename is equal to a dash (<code>-</code>) or anything else, which is specified <a data-primary="_ (underscore)" data-secondary="wildcard character in matching" data-type="indexterm" id="id511"/>using the wildcard <code>_</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">open</code><code class="p">(</code><code class="n">filename</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="nb">Box</code><code class="o">&lt;</code><code class="k">dyn</code><code class="w"> </code><code class="n">BufRead</code><code class="o">&gt;</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO13-1" id="co_on_the_catwalk_CO13-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="k">match</code><code class="w"> </code><code class="n">filename</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="s">"</code><code class="s">-</code><code class="s">"</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="nb">Ok</code><code class="p">(</code><code class="nb">Box</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="n">BufReader</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="n">io</code><code>::</code><code class="n">stdin</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">)</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO13-2" id="co_on_the_catwalk_CO13-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+        </code><code class="n">_</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="nb">Ok</code><code class="p">(</code><code class="nb">Box</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="n">BufReader</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="n">File</code><code>::</code><code class="n">open</code><code class="p">(</code><code class="n">filename</code><code class="p">)</code><code class="o">?</code><code class="p">)</code><code class="p">)</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO13-3" id="co_on_the_catwalk_CO13-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+    </code><code class="p">}</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_on_the_catwalk_CO13-1" id="callout_on_the_catwalk_CO13-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The function will accept a filename and will return either an error or a boxed value that implements the <code>BufRead</code> trait.<a data-primary="BufRead trait" data-type="indexterm" id="id512"/></p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO13-2" id="callout_on_the_catwalk_CO13-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>When the filename is a dash (<code>-</code>), read from <a href="https://oreil.ly/TtQvx"><code>std::io::stdin</code></a>.<a data-primary="- (dash or minus sign)" data-secondary="filename argument, reading with catr" data-type="indexterm" id="id513"/><a data-primary="std::io::stdin" data-type="indexterm" id="id514"/></p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO13-3" id="callout_on_the_catwalk_CO13-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Otherwise, use <a href="https://oreil.ly/Aj1pC"><code>File::open</code></a> to try to open the given file or propagate an error.<a data-primary="File::open function" data-type="indexterm" id="id515"/></p></dd>
+</dl>
+
+<p>If <code>File::open</code> is successful, the result will be a <em>filehandle</em>  of the type <a href="https://oreil.ly/S16cp"><code>std::fs::File</code></a>, which is a mechanism 
+<span class="keep-together">for reading</span> the contents of a file.<a data-primary="std::fs::File" data-type="indexterm" id="id516"/><a data-primary="filehandles" data-type="indexterm" id="id517"/>
+Both a filehandle and <code>std::io::stdin</code> implement the <a href="https://oreil.ly/2Dn3M"><code>Read</code> trait</a> that a <a href="https://oreil.ly/OUSJb"><code>BufReader</code> struct</a> will use to implement the <a href="https://oreil.ly/4tYrU"><code>BufRead</code> trait</a>.
+This means the return value will, for instance, respond to the <a href="https://oreil.ly/KhmCp">
+<span class="keep-together"><code>BufRead::lines</code></span> function</a> to produce lines of text.<a data-primary="Read trait" data-type="indexterm" id="id518"/><a data-primary="BufRead::lines function" data-type="indexterm" id="id519"/>
+Note that this function will remove any line endings, such as <code>\r\n</code> on Windows and <code>\n</code> on Unix.</p>
+
+<p>The return type includes the <a href="https://oreil.ly/OobOp"><code>dyn</code></a> keyword to say that the return type’s trait is dynamically dispatched.<a data-primary="dyn keyword" data-type="indexterm" id="id520"/>
+This allows us to abstract the idea of the input source.
+At the moment, we’re reading from either a file or from <code>STDIN</code>, but we could expand this to include reading from some other source like a socket or a web page or the Mars rover, as long as that source that implements the trait <code>BufRead</code>.</p>
+
+<p>The return type is placed into a <a href="https://oreil.ly/o8EdI"><code>Box</code></a>, which is a way to store a value on the heap.<a data-primary="Box pointer type" data-type="indexterm" id="id521"/><a data-primary="pointers" data-secondary="creating to heap-allocated memory to hold filehandle" data-type="indexterm" id="id522"/>
+You may wonder if this is completely necessary.
+I could try to write the function without using <code>Box</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="c1">// This will not compile</code>
+<code class="k">fn</code> <code class="nf">open</code><code class="p">(</code><code class="n">filename</code>: <code class="kp">&amp;</code><code class="kt">str</code><code class="p">)</code><code class="w"> </code>-&gt; <code class="nb">Result</code><code class="o">&lt;</code><code class="k">dyn</code><code class="w"> </code><code class="n">BufRead</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">match</code><code class="w"> </code><code class="n">filename</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="s">"-"</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">Ok</code><code class="p">(</code><code class="n">BufReader</code>::<code class="n">new</code><code class="p">(</code><code class="n">io</code>::<code class="n">stdin</code><code class="p">())),</code><code class="w"/>
+<code class="w">        </code><code class="n">_</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">Ok</code><code class="p">(</code><code class="n">BufReader</code>::<code class="n">new</code><code class="p">(</code><code class="n">File</code>::<code class="n">open</code><code class="p">(</code><code class="n">filename</code><code class="p">)</code><code class="o">?</code><code class="p">)),</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>But if I try to compile this code, I get the following error:</p>
+
+<pre data-type="programlisting">error[E0277]: the size for values of type `(dyn BufRead + 'static)`
+cannot be known at compilation time
+   --&gt; src/main.rs:70:28
+    |
+70  | fn open(filename: &amp;str) -&gt; Result&lt;dyn BufRead&gt; {
+    |                            ^^^^^^^^^^^^^^^^^^^ doesn't have a size
+    |                                                known at compile-time
+    |
+    = help: the trait `Sized` is not implemented for `(dyn BufRead + 'static)`
+note: required by a bound in `Result`</pre>
+
+<p>The compiler doesn’t have enough information from <code>dyn BufRead</code> to know the size of the return type.<a data-primary="Sized trait" data-type="indexterm" id="id523"/>
+If a variable doesn’t have a fixed, known size, then Rust can’t store it on the stack.
+The solution is to instead allocate memory on the heap by putting the return value into a <code>Box</code>, which is a pointer with a known size.</p>
+
+<p>The preceding <code>open</code> function is dense.
+I can appreciate if you think that it’s more than a little complicated; however, it handles almost any error you will encounter.
+To demonstrate this, change your <code>run</code> to the following:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">filename</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">files</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO14-1" id="co_on_the_catwalk_CO14-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+        </code><code class="k">match</code><code class="w"> </code><code class="n">open</code><code class="p">(</code><code class="o">&amp;</code><code class="n">filename</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO14-2" id="co_on_the_catwalk_CO14-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+            </code><code class="nb">Err</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"</code><code class="s">Failed to open {filename}: {err}</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO14-3" id="co_on_the_catwalk_CO14-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+            </code><code class="nb">Ok</code><code class="p">(</code><code class="n">_</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">Opened {filename}</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO14-4" id="co_on_the_catwalk_CO14-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist pagebreak-before">
+<dt><a class="co" href="#co_on_the_catwalk_CO14-1" id="callout_on_the_catwalk_CO14-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Iterate through the filenames.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO14-2" id="callout_on_the_catwalk_CO14-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Try to open the filename.<a data-primary="&amp; operator" data-type="indexterm" id="id524"/> Note the use of <code>&amp;</code> to borrow the variable.<a data-primary="errors" data-secondary="opening files in catr" data-type="indexterm" id="id525"/></p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO14-3" id="callout_on_the_catwalk_CO14-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Print an error message to <code>STDERR</code> when <code>open</code> fails.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO14-4" id="callout_on_the_catwalk_CO14-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Print a success message when <code>open</code> works. The underscore for the variable tells the compiler that I do not intend to use it.</p></dd>
+</dl>
+
+<p>Try to run your program with the following:</p>
+<ol>
+<li>
+<p>A valid input file such as <em>tests/inputs/fox.txt</em></p>
+</li>
+<li>
+<p>A nonexistent file</p>
+</li>
+<li>
+<p>An unreadable file</p>
+</li>
+
+</ol>
+
+<p>For the last option, you can create a file that cannot be read like so:</p>
+
+<pre data-type="programlisting">$ touch cant-touch-this &amp;&amp; chmod 000 cant-touch-this</pre>
+
+<p>Run your program and verify your code gracefully prints error messages for bad input files and continues to process the valid ones:</p>
+
+<pre data-type="programlisting">$ cargo run -- blargh cant-touch-this tests/inputs/fox.txt
+Failed to open blargh: No such file or directory (os error 2)
+Failed to open cant-touch-this: Permission denied (os error 13)
+Opened tests/inputs/fox.txt</pre>
+
+<p>At this point, you should be able to pass <strong><code>cargo test skips_bad_file</code></strong>.
+Now that you can open and read valid input files, I want you to finish the program on your own.
+Can you figure out how to read the opened file line by line?
+Start with <em>tests​/⁠inputs/fox.txt</em>, which has only one line.
+You should be able to see the following 
+<span class="keep-together">output:</span></p>
+
+<pre data-type="programlisting">$ cargo run -- tests/inputs/fox.txt
+The quick brown fox jumps over the lazy dog.</pre>
+
+<p>Verify that you can read <code>STDIN</code> by default.<a data-primary="| (pipe) symbol" data-secondary="piping STDOUT from first command to STDIN for second command" data-type="indexterm" id="id526"/>
+In the following command, I use the <code>|</code> to pipe <code>STDOUT</code> from the first command to the <code>STDIN</code> of the second command:</p>
+
+<pre data-type="programlisting">$ cat tests/inputs/fox.txt | cargo run
+The quick brown fox jumps over the lazy dog.</pre>
+
+<p>The output should be the same when providing a dash as the filename.
+In the following command, I <a data-primary="&gt; (redirect) operator in bash" data-type="indexterm" id="id527"/>will use the <code>bash</code> redirect operator <code>&lt;</code> to take input from the given filename and provide it to <code>STDIN</code>:</p>
+
+<pre data-type="programlisting">$ cargo run -- - &lt; tests/inputs/fox.txt
+The quick brown fox jumps over the lazy dog.</pre>
+
+<p>Next, try an input file with more than one line and try to number the lines with <code>-n</code>:</p>
+
+<pre data-type="programlisting">$ cargo run -- -n tests/inputs/spiders.txt
+     1	Don't worry, spiders,
+     2	I keep house
+     3	casually.</pre>
+
+<p>Then try to skip blank lines in the numbering with <code>-b</code>:</p>
+
+<pre data-type="programlisting">$ cargo run -- -b tests/inputs/the-bustle.txt
+     1	The bustle in a house
+     2	The morning after death
+     3	Is solemnest of industries
+     4	Enacted upon earth,—
+
+     5	The sweeping up the heart,
+     6	And putting love away
+     7	We shall not want to use again
+     8	Until eternity.</pre>
+
+<p>Run <strong><code>cargo test</code></strong> often to see which tests are failing.<a data-primary="STDIN" data-secondary="opening with catr program" data-startref="ix_STDIN" data-type="indexterm" id="id528"/><a data-primary="cat (concatenate) command" data-secondary="writing catr version" data-startref="ix_catwropen" data-tertiary="opening a file or STDIN" data-type="indexterm" id="id529"/></p>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Using the Test Suite" data-type="sect2"><div class="sect2" id="id32">
+<h2>Using the Test Suite</h2>
+
+<p>Now is a good time to examine the tests more closely so you can understand both how to write tests and what they expect of your program.<a data-primary="cat (concatenate) command" data-secondary="writing catr version" data-tertiary="using the test suite" data-type="indexterm" id="ix_catwrtst"/><a data-primary="testing" data-secondary="using test suite for catr program" data-type="indexterm" id="ix_tstcatr"/>
+The test structure in <em>tests/cli.rs</em> is similar to <a data-type="xref" href="ch02.html#ch02">Chapter 2</a>, starting with the imports:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">use</code><code class="w"> </code><code class="n">anyhow</code><code>::</code><code class="nb">Result</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO15-1" id="co_on_the_catwalk_CO15-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+</code><code class="k">use</code><code class="w"> </code><code class="n">assert_cmd</code><code>::</code><code class="n">Command</code><code class="p">;</code><code class="w">
+</code><code class="k">use</code><code class="w"> </code><code class="n">predicates</code><code>::</code><code class="n">prelude</code><code>:</code><code>:</code><code class="o">*</code><code class="p">;</code><code class="w">
+</code><code class="k">use</code><code class="w"> </code><code class="n">pretty_assertions</code><code>::</code><code class="n">assert_eq</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO15-2" id="co_on_the_catwalk_CO15-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+</code><code class="k">use</code><code class="w"> </code><code class="n">rand</code><code>:</code><code>:</code><code class="p">{</code><code class="n">distributions</code><code>::</code><code class="n">Alphanumeric</code><code class="p">,</code><code class="w"> </code><code class="n">Rng</code><code class="p">}</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO15-3" id="co_on_the_catwalk_CO15-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+</code><code class="k">use</code><code class="w"> </code><code class="n">std</code><code>::</code><code class="n">fs</code><code class="p">;</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_on_the_catwalk_CO15-1" id="callout_on_the_catwalk_CO15-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>All programs will use <code>anyhow::Result</code> over the default <code>Result</code>.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO15-2" id="callout_on_the_catwalk_CO15-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>All tests will use <code>pretty_assertions::assert_eq</code> over the default <code>assert_eq!</code> macro.<a data-primary="pretty_assertions::assert_eq macro" data-type="indexterm" id="id530"/></p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO15-3" id="callout_on_the_catwalk_CO15-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>The <a href="https://oreil.ly/HJOPg"><code>rand</code> crate</a> is used to generate random values at runtime.<a data-primary="rand crate" data-type="indexterm" id="id531"/></p></dd>
+</dl>
+
+<p>I’ve also added a little more organization.
+For instance, I use the <a href="https://oreil.ly/CY0Hn"><code>const</code> keyword</a> to create several <em>constant</em> <code>&amp;str</code> values at the top of that module that I use throughout the crate.<a data-primary="const keyword" data-type="indexterm" id="id532"/>
+I use a common convention of <code>ALL_CAPS</code> names to highlight the fact that they are <em>scoped</em> or visible throughout the crate:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">const</code><code class="w"> </code><code class="n">PRG</code>: <code class="kp">&amp;</code><code class="kt">str</code> <code class="o">=</code><code class="w"> </code><code class="s">"catr"</code><code class="p">;</code><code class="w"/>
+<code class="k">const</code><code class="w"> </code><code class="n">EMPTY</code>: <code class="kp">&amp;</code><code class="kt">str</code> <code class="o">=</code><code class="w"> </code><code class="s">"tests/inputs/empty.txt"</code><code class="p">;</code><code class="w"/>
+<code class="k">const</code><code class="w"> </code><code class="n">FOX</code>: <code class="kp">&amp;</code><code class="kt">str</code> <code class="o">=</code><code class="w"> </code><code class="s">"tests/inputs/fox.txt"</code><code class="p">;</code><code class="w"/>
+<code class="k">const</code><code class="w"> </code><code class="n">SPIDERS</code>: <code class="kp">&amp;</code><code class="kt">str</code> <code class="o">=</code><code class="w"> </code><code class="s">"tests/inputs/spiders.txt"</code><code class="p">;</code><code class="w"/>
+<code class="k">const</code><code class="w"> </code><code class="n">BUSTLE</code>: <code class="kp">&amp;</code><code class="kt">str</code> <code class="o">=</code><code class="w"> </code><code class="s">"tests/inputs/the-bustle.txt"</code><code class="p">;</code><code class="w"/></pre>
+
+<p>To test that the program will die when given a nonexistent file, I use the <code>rand</code> crate to generate a random filename that does not exist:<a data-primary="rand crate" data-secondary="generating random filename that doesn't exist" data-type="indexterm" id="id533"/></p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">gen_bad_file</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">String</code><code> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO16-1" id="co_on_the_catwalk_CO16-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="k">loop</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO16-2" id="co_on_the_catwalk_CO16-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+        </code><code class="kd">let</code><code class="w"> </code><code class="n">filename</code><code>:</code><code> </code><code class="nb">String</code><code> </code><code class="o">=</code><code class="w"> </code><code class="n">rand</code><code>::</code><code class="n">thread_rng</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO16-3" id="co_on_the_catwalk_CO16-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+            </code><code class="p">.</code><code class="n">sample_iter</code><code class="p">(</code><code class="o">&amp;</code><code class="n">Alphanumeric</code><code class="p">)</code><code class="w">
+</code><code class="w">            </code><code class="p">.</code><code class="n">take</code><code class="p">(</code><code class="mi">7</code><code class="p">)</code><code class="w">
+</code><code class="w">            </code><code class="p">.</code><code class="n">map</code><code class="p">(</code><code class="kt">char</code><code>::</code><code class="n">from</code><code class="p">)</code><code class="w">
+</code><code class="w">            </code><code class="p">.</code><code class="n">collect</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="n">fs</code><code>::</code><code class="n">metadata</code><code class="p">(</code><code class="o">&amp;</code><code class="n">filename</code><code class="p">)</code><code class="p">.</code><code class="n">is_err</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO16-4" id="co_on_the_catwalk_CO16-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+            </code><code class="k">return</code><code class="w"> </code><code class="n">filename</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_on_the_catwalk_CO16-1" id="callout_on_the_catwalk_CO16-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The function will return a <a href="https://oreil.ly/X32Yh"><code>String</code></a>, which is a dynamically generated string closely related to the <code>str</code> struct I’ve been using.<a data-primary="String type" data-type="indexterm" id="id534"/></p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO16-2" id="callout_on_the_catwalk_CO16-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Start an infinite <code>loop</code>.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO16-3" id="callout_on_the_catwalk_CO16-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Create a random string of seven alphanumeric characters.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO16-4" id="callout_on_the_catwalk_CO16-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p><a href="https://oreil.ly/VsRxb"><code>fs::metadata</code></a> returns an error when the given filename does not exist, so return the nonexistent filename.</p></dd>
+</dl>
+
+<p>In the preceding function, I use <code>filename</code> two times after creating it.
+The first time I borrow it using <code>&amp;filename</code>, and the second time I don’t use the ampersand.
+Try removing the <code>&amp;</code> and running the code.
+You should get an error message stating that ownership of the <code>filename</code> value is moved into <code>fs::metadata</code>:</p>
+
+<pre data-type="programlisting">error[E0382]: use of moved value: `filename`
+  --&gt; tests/cli.rs:37:20
+   |
+30 |         let filename: String = rand::thread_rng()
+   |             -------- move occurs because `filename` has type `String`,
+   |                      which does not implement the `Copy` trait
+...
+36 |         if fs::metadata(filename).is_err() {
+   |                         -------- value moved here
+37 |             return filename;
+   |                    ^^^^^^^^ value used here after move</pre>
+
+<p class="pagebreak-before">Effectively, the <code>fs::metadata</code> function consumes the <code>filename</code> variable, leaving it unusable.<a data-primary="fs::metadata function" data-type="indexterm" id="id535"/><a data-primary="&amp; operator" data-secondary="borrowing reference to a variable" data-type="indexterm" id="id536"/>
+The <code>&amp;</code> shows I only want to borrow a reference to the variable.
+Don’t worry if you don’t completely understand that yet.
+I’m only showing the following <code>gen_bad_file</code> function so that you understand how it is used<a data-primary="skips_bad_file test" data-type="indexterm" id="id537"/> in the <code>skips_bad_file</code> test:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="k">fn</code><code> </code><code class="nf">skips_bad_file</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">bad</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">gen_bad_file</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO17-1" id="co_on_the_catwalk_CO17-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="n">expected</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">format!</code><code class="p">(</code><code class="s">"</code><code class="s">{bad}: .* [(]os error 2[)]</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO17-2" id="co_on_the_catwalk_CO17-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="n">Command</code><code>::</code><code class="n">cargo_bin</code><code class="p">(</code><code class="n">PRG</code><code class="p">)</code><code class="o">?</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO17-3" id="co_on_the_catwalk_CO17-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="o">&amp;</code><code class="n">bad</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">assert</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">success</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO17-4" id="co_on_the_catwalk_CO17-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+        </code><code class="p">.</code><code class="n">stderr</code><code class="p">(</code><code class="n">predicate</code><code>::</code><code class="kt">str</code><code>::</code><code class="n">is_match</code><code class="p">(</code><code class="n">expected</code><code class="p">)</code><code class="o">?</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_on_the_catwalk_CO17-1" id="callout_on_the_catwalk_CO17-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Generate the name of a nonexistent file.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO17-2" id="callout_on_the_catwalk_CO17-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The expected error message should include the filename and the string <em>os error 2</em> on both Windows and Unix platforms.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO17-3" id="callout_on_the_catwalk_CO17-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Run the program with the bad file and verify that <code>STDERR</code> matches the expected pattern.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO17-4" id="callout_on_the_catwalk_CO17-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>The program should not fail because bad files should only generate warnings and not kill the process.</p></dd>
+</dl>
+<div data-type="tip"><h6>Tip</h6>
+<p>In the preceding function, I used the <a href="https://oreil.ly/rgrsJ"><code>format!</code> macro</a> to generate a new <code>String</code>. This macro works like <code>print!</code> except that it returns the value rather than printing it.<a data-primary="format! macro" data-type="indexterm" id="id538"/><a data-primary="String type" data-secondary="generating using format! macro" data-type="indexterm" id="id539"/></p>
+</div>
+
+<p>I created a helper function called <code>run</code> to run the program with input arguments and verify that the output matches the text in the file generated by <em>mk-outs.sh</em>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="p">[</code><code class="o">&amp;</code><code class="kt">str</code><code class="p">]</code><code class="p">,</code><code class="w"> </code><code class="n">expected_file</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO18-1" id="co_on_the_catwalk_CO18-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="n">expected</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">fs</code><code>::</code><code class="n">read_to_string</code><code class="p">(</code><code class="n">expected_file</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO18-2" id="co_on_the_catwalk_CO18-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="n">output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code>::</code><code class="n">cargo_bin</code><code class="p">(</code><code class="n">PRG</code><code class="p">)</code><code class="o">?</code><code class="p">.</code><code class="n">args</code><code class="p">(</code><code class="n">args</code><code class="p">)</code><code class="p">.</code><code class="n">output</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO18-3" id="co_on_the_catwalk_CO18-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+    </code><code class="fm">assert!</code><code class="p">(</code><code class="n">output</code><code class="p">.</code><code class="n">status</code><code class="p">.</code><code class="n">success</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO18-4" id="co_on_the_catwalk_CO18-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+
+    </code><code class="kd">let</code><code class="w"> </code><code class="n">stdout</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">String</code><code>::</code><code class="n">from_utf8</code><code class="p">(</code><code class="n">output</code><code class="p">.</code><code class="n">stdout</code><code class="p">)</code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"</code><code class="s">invalid UTF-8</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO18-5" id="co_on_the_catwalk_CO18-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">stdout</code><code class="p">,</code><code class="w"> </code><code class="n">expected</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO18-6" id="co_on_the_catwalk_CO18-6"><img alt="6" src="assets/6.png"/></a><code class="w">
+
+    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_on_the_catwalk_CO18-1" id="callout_on_the_catwalk_CO18-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The function accepts a slice of <code>&amp;str</code> arguments and the filename with the expected output. The function returns a <code>Result</code> because some function calls within may fail.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO18-2" id="callout_on_the_catwalk_CO18-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Try to read the expected output file.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO18-3" id="callout_on_the_catwalk_CO18-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Execute the program with the arguments and obtain the output.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO18-4" id="callout_on_the_catwalk_CO18-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Verify the program ran successfully.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO18-5" id="callout_on_the_catwalk_CO18-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>Attempt to convert the program’s <code>STDOUT</code> to a string.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO18-6" id="callout_on_the_catwalk_CO18-6"><img alt="6" src="assets/6.png"/></a></dt>
+<dd><p>Verify that the actual program output matches the expected output.</p></dd>
+</dl>
+
+<p>I use this function like so:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="k">fn</code><code> </code><code class="nf">bustle</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="n">run</code><code class="p">(</code><code class="o">&amp;</code><code class="p">[</code><code class="n">BUSTLE</code><code class="p">]</code><code class="p">,</code><code class="w"> </code><code class="s">"</code><code class="s">tests/expected/the-bustle.txt.out</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO19-1" id="co_on_the_catwalk_CO19-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_on_the_catwalk_CO19-1" id="callout_on_the_catwalk_CO19-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Run the program with the <code>BUSTLE</code> input file and verify that the output matches the output produced by <em>mk-outs.sh</em>.</p></dd>
+</dl>
+
+<p>I also wrote a helper <a data-primary="STDIN" data-secondary="helper function providing input via" data-type="indexterm" id="id540"/>function to provide input via <code>STDIN</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run_stdin</code><code class="p">(</code><code class="w">
+</code><code class="w">    </code><code class="n">input_file</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO20-1" id="co_on_the_catwalk_CO20-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="n">args</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="p">[</code><code class="o">&amp;</code><code class="kt">str</code><code class="p">]</code><code class="p">,</code><code class="w">
+</code><code class="w">    </code><code class="n">expected_file</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">,</code><code class="w">
+</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">input</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">fs</code><code>::</code><code class="n">read_to_string</code><code class="p">(</code><code class="n">input_file</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO20-2" id="co_on_the_catwalk_CO20-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="n">expected</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">fs</code><code>::</code><code class="n">read_to_string</code><code class="p">(</code><code class="n">expected_file</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code>::</code><code class="n">cargo_bin</code><code class="p">(</code><code class="n">PRG</code><code class="p">)</code><code class="o">?</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO20-3" id="co_on_the_catwalk_CO20-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+        </code><code class="p">.</code><code class="n">write_stdin</code><code class="p">(</code><code class="n">input</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">args</code><code class="p">(</code><code class="n">args</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">output</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="fm">assert!</code><code class="p">(</code><code class="n">output</code><code class="p">.</code><code class="n">status</code><code class="p">.</code><code class="n">success</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO20-4" id="co_on_the_catwalk_CO20-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+
+    </code><code class="kd">let</code><code class="w"> </code><code class="n">stdout</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">String</code><code>::</code><code class="n">from_utf8</code><code class="p">(</code><code class="n">output</code><code class="p">.</code><code class="n">stdout</code><code class="p">)</code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"</code><code class="s">invalid UTF-8</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO20-5" id="co_on_the_catwalk_CO20-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">stdout</code><code class="p">,</code><code class="w"> </code><code class="n">expected</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_on_the_catwalk_CO20-1" id="callout_on_the_catwalk_CO20-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The first argument is the filename containing the text that should be given to <code>STDIN</code>.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO20-2" id="callout_on_the_catwalk_CO20-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Try to read the input and expected files.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO20-3" id="callout_on_the_catwalk_CO20-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Try to run the program with the given arguments and <code>STDIN</code>.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO20-4" id="callout_on_the_catwalk_CO20-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Verify that the program ran successfully.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO20-5" id="callout_on_the_catwalk_CO20-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>Check the program’s output against the expected value.</p></dd>
+</dl>
+
+<p>This function is used similarly:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="k">fn</code><code> </code><code class="nf">bustle_stdin</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="n">run_stdin</code><code class="p">(</code><code class="n">BUSTLE</code><code class="p">,</code><code class="w"> </code><code class="o">&amp;</code><code class="p">[</code><code class="s">"</code><code class="s">-</code><code class="s">"</code><code class="p">]</code><code class="p">,</code><code class="w"> </code><code class="s">"</code><code class="s">tests/expected/the-bustle.txt.stdin.out</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO21-1" id="co_on_the_catwalk_CO21-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_on_the_catwalk_CO21-1" id="callout_on_the_catwalk_CO21-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Run the program using the contents of the given filename as <code>STDIN</code> and a dash as the input filename. Verify the output matches the expected value.</p></dd>
+</dl>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>That should be enough for you to finish the rest of the program. Off you go! Come back when you’re done.<a data-primary="testing" data-secondary="using test suite for catr program" data-startref="ix_tstcatr" data-type="indexterm" id="id541"/><a data-primary="cat (concatenate) command" data-secondary="writing catr version" data-startref="ix_catwrtst" data-tertiary="using the test suite" data-type="indexterm" id="id542"/></p>
+</div>
+</div></section>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Solution" data-type="sect1"><div class="sect1" id="id149">
+<h1>Solution</h1>
+
+<p>I hope you found this an interesting and challenging program to write.
+I’ll show you how to modify the program step by step to reach a final solution, which you can find in the book’s repository.<a data-primary="cat (concatenate) command" data-secondary="writing catr version" data-tertiary="reading lines in a file" data-type="indexterm" id="id543"/><a data-primary="files" data-secondary="reading lines in with catr program" data-type="indexterm" id="id544"/></p>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Reading the Lines in a File" data-type="sect2"><div class="sect2" id="id33">
+<h2>Reading the Lines in a File</h2>
+
+<p>To start, I will print the lines of files that are opened successfully:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">filename</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">files</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="k">match</code><code class="w"> </code><code class="n">open</code><code class="p">(</code><code class="o">&amp;</code><code class="n">filename</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="nb">Err</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"</code><code class="s">Failed to open {filename}: {err}</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO22-1" id="co_on_the_catwalk_CO22-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+            </code><code class="nb">Ok</code><code class="p">(</code><code class="n">file</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="k">for</code><code class="w"> </code><code class="n">line_result</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">file</code><code class="p">.</code><code class="n">lines</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO22-2" id="co_on_the_catwalk_CO22-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+                    </code><code class="kd">let</code><code class="w"> </code><code class="n">line</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">line_result</code><code class="o">?</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO22-3" id="co_on_the_catwalk_CO22-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+                    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{line}</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO22-4" id="co_on_the_catwalk_CO22-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+                </code><code class="p">}</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_on_the_catwalk_CO22-1" id="callout_on_the_catwalk_CO22-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Print the filename and error when there is a problem opening a file.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO22-2" id="callout_on_the_catwalk_CO22-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Iterate over each <code>line_result</code> value from <code>BufRead::lines</code>.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO22-3" id="callout_on_the_catwalk_CO22-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Either unpack an <code>Ok</code> value from <code>line_result</code> or propagate an error.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO22-4" id="callout_on_the_catwalk_CO22-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Print the line.</p></dd>
+</dl>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>When reading <a data-primary="Result type" data-type="indexterm" id="id545"/><a data-primary="std::io::Result" data-seealso="Result type" data-type="indexterm" id="id546"/>the lines from a file, you don’t get the lines directly from the filehandle but instead get a <a href="https://oreil.ly/kxFes"><code>std::io::Result</code></a>, which is a type “broadly used across <code>std::io</code> for any operation which may produce an error.” The reading and writing of files falls into the category of I/O (input/output), which depends on external resources like the operating and filesystems. While it’s unlikely that reading a line from a filehandle will fail, the point is that it <em>could</em> fail.</p>
+</div>
+
+<p>Run this code with an input file to see it in action:</p>
+
+<pre data-type="programlisting">$ cargo run -- tests/inputs/spiders.txt
+Don't worry, spiders,
+I keep house
+casually.</pre>
+
+<p>If you run <strong><code>cargo test</code></strong> at this point, you should pass about half of the tests, which is not bad for so few lines of code.</p>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Printing Line Numbers" data-type="sect2"><div class="sect2" id="id34">
+<h2>Printing Line Numbers</h2>
+
+<p>Next is to add the printing of line numbers for the <code>-n|--number</code> option.<a data-primary="cat (concatenate) command" data-secondary="writing catr version" data-tertiary="printing line numbers" data-type="indexterm" id="id547"/><a data-primary="lines" data-secondary="printing line numbers in catr" data-type="indexterm" id="id548"/>
+One solution that will likely be familiar to C programmers would be something like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">filename</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">files</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="k">match</code><code class="w"> </code><code class="n">open</code><code class="p">(</code><code class="o">&amp;</code><code class="n">filename</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="nb">Err</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"</code><code class="s">Failed to open {filename}: {err}</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="nb">Ok</code><code class="p">(</code><code class="n">file</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">line_num</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO23-1" id="co_on_the_catwalk_CO23-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+                </code><code class="k">for</code><code class="w"> </code><code class="n">line_result</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">file</code><code class="p">.</code><code class="n">lines</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                    </code><code class="kd">let</code><code class="w"> </code><code class="n">line</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">line_result</code><code class="o">?</code><code class="p">;</code><code class="w">
+</code><code class="w">                    </code><code class="n">line_num</code><code class="w"> </code><code class="o">+</code><code class="o">=</code><code class="w"> </code><code class="mi">1</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO23-2" id="co_on_the_catwalk_CO23-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+
+                    </code><code class="k">if</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">number_lines</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO23-3" id="co_on_the_catwalk_CO23-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+                        </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{line_num:&gt;6}</code><code class="se">\t</code><code class="s">{line}</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO23-4" id="co_on_the_catwalk_CO23-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+                    </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                        </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{line}</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO23-5" id="co_on_the_catwalk_CO23-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+                    </code><code class="p">}</code><code class="w">
+</code><code class="w">                </code><code class="p">}</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_on_the_catwalk_CO23-1" id="callout_on_the_catwalk_CO23-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Initialize a mutable counter variable to hold the line number.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO23-2" id="callout_on_the_catwalk_CO23-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Add 1 to the line number.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO23-3" id="callout_on_the_catwalk_CO23-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Check if the user wants line numbers.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO23-4" id="callout_on_the_catwalk_CO23-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>If so, print the current line number in a right-justified field six characters wide followed by a tab character and then the line of text.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO23-5" id="callout_on_the_catwalk_CO23-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>Otherwise, print the line.</p></dd>
+</dl>
+
+<p>Recall that all variables in Rust are immutable by default, so it’s necessary to add <code>mut</code> to <code>line_num</code>, as I intend to change it.<a data-primary="mut (mutable) keyword" data-secondary="adding to line_num variable" data-type="indexterm" id="id549"/><a data-primary="+= (addition and assignment) operator" data-type="indexterm" id="id550"/>
+The <code>+=</code> operator is a compound assignment that adds the righthand value 1 to <code>line_num</code> to increment it.<sup><a data-type="noteref" href="ch03.html#id551" id="id551-marker">2</a></sup>
+Of note, too, is the formatting syntax <code>{:&gt;6}</code> that indicates the width of the field as six characters with the text aligned to the right.<a data-primary="{} (curly braces)" data-secondary="{:&gt;6} formatting syntax" data-type="indexterm" id="id552"/><a data-primary="formatting syntax {:&gt;6}" data-type="indexterm" id="id553"/><a data-primary="^ (caret)" data-secondary="for centered text" data-secondary-sortas="centered" data-type="indexterm" id="id554"/><a data-primary="&lt; using for left-justified text" data-type="indexterm" id="id555"/>
+(You can use <code>&lt;</code> for left-justified and <code>^</code> for centered text.)
+This syntax is similar to <code>printf</code> in C, Perl, and Python’s string formatting.</p>
+
+<p>If I run the program at this point, it looks pretty good:</p>
+
+<pre data-type="programlisting">$ cargo run -- tests/inputs/spiders.txt -n
+     1	Don't worry, spiders,
+     2	I keep house
+     3	casually.</pre>
+
+<p>While this works adequately, I’d like to point out a more idiomatic solution using <a href="https://oreil.ly/gXM7q"><code>Iterator::enumerate</code></a>.<a data-primary="Iterator::enumerate function" data-type="indexterm" id="id556"/>
+This method will return a <a href="https://oreil.ly/Cmywl">tuple</a> containing the index position and value for each element in an <em>iterable</em>, which is something that can produce <a data-primary="iterables" data-type="indexterm" id="id557"/><a data-primary="tuples" data-type="indexterm" id="id558"/>values until exhausted:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">filename</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">files</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="k">match</code><code class="w"> </code><code class="n">open</code><code class="p">(</code><code class="o">&amp;</code><code class="n">filename</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="nb">Err</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"</code><code class="s">Failed to open {filename}: {err}</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="nb">Ok</code><code class="p">(</code><code class="n">file</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="k">for</code><code class="w"> </code><code class="p">(</code><code class="n">line_num</code><code class="p">,</code><code class="w"> </code><code class="n">line_result</code><code class="p">)</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">file</code><code class="p">.</code><code class="n">lines</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">enumerate</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO24-1" id="co_on_the_catwalk_CO24-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+                    </code><code class="kd">let</code><code class="w"> </code><code class="n">line</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">line_result</code><code class="o">?</code><code class="p">;</code><code class="w">
+</code><code class="w">                    </code><code class="k">if</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">number_lines</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                        </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{:&gt;6}</code><code class="se">\t</code><code class="s">{line}</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="n">line_num</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="mi">1</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO24-2" id="co_on_the_catwalk_CO24-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+                    </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                        </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{line}</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                    </code><code class="p">}</code><code class="w">
+</code><code class="w">                </code><code class="p">}</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_on_the_catwalk_CO24-1" id="callout_on_the_catwalk_CO24-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The tuple values from <code>Iterator::enumerate</code> can be unpacked using pattern matching.<a data-primary="pattern matching" data-secondary="using to unpack values from Iterator::enumerate" data-type="indexterm" id="id559"/></p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO24-2" id="callout_on_the_catwalk_CO24-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Numbering from <code>enumerate</code> starts at 0, so add 1 to mimic <code>cat</code>, which starts at 1. Note that the expression <code>line_num + 1</code> may not be placed inside the <code>{}</code> placeholder and so is passed as an argument to <code>println!</code>.</p></dd>
+</dl>
+
+<p>This will create the same output as before, but now the code avoids using a mutable value.
+I can execute <strong><code>cargo test fox</code></strong> to run all the tests with the word <em>fox</em> in their name, and I find that two out of three pass.
+The program fails on the <code>-b</code> flag, so next I need to handle printing the line numbers only for nonblank lines.<a data-primary="variables (Rust)" data-secondary="shadowing" data-type="indexterm" id="id560"/>
+Notice in this version, I’m also going to remove <code>line_result</code> and shadow the <code>line</code> variable:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">filename</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">files</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="k">match</code><code class="w"> </code><code class="n">open</code><code class="p">(</code><code class="o">&amp;</code><code class="n">filename</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="nb">Err</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"</code><code class="s">Failed to open {filename}: {err}</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="nb">Ok</code><code class="p">(</code><code class="n">file</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">prev_num</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO25-1" id="co_on_the_catwalk_CO25-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+                </code><code class="k">for</code><code class="w"> </code><code class="p">(</code><code class="n">line_num</code><code class="p">,</code><code class="w"> </code><code class="n">line</code><code class="p">)</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">file</code><code class="p">.</code><code class="n">lines</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">enumerate</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                    </code><code class="kd">let</code><code class="w"> </code><code class="n">line</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">line</code><code class="o">?</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO25-2" id="co_on_the_catwalk_CO25-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+                    </code><code class="k">if</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">number_lines</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO25-3" id="co_on_the_catwalk_CO25-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+                        </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{:&gt;6}</code><code class="se">\t</code><code class="s">{line}</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="n">line_num</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="mi">1</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                    </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="k">if</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">number_nonblank_lines</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO25-4" id="co_on_the_catwalk_CO25-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+                        </code><code class="k">if</code><code class="w"> </code><code class="n">line</code><code class="p">.</code><code class="n">is_empty</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                            </code><code class="fm">println!</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO25-5" id="co_on_the_catwalk_CO25-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+                        </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                            </code><code class="n">prev_num</code><code class="w"> </code><code class="o">+</code><code class="o">=</code><code class="w"> </code><code class="mi">1</code><code class="p">;</code><code class="w">
+</code><code class="w">                            </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{prev_num:&gt;6}</code><code class="se">\t</code><code class="s">{line}</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO25-6" id="co_on_the_catwalk_CO25-6"><img alt="6" src="assets/6.png"/></a><code class="w">
+                        </code><code class="p">}</code><code class="w">
+</code><code class="w">                    </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                        </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{line}</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_on_the_catwalk_CO25-7" id="co_on_the_catwalk_CO25-7"><img alt="7" src="assets/7.png"/></a><code class="w">
+                    </code><code class="p">}</code><code class="w">
+</code><code class="w">                </code><code class="p">}</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist pagebreak-before">
+<dt><a class="co" href="#co_on_the_catwalk_CO25-1" id="callout_on_the_catwalk_CO25-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Initialize a mutable variable for the number of the last nonblank line.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO25-2" id="callout_on_the_catwalk_CO25-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Shadow the <code>line</code> with the result of unpacking the <code>Result</code>.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO25-3" id="callout_on_the_catwalk_CO25-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Handle printing line numbers.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO25-4" id="callout_on_the_catwalk_CO25-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Handle printing line numbers for nonblank lines.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO25-5" id="callout_on_the_catwalk_CO25-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>If the line is empty, print a blank line.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO25-6" id="callout_on_the_catwalk_CO25-6"><img alt="6" src="assets/6.png"/></a></dt>
+<dd><p>Otherwise, increment <code>prev_num</code> and print the output.</p></dd>
+<dt><a class="co" href="#co_on_the_catwalk_CO25-7" id="callout_on_the_catwalk_CO25-7"><img alt="7" src="assets/7.png"/></a></dt>
+<dd><p>If there are no numbering options, print the line.</p></dd>
+</dl>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p><em>Shadowing</em> a variable in Rust is when you reuse a variable’s name and set it to a new value.<a data-primary="shadowing a variable" data-type="indexterm" id="id561"/> Arguably the <code>line_result</code>/<code>line</code> code may be more explicit and readable, but reusing <code>line</code> in this context is more Rustic code you’re likely to encounter.</p>
+</div>
+
+<p>If you run <strong><code>cargo test</code></strong>, you should pass all the tests.</p>
+</div></section>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Going Further" data-type="sect1"><div class="sect1" id="id35">
+<h1>Going Further</h1>
+
+<p>You have a working program now, but you don’t have to stop there.
+If you’re up for an additional challenge, try implementing the other options shown in the manual pages for both the BSD and GNU versions.<a data-primary="cat (concatenate) command" data-secondary="writing catr version" data-tertiary="going further with" data-type="indexterm" id="id562"/>
+For each option, use <code>cat</code> to create the expected output file, then expand the tests to check that your program creates this same 
+<span class="keep-together">output.</span>
+I’d also recommend you check out <a href="https://oreil.ly/QgMnb"><code>bat</code></a>, which is another Rust clone of <code>cat</code> (“with wings”), for a more complete implementation.</p>
+
+<p>The numbered lines output of <code>cat -n</code> is similar in ways to <code>nl</code>, a “line numbering filter.”
+<code>cat</code> is also a bit <a data-primary="pagers" data-type="indexterm" id="id563"/><a data-primary="more and less pagers" data-type="indexterm" id="id564"/>similar to programs that will show you a <em>page</em> or screen full of text at a time, so-called <em>pagers</em> like <code>more</code> and <code>less</code>.<sup><a data-type="noteref" href="ch03.html#id565" id="id565-marker">3</a></sup>
+Consider implementing these programs.
+Read the manual pages, create the test output, and copy the ideas from this project to write and test your versions.</p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Summary" data-type="sect1"><div class="sect1" id="id36">
+<h1>Summary</h1>
+
+<p>You made big strides in this chapter, creating a much more complex program than in the previous chapters.
+Consider what you learned:</p>
+
+<ul>
+<li>
+<p>You used a testing-first approach where all the tests exist before the program is even written. When the program passes all the tests, you can be confident your program meets all the specifications encoded in the tests.</p>
+</li>
+<li>
+<p>You saw how to use the <code>rand</code> crate to generate a random string for a nonexistent file.</p>
+</li>
+<li>
+<p>You learned about the <code>const</code> keyword to make constant values.</p>
+</li>
+<li>
+<p>You figured out how to read lines of text from both <code>STDIN</code> and regular files.</p>
+</li>
+<li>
+<p>You used the <code>eprintln!</code> macro to print to <code>STDERR</code> and <code>format!</code> to dynamically generate a new string.</p>
+</li>
+<li>
+<p>You used a <code>for</code> loop to visit each element in an iterable.</p>
+</li>
+<li>
+<p>You found that the <code>Iterator::enumerate</code> method will return both the index and the element as a tuple, which is useful for numbering the lines of text.</p>
+</li>
+<li>
+<p>You learned to use a <code>Box</code> that points to a filehandle to read <code>STDIN</code> or a regular file.<a data-primary="cat (concatenate) command" data-startref="ix_cat" data-type="indexterm" id="id566"/></p>
+</li>
+</ul>
+
+<p>In the next chapter, you’ll learn a good deal more about reading files by lines, bytes, or characters.</p>
+</div></section>
+<div data-type="footnotes"><p data-type="footnote" id="id507"><sup><a href="ch03.html#id507-marker">1</a></sup> <em>Glob</em> is short for <em>global</em>, an early Unix program that would expand wildcard characters into filepaths. Nowadays, the shell handles glob patterns directly.</p><p data-type="footnote" id="id551"><sup><a href="ch03.html#id551-marker">2</a></sup> Note that Rust does not have a unary <code>++</code> operator, so you cannot use <code>line_num++</code> to increment a variable by 1.</p><p data-type="footnote" id="id565"><sup><a href="ch03.html#id565-marker">3</a></sup> <code>more</code> shows you a page of text with “More” at the bottom to let you know you can continue. Obviously, someone decided to be clever and named their clone <code>less</code>, but it does the same thing.</p></div></div></section></body></html>

@@ -1,0 +1,1207 @@
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Fortunate Son</title><link href="epub.css" rel="stylesheet" type="text/css"/>
+<meta content="urn:uuid:e80a1ec8-ed8e-40f7-ba3d-26a647960341" name="Adept.expected.resource"/></head><body data-type="book"><section data-pdf-bookmark="Chapter 12. Fortunate Son" data-type="chapter" epub:type="chapter"><div class="chapter" id="ch12">
+<h1><span class="label">Chapter 12. </span>Fortunate Son</h1>
+
+<blockquote>
+<p>
+Now I laugh and make a fortune / Off the same ones that I tortured
+</p>
+<p data-type="attribution">
+They Might Be Giants, “Kiss Me, Son of God” (1988)
+</p>
+</blockquote>
+
+<p>In this chapter, you will<a data-primary="fortune program" data-type="indexterm" id="ix_frtn"/> create a Rust version of the <code>fortune</code> program that will print a randomly selected aphorism or bit of trivia or <a data-primary="ASCII art" data-type="indexterm" id="id1448"/>interesting ASCII art<sup><a data-type="noteref" href="ch12.html#id1449" id="id1449-marker">1</a></sup> from a database of text files.
+The program gets its name from a fortune cookie, a crisp cookie that contains a small piece of paper printed with a short bit of text that might be a fortune like “You will take a trip soon” or maybe a short joke or saying.
+When I was first learning to use a Unix terminal in my undergraduate days,<sup><a data-type="noteref" href="ch12.html#id1450" id="id1450-marker">2</a></sup> a successful login would often include the output from <code>fortune</code>.</p>
+
+<p>You will learn how to do the following:</p>
+
+<ul>
+<li>
+<p>Use the <code>Path</code> and <code>PathBuf</code> structs to represent system paths</p>
+</li>
+<li>
+<p>Parse records of text spanning multiple lines from a file</p>
+</li>
+<li>
+<p>Use randomness and control it with seeds</p>
+</li>
+<li>
+<p>Use the <code>OsStr</code> and <code>OsString</code> types to represent filenames</p>
+</li>
+</ul>
+
+
+
+
+
+
+<section data-pdf-bookmark="How fortune Works" data-type="sect1"><div class="sect1" id="id123">
+<h1>How fortune Works</h1>
+
+<p>I will start by describing how <code>fortune</code> works so you will have an idea of what your version will need to do.<a data-primary="fortune program" data-secondary="how it works" data-type="indexterm" id="ix_frtnhow"/>
+You may first need to install the program,<sup><a data-type="noteref" href="ch12.html#id1451" id="id1451-marker">3</a></sup> as it is not often present by default on most systems.
+Here’s a bit of the manual page, which you can read with <strong><code>man fortune</code></strong>:</p>
+
+<pre data-type="programlisting">NAME
+       fortune - print a random, hopefully interesting, adage
+
+SYNOPSIS
+       fortune [-acefilosuw] [-n length] [ -m pattern] [[n%] file/dir/all]
+
+DESCRIPTION
+       When  fortune  is run with no arguments it prints out a random epigram.
+       Epigrams are divided into several categories, where  each  category  is
+       sub-divided  into those which are potentially offensive and those which
+       are not.</pre>
+
+<p>The original program has many options, but the challenge program will be concerned only with the following:</p>
+
+<pre data-type="programlisting">  -m pattern
+         Print out all fortunes which match the basic regular  expression
+         pattern.   The  syntax  of these expressions depends on how your
+         system defines re_comp(3) or regcomp(3), but it should neverthe-
+         less be similar to the syntax used in grep(1).
+
+         The  fortunes  are output to standard output, while the names of
+         the file from which each fortune comes are printed  to  standard
+         error.   Either or both can be redirected; if standard output is
+         redirected to a file, the result is a  valid  fortunes  database
+         file.   If  standard  error is also redirected to this file, the
+         result is still valid, but there  will  be  ''bogus''  fortunes,
+         i.e. the filenames themselves, in parentheses.  This can be use-
+         ful if you wish to remove the gathered matches from their origi-
+         nal  files,  since each filename-record will precede the records
+         from the file it names.
+
+  -i     Ignore case for -m patterns.</pre>
+
+<p>When the <code>fortune</code> program is run with no arguments, it will randomly choose and print some text:</p>
+
+<pre data-type="programlisting">$ fortune
+Laughter is the closest distance between two people.
+		-- Victor Borge</pre>
+
+<p>Whence does this text originate?
+The manual page notes that you can supply one or more files or directories of the text sources.<a data-primary="directories" data-secondary="supplying as text source for fortune" data-type="indexterm" id="id1452"/><a data-primary="files" data-secondary="supplying as text source for fortune" data-type="indexterm" id="id1453"/>
+If no files are given, then the program will read from some default location.
+On my laptop, this is what the manual page says:</p>
+
+<pre data-type="programlisting">FILES
+       Note: these are the defaults as defined at compile time.
+
+       /opt/homebrew/Cellar/fortune/9708/share/games/fortunes
+              Directory for inoffensive fortunes.
+       /opt/homebrew/Cellar/fortune/9708/share/games/fortunes/off
+              Directory for offensive fortunes.</pre>
+
+<p>I created a few representative files in the <em>12_fortuner/tests/inputs</em> directory for testing purposes, along with an empty directory:</p>
+
+<pre data-type="programlisting">$ cd 12_fortuner
+$ ls tests/inputs/
+ascii-art   empty/      jokes       literature  quotes</pre>
+
+<p>Use <code>head</code> to look at the structure of a file.<a data-primary="head program" data-type="indexterm" id="id1454"/>
+A fortune record can span multiple lines and is terminated with a percent sign (<code>%</code>) on a line by itself:</p>
+
+<pre data-type="programlisting">$ head -n 9 tests/inputs/jokes
+Q. What do you call a head of lettuce in a shirt and tie?
+A. Collared greens.
+%
+Q: Why did the gardener quit his job?
+A: His celery wasn't high enough.
+%
+Q. Why did the honeydew couple get married in a church?
+A. Their parents told them they cantaloupe.
+%</pre>
+
+<p>You can tell <code>fortune</code> to read a particular file like <em>tests/inputs/ascii-art</em>, but first you will need to use the program <a href="https://oreil.ly/jYa5O"><code>strfile</code></a> to create index files for randomly selecting the text records.<a data-primary="strfile program" data-type="indexterm" id="id1455"/><a data-primary="indexes" data-secondary="index files for random selection of text records" data-type="indexterm" id="id1456"/>
+I have provided a <code>bash</code> script called <em>mk-dat.sh</em> in the <em>12_fortuner</em> directory that will index the files in the <em>tests/inputs</em> directory.
+After running this program, each input file should have a companion file ending in <em>.dat</em>:</p>
+
+<pre data-type="programlisting">$ ls -1 tests/inputs/
+ascii-art
+ascii-art.dat
+empty/
+jokes
+jokes.dat
+literature
+literature.dat
+quotes
+quotes.dat</pre>
+
+<p class="pagebreak-before">Now you should be able to run the following command to, for instance, randomly select a bit of ASCII art.<a data-primary="ASCII art" data-secondary="command for randomly selecting" data-type="indexterm" id="id1457"/>
+You may or may not see a cute frog:</p>
+
+<pre data-type="programlisting">$ fortune tests/inputs/ascii-art
+           .--._.--.
+          ( O     O )
+          /   . .   \
+         .`._______.'.
+        /(           )\
+      _/  \  \   /  /  \_
+   .~   `  \  \ /  /  '   ~.
+  {    -.   \  V  /   .-    }
+_ _`.    \  |  |  |  /    .'_ _
+&gt;_       _} |  |  | {_       _&lt;
+ /. - ~ ,_-'  .^.  `-_, ~ - .\
+         '-'|/   \|`-`</pre>
+
+<p>You can also supply the <em>tests/inputs</em> directory to tell <code>fortune</code> to select a record from any of the files therein:</p>
+
+<pre data-type="programlisting">$ fortune tests/inputs
+A classic is something that everyone wants to have read
+and nobody wants to read.
+		-- Mark Twain, "The Disappearance of Literature"</pre>
+
+<p>If a provided path does not exist, <code>fortune</code> will immediately halt with an error.<a data-primary="paths" data-secondary="nonexistent file paths, handling by fortune" data-type="indexterm" id="id1458"/>
+Here I’ll use <em>blargh</em> for a nonexistent file:</p>
+
+<pre data-type="programlisting">$ fortune tests/inputs/jokes <strong>blargh</strong> tests/inputs/ascii-art
+<strong>blargh: No such file or directory</strong></pre>
+
+<p>Oddly, if the input source exists <a data-primary="files" data-secondary="unreadable, handling by fortune" data-type="indexterm" id="id1459"/>but is not readable, one version of <code>fortune</code> will complain that the file does not exist and produces no further output:</p>
+
+<pre data-type="programlisting">$ touch hammer &amp;&amp; chmod 000 hammer
+$ fortune hammer
+hammer: No such file or directory</pre>
+
+<p>Another version explains that the file is not readable and informs the user that no fortunes were available for choosing:</p>
+
+<pre data-type="programlisting">$ fortune hammer
+/home/u20/kyclark/hammer: Permission denied
+No fortunes found</pre>
+
+<p>Using the <code>-m</code> option, I can search for all the text records matching a given string.<a data-primary="strings" data-secondary="searching for text records matching given string in fortune" data-type="indexterm" id="id1460"/><a data-primary="-m option (fortune)" data-primary-sortas="m" data-type="indexterm" id="id1461"/>
+The output will include a header printed to <code>STDERR</code> listing the filename that contains the records followed by the records printed to <code>STDOUT</code>.
+For instance, here are all the quotes by Yogi Berra:</p>
+
+<pre class="pagebreak-before" data-type="programlisting">$ fortune -m 'Yogi Berra' tests/inputs/
+(quotes)
+%
+It's like deja vu all over again.
+-- Yogi Berra
+%
+You can observe a lot just by watching.
+-- Yogi Berra
+%</pre>
+
+<p>If I search for <em>Mark Twain</em> and redirect both <code>STDERR</code> and <code>STDOUT</code> to files, I find that quotes of his are found in the <em>literature</em> and <em>quotes</em> files.
+Note that the headers printed to <code>STDERR</code> include only the basename of the file, like <em>literature</em>, and not the full path, like <em>tests/inputs/literature</em>:</p>
+
+<pre data-type="programlisting">$ fortune -m 'Mark Twain' tests/inputs/ 1&gt;out 2&gt;err
+$ cat err
+(literature)
+%
+(quotes)
+%</pre>
+
+<p>Searching is case-sensitive by default, so searching for lowercase <em>yogi berra</em> will return no results.<a data-primary="case-sensitive searching in fortune" data-type="indexterm" id="id1462"/>
+I must use the <code>-i</code> flag to perform case-insensitive matching<a data-primary="case-insensitive matching" data-secondary="in fortune" data-type="indexterm" id="id1463"/>:</p>
+
+<pre data-type="programlisting">$ fortune -i -m 'yogi berra' tests/inputs/
+(quotes)
+%
+It's like deja vu all over again.
+-- Yogi Berra
+%
+You can observe a lot just by watching.
+-- Yogi Berra
+%</pre>
+
+<p>While <code>fortune</code> can do a few more things, this is as much as the challenge program will re-create.<a data-primary="fortune program" data-secondary="how it works" data-startref="ix_frtnhow" data-type="indexterm" id="id1464"/></p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Getting Started" data-type="sect1"><div class="sect1" id="id160">
+<h1>Getting Started</h1>
+
+<p>The challenge program for this chapter will be called <code>fortuner</code> (pronounced <em>for-chu-ner</em>) for a Rust version of <code>fortune</code>.<a data-primary="fortune program" data-secondary="writing fortuner version" data-tertiary="getting started" data-type="indexterm" id="id1465"/>
+You should begin with <strong><code>cargo new fortuner</code></strong>, and then add the following dependencies to your <em>Cargo.toml</em>:</p>
+
+<pre class="widows_3" data-code-language="toml" data-type="programlisting"><code class="k">[dependencies]</code><code class="w"/>
+<code class="n">anyhow</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"1.0.79"</code><code class="w"/>
+<code class="n">clap</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">version</code><code class="w"> </code><code class="p">=</code><code class="w"> </code><code class="s2">"4.5.0"</code><code class="p">,</code><code class="w"> </code><code class="n">features</code><code class="w"> </code><code class="p">=</code><code class="w"> </code><code class="p">[</code><code class="s2">"derive"</code><code class="p">]</code><code class="w"> </code><code class="p">}</code><code class="w"/>
+<code class="n">rand</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"0.8.5"</code><code class="w"/>
+<code class="n">regex</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"1.10.3"</code><code class="w"/>
+<code class="n">walkdir</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"2.4.0"</code><code class="w"/>
+
+<code class="k">[dev-dependencies]</code><code class="w"/>
+<code class="n">assert_cmd</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"2.0.13"</code><code class="w"/>
+<code class="n">predicates</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"3.0.4"</code><code class="w"/>
+<code class="n">pretty_assertions</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"1.4.0"</code><code class="w"/></pre>
+
+<p>Copy the book’s <em>12_fortuner/tests</em> directory into your project.
+Run <strong><code>cargo test</code></strong> to build the program and run the tests, all of which should fail.</p>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Defining the Arguments" data-type="sect2"><div class="sect2" id="id124">
+<h2>Defining the Arguments</h2>
+
+<p>Update your <em>src/main.rs</em> to the <a data-primary="fortune program" data-secondary="writing fortuner version" data-tertiary="defining the arguments" data-type="indexterm" id="ix_frtnwrdefarg"/>following to define the program’s arguments:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[</code><code class="cp">derive(Debug)</code><code class="cp">]</code><code class="w">
+</code><code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code> </code><code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="n">sources</code><code>:</code><code> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO1-1" id="co_fortunate_son_CO1-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="n">pattern</code><code>:</code><code> </code><code class="nb">Option</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO1-2" id="co_fortunate_son_CO1-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="n">insensitive</code><code>:</code><code> </code><code class="kt">bool</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO1-3" id="co_fortunate_son_CO1-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+    </code><code class="n">seed</code><code>:</code><code> </code><code class="nb">Option</code><code class="o">&lt;</code><code class="kt">u64</code><code class="o">&gt;</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO1-4" id="co_fortunate_son_CO1-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_fortunate_son_CO1-1" id="callout_fortunate_son_CO1-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <code>sources</code> argument is a list of files or directories.</p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO1-2" id="callout_fortunate_son_CO1-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <code>pattern</code> is an optional string to filter fortunes.</p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO1-3" id="callout_fortunate_son_CO1-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p><code>insensitive</code> is a Boolean option for whether or not to search with case-sensitivity.</p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO1-4" id="callout_fortunate_son_CO1-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>The <code>seed</code> is an optional <code>u64</code> value to control random selections.</p></dd>
+</dl>
+
+<p>Either annotate the <code>Args</code> for the <code>clap</code> derive pattern or start the builder pattern<a data-primary="derive pattern" data-secondary="using in fortuner program" data-type="indexterm" id="id1466"/><a data-primary="builder pattern" data-secondary="using in fortuner program" data-type="indexterm" id="id1467"/> with the following skeleton for a <code>get_args</code> function:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">get_args</code><code class="p">()</code><code class="w"> </code>-&gt; <code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">matches</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code>::<code class="n">new</code><code class="p">(</code><code class="s">"fortuner"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">version</code><code class="p">(</code><code class="s">"0.1.0"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">author</code><code class="p">(</code><code class="s">"Ken Youens-Clark &lt;kyclark@gmail.com&gt;"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">about</code><code class="p">(</code><code class="s">"Rust version of `fortune`"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="c1">// What goes here?</code>
+<code class="w">        </code><code class="p">.</code><code class="n">get_matches</code><code class="p">();</code><code class="w"/>
+
+<code class="w">    </code><code class="n">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">sources</code>: <code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">        </code><code class="n">seed</code>: <code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">        </code><code class="n">pattern</code>: <code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">        </code><code class="n">insensitive</code>: <code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Have the <code>main</code> pretty-print the arguments to start:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">args</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">get_args</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{args:#?}"</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Your program should be able to print a <a data-primary="usage statement" data-secondary="fortuner program" data-type="indexterm" id="id1468"/>usage statement like the following:</p>
+
+<pre data-type="programlisting">$ cargo run -- -h
+Rust version of `fortune`
+
+Usage: fortuner [OPTIONS] &lt;FILE&gt;...
+
+Arguments:
+  &lt;FILE&gt;...  Input files or directories
+
+Options:
+  -m, --pattern &lt;PATTERN&gt;  Pattern
+  -i, --insensitive        Case-insensitive pattern matching
+  -s, --seed &lt;SEED&gt;        Random seed
+  -h, --help               Print help
+  -V, --version            Print version</pre>
+
+<p>Unlike the original <code>fortune</code>, the challenge program will require one or more input files or directories.<a data-primary="FILE argument (fortuner)" data-type="indexterm" id="id1469"/><a data-primary="input files" data-secondary="requirement by fortuner" data-type="indexterm" id="id1470"/>
+When run with no arguments, it should halt and print the usage:</p>
+
+<pre data-type="programlisting">$ cargo run
+error: the following required arguments were not provided:
+  &lt;FILE&gt;...
+
+Usage: fortuner &lt;FILE&gt;...
+
+For more information, try '--help'.</pre>
+
+<p>Verify that the arguments are parsed correctly:</p>
+
+<pre data-type="programlisting">$ cargo run -- ./tests/inputs -m 'Yogi Berra' -s 1
+Args {
+    sources: [
+        "./tests/inputs", <a class="co" href="#callout_fortunate_son_CO2-1" id="co_fortunate_son_CO2-1"><img alt="1" src="assets/1.png"/></a>
+    ],
+    pattern: Some( <a class="co" href="#callout_fortunate_son_CO2-2" id="co_fortunate_son_CO2-2"><img alt="2" src="assets/2.png"/></a>
+        "Yogi Berra",
+    ),
+    insensitive: false, <a class="co" href="#callout_fortunate_son_CO2-3" id="co_fortunate_son_CO2-3"><img alt="3" src="assets/3.png"/></a>
+    seed: Some( <a class="co" href="#callout_fortunate_son_CO2-4" id="co_fortunate_son_CO2-4"><img alt="4" src="assets/4.png"/></a>
+        1,
+    ),
+}</pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_fortunate_son_CO2-1" id="callout_fortunate_son_CO2-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Positional arguments should be interpreted as <code>sources</code>.<a data-primary="sources, positional arguments interpreted as in fortuner" data-type="indexterm" id="id1471"/></p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO2-2" id="callout_fortunate_son_CO2-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <code>-m</code> option should be the value for the <code>pattern</code>.<a data-primary="regular expressions" data-secondary="-m option parsed as in fortuner" data-secondary-sortas="m" data-type="indexterm" id="id1472"/><a data-primary="-m option (fortuner)" data-primary-sortas="m" data-type="indexterm" id="id1473"/></p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO2-3" id="callout_fortunate_son_CO2-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>The <code>insensitive</code> flag defaults to <code>false</code>.<a data-primary="insensitive flag" data-type="indexterm" id="id1474"/></p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO2-4" id="callout_fortunate_son_CO2-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>The <code>-s</code> option should be parsed as a <code>u64</code>, if present.<a data-primary="-s option (fortuner)" data-primary-sortas="s" data-type="indexterm" id="id1475"/><a data-primary="u64 type" data-secondary="-s option parsed as in fortuner" data-secondary-sortas="s" data-type="indexterm" id="id1476"/></p></dd>
+</dl>
+
+<p>Any value for the <code>--seed</code> that<a data-primary="--seed option (fortuner)" data-primary-sortas="seed" data-type="indexterm" id="id1477"/> cannot be parsed as a <code>u64</code> should also be 
+<span class="keep-together">rejected:</span></p>
+
+<pre data-type="programlisting">$ cargo run -- ./tests/inputs -s blargh
+error: invalid value 'blargh' for '--seed &lt;SEED&gt;':
+invalid digit found in string</pre>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Stop reading and get your program to match the preceding output. It should also pass the tests <em>dies_not_enough_args</em> and <em>dies_bad_seed</em>.</p>
+</div>
+<aside data-type="sidebar" epub:type="sidebar"><div class="sidebar" id="id1478">
+<h1>Seeding Random Number Generators</h1>
+<p>The challenge program will randomly choose some text to show, but computers don’t usually make completely random choices.<a data-primary="random number generators" data-secondary="seeding" data-type="indexterm" id="id1479"/>
+As Robert R. Coveyou stated, “Random number generation is too important to be left to chance.”<sup><a data-type="noteref" href="ch12.html#id1480" id="id1480-marker">4</a></sup>
+The challenge program will use a <em>pseudorandom number generator</em> (PRNG) that will always make the same selection following from some starting value, often called a <em>seed</em>.<a data-primary="pseudo random number generator (PRNG)" data-type="indexterm" id="id1481"/>
+That is, for any given seed, the same “random” choices will follow.
+This makes it possible to test pseudorandom programs because we can use a known seed to verify that it produces some expected output.
+I’ll be using the <a href="https://oreil.ly/aKH3G"><code>rand</code> crate</a> to create a PRNG, optionally using the <code>args.seed</code> value when present.<a data-primary="rand crate" data-type="indexterm" id="id1482"/><a data-primary="seed value for random number generator" data-type="indexterm" id="id1483"/>
+When no seed is present, then the program will make a different pseudorandom choice based on some other random input and so will appear to actually be random.
+For more information, consult <a href="https://oreil.ly/J7gRz">“The Rust Rand Book”</a>.</p>
+</div></aside>
+
+<p>Here is how I define the<a data-primary="get_args function" data-secondary="fortuner program" data-type="indexterm" id="id1484"/> arguments in my <code>get_args</code>.
+I won’t comment on this as it’s similar to many previous programs.
+Be sure to add <code>use clap::{Arg, ArgAction, Command}</code> for the following code:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">get_args</code><code class="p">()</code><code class="w"> </code>-&gt; <code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">matches</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code>::<code class="n">new</code><code class="p">(</code><code class="s">"fortuner"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">version</code><code class="p">(</code><code class="s">"0.1.0"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">author</code><code class="p">(</code><code class="s">"Ken Youens-Clark &lt;kyclark@gmail.com&gt;"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">about</code><code class="p">(</code><code class="s">"Rust version of `fortune`"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w"/>
+<code class="w">            </code><code class="n">Arg</code>::<code class="n">new</code><code class="p">(</code><code class="s">"sources"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">value_name</code><code class="p">(</code><code class="s">"FILE"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">num_args</code><code class="p">(</code><code class="mi">1</code><code class="o">..</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">required</code><code class="p">(</code><code class="kc">true</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"Input files or directories"</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w"/>
+<code class="w">            </code><code class="n">Arg</code>::<code class="n">new</code><code class="p">(</code><code class="s">"pattern"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">value_name</code><code class="p">(</code><code class="s">"PATTERN"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">short</code><code class="p">(</code><code class="sc">'m'</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">long</code><code class="p">(</code><code class="s">"pattern"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"Pattern"</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w"/>
+<code class="w">            </code><code class="n">Arg</code>::<code class="n">new</code><code class="p">(</code><code class="s">"insensitive"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">short</code><code class="p">(</code><code class="sc">'i'</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">long</code><code class="p">(</code><code class="s">"insensitive"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"Case-insensitive pattern matching"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">action</code><code class="p">(</code><code class="n">ArgAction</code>::<code class="n">SetTrue</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w"/>
+<code class="w">            </code><code class="n">Arg</code>::<code class="n">new</code><code class="p">(</code><code class="s">"seed"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">value_name</code><code class="p">(</code><code class="s">"SEED"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">short</code><code class="p">(</code><code class="sc">'s'</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">long</code><code class="p">(</code><code class="s">"seed"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">value_parser</code><code class="p">(</code><code class="n">clap</code>::<code class="n">value_parser</code><code class="o">!</code><code class="p">(</code><code class="kt">u64</code><code class="p">))</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"Random seed"</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">get_matches</code><code class="p">();</code><code class="w"/>
+
+<code class="w">    </code><code class="n">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">sources</code>: <code class="nc">matches</code><code class="p">.</code><code class="n">get_many</code><code class="p">(</code><code class="s">"sources"</code><code class="p">).</code><code class="n">unwrap</code><code class="p">().</code><code class="n">cloned</code><code class="p">().</code><code class="n">collect</code><code class="p">(),</code><code class="w"/>
+<code class="w">        </code><code class="n">seed</code>: <code class="nc">matches</code><code class="p">.</code><code class="n">get_one</code><code class="p">(</code><code class="s">"seed"</code><code class="p">).</code><code class="n">cloned</code><code class="p">(),</code><code class="w"/>
+<code class="w">        </code><code class="n">pattern</code>: <code class="nc">matches</code><code class="p">.</code><code class="n">get_one</code><code class="p">(</code><code class="s">"pattern"</code><code class="p">).</code><code class="n">cloned</code><code class="p">(),</code><code class="w"/>
+<code class="w">        </code><code class="n">insensitive</code>: <code class="nc">matches</code><code class="p">.</code><code class="n">get_flag</code><code class="p">(</code><code class="s">"insensitive"</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>For the derive pattern, I <a data-primary="derive pattern" data-secondary="using in fortuner program" data-type="indexterm" id="id1485"/>include <code>use clap::Parser</code> and the following:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[derive(Debug, Parser)]</code><code class="w"/>
+<code class="cp">#[command(author, version, about)]</code><code class="w"/>
+<code class="sd">/// Rust version of `fortune`</code>
+<code class="k">struct</code> <code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="sd">/// Input files or directories</code>
+<code class="w">    </code><code class="cp">#[arg(required(true), value_name = </code><code class="s">"FILE"</code><code class="cp">)]</code><code class="w"/>
+<code class="w">    </code><code class="n">sources</code>: <code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Pattern</code>
+<code class="w">    </code><code class="cp">#[arg(short('m'), long)]</code><code class="w"/>
+<code class="w">    </code><code class="n">pattern</code>: <code class="nb">Option</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Case-insensitive pattern matching</code>
+<code class="w">    </code><code class="cp">#[arg(short, long)]</code><code class="w"/>
+<code class="w">    </code><code class="n">insensitive</code>: <code class="kt">bool</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Random seed</code>
+<code class="w">    </code><code class="cp">#[arg(short, long, value_parser(clap::value_parser!(u64)))]</code><code class="w"/>
+<code class="w">    </code><code class="n">seed</code>: <code class="nb">Option</code><code class="o">&lt;</code><code class="kt">u64</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Next, I will have <code>main</code> call a <code>run</code> function.</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">run</code><code class="p">(</code><code class="n">Args</code>::<code class="n">parse</code><code class="p">())</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"{e}"</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="n">std</code>::<code class="n">process</code>::<code class="n">exit</code><code class="p">(</code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Inside my <code>run</code>, I want to use the <code>--insensitive</code> flag with <a href="https://oreil.ly/oXA6X"><code>regex::RegexBuilder</code></a> to<a data-primary="--insensitive option" data-primary-sortas="insensitive" data-secondary="using with regex::RegexBuilder" data-type="indexterm" id="id1486"/><a data-primary="regex::RegexBuilder struct" data-type="indexterm" id="id1487"/><a data-primary="regular expressions" data-secondary="case-insensitive, creating" data-type="indexterm" id="id1488"/><a data-primary="case-insensitive regular expression" data-type="indexterm" id="id1489"/> create a regular expression that might be case-insensitive.
+This is similar to what we did in <a data-type="xref" href="ch09.html#ch09">Chapter 9</a>, except that the <code>args.pattern</code> here is an optional string that I want to turn into an optional regex.
+Be sure to use <code>regex::RegexBuilder</code> and <code>anyhow::{anyhow, Result}</code> for the following:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">pattern</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">args</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">pattern</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO3-1" id="co_fortunate_son_CO3-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+        </code><code class="p">.</code><code class="n">map</code><code class="p">(</code><code class="o">|</code><code class="n">val</code><code>:</code><code> </code><code class="nb">String</code><code class="o">|</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO3-2" id="co_fortunate_son_CO3-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+            </code><code class="n">RegexBuilder</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="n">val</code><code class="p">.</code><code class="n">as_str</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO3-3" id="co_fortunate_son_CO3-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+                </code><code class="p">.</code><code class="n">case_insensitive</code><code class="p">(</code><code class="n">args</code><code class="p">.</code><code class="n">insensitive</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO3-4" id="co_fortunate_son_CO3-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+                </code><code class="p">.</code><code class="n">build</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO3-5" id="co_fortunate_son_CO3-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+                </code><code class="p">.</code><code class="n">map_err</code><code class="p">(</code><code class="o">|</code><code class="n">_</code><code class="o">|</code><code class="w"> </code><code class="n">anyhow</code><code class="o">!</code><code class="p">(</code><code class="s">r#"Invalid --pattern "{val}""#</code><code class="p">)</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO3-6" id="co_fortunate_son_CO3-6"><img alt="6" src="assets/6.png"/></a><code class="w">
+        </code><code class="p">}</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">transpose</code><code class="p">(</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO3-7" id="co_fortunate_son_CO3-7"><img alt="7" src="assets/7.png"/></a><code class="w">
+
+    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{pattern:?}</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_fortunate_son_CO3-1" id="callout_fortunate_son_CO3-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p><code>args.pattern</code> is an <code>Option&lt;String&gt;</code>.<a data-primary="ArgMatches::value_of function" data-type="indexterm" id="id1490"/><a data-primary="Option&lt;&amp;str&gt;" data-type="indexterm" id="id1491"/><a data-primary="Option::map function" data-type="indexterm" id="id1492"/></p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO3-2" id="callout_fortunate_son_CO3-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Use <a href="https://oreil.ly/JaDYG"><code>Option::map</code></a> to handle <code>Some(val)</code>.</p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO3-3" id="callout_fortunate_son_CO3-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Call <code>RegexBuilder::new</code> with the given value.<a data-primary="RegexBuilder::new method" data-type="indexterm" id="id1493"/></p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO3-4" id="callout_fortunate_son_CO3-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>The <a href="https://oreil.ly/rRTXv"><code>RegexBuilder::case_insensitive</code> method</a> will cause the regex to disregard case in comparisons when the <code>insensitive</code> flag is present.<a data-primary="RegexBuilder::case_insensitive method" data-type="indexterm" id="id1494"/><a data-primary="RegexBuilder::build method" data-type="indexterm" id="id1495"/></p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO3-5" id="callout_fortunate_son_CO3-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>The <a href="https://oreil.ly/wrXyO"><code>RegexBuilder::build</code> method</a> will compile the regex.</p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO3-6" id="callout_fortunate_son_CO3-6"><img alt="6" src="assets/6.png"/></a></dt>
+<dd><p>If <code>build</code> returns an error, use <a href="https://oreil.ly/4izCX"><code>Result::map_err</code></a> to create an error message stating that the given pattern is invalid.<a data-primary="Result::map_err function" data-type="indexterm" id="id1496"/></p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO3-7" id="callout_fortunate_son_CO3-7"><img alt="7" src="assets/7.png"/></a></dt>
+<dd><p>The result of <code>Option::map</code> will be an <code>Option&lt;Result&gt;</code>, and <a href="https://oreil.ly/QCi0s"><code>Option::​trans⁠pose</code></a> will turn this into a <code>Result&lt;Option&gt;</code>. Use <code>?</code> to fail on an invalid regex.<a data-primary="Option::transpose function" data-type="indexterm" id="id1497"/><a data-primary="Option&lt;Result&gt;" data-primary-sortas="Option Result" data-type="indexterm" id="id1498"/><a data-primary="Result&lt;Option&gt;" data-primary-sortas="Result Option" data-type="indexterm" id="id1499"/></p></dd>
+</dl>
+
+<p>An invalid regular expression should be rejected at this point, and your program should pass <strong><code>cargo test dies_bad_pattern</code></strong>.
+As noted in <a data-type="xref" href="ch09.html#ch09">Chapter 9</a>, for instance, a lone asterisk is not a valid regex:</p>
+
+<pre data-type="programlisting">$ cargo run -- ./tests/inputs -m "*"
+Invalid --pattern "*"</pre>
+
+<p>Your program should now be able to print a debug representation of the regex 
+<span class="keep-together">pattern</span>:<a data-primary="fortune program" data-secondary="writing fortuner version" data-startref="ix_frtnwrdefarg" data-tertiary="defining the arguments" data-type="indexterm" id="id1500"/></p>
+
+<pre data-type="programlisting">$ cargo run -- -m Yogi tests/inputs/
+Some(Regex("Yogi"))</pre>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Finding the Input Sources" data-type="sect2"><div class="sect2" id="id125">
+<h2>Finding the Input Sources</h2>
+
+<p>You are free to write your solution however you see fit so long as it passes the integration tests.<a data-primary="fortune program" data-secondary="writing fortuner version" data-tertiary="finding input sources" data-type="indexterm" id="ix_frtnwrfndin"/><a data-primary="input sources, finding in fortuner" data-type="indexterm" id="ix_inptsrc"/>
+This is a rather complicated program, so I’m going to break it into many small, testable functions to help you arrive at a solution.<sup><a data-type="noteref" href="ch12.html#id1501" id="id1501-marker">5</a></sup>
+If you want to follow my lead, then the next order of business is finding the input files from the given sources, which might be filenames or directories.
+When a source is a directory, all the files in the directory will be used.
+To read the fortune files, the <code>fortune</code> program requires the <em>*.dat</em> files created by <code>strfile</code>.<a data-primary="strfile program" data-secondary=".dat files created by" data-secondary-sortas="dat" data-type="indexterm" id="id1502"/><a data-primary="directories" data-secondary="sources in fortuner" data-type="indexterm" id="id1503"/><a data-primary=".dat files (strfile)" data-primary-sortas="dat" data-type="indexterm" id="id1504"/>
+These are binary files that contain data for randomly accessing the records.
+The challenge program will not use these and so should skip them, if present.
+If you ran the <em>mk-dat.sh</em> program, you can either remove the <em>*.dat</em> files from <em>tests/inputs</em> or include logic in your program to skip them.</p>
+
+<p>I decided to write a function to find all the files in a list of paths provided by the user.
+While I could return the files as strings, I want to introduce you to a couple of useful structs Rust has for representing paths.<a data-primary="Path struct" data-type="indexterm" id="id1505"/>
+The first is <a href="https://oreil.ly/H9eW4"><code>Path</code></a>, which, according to the documentation, “supports a number of operations for inspecting a path, including breaking the path into its components (separated by <code>/</code> on Unix and by either <code>/</code> or <code>\</code> on Windows), extracting the file name, determining whether the path is absolute, and so on.”
+That sounds useful, so you might think my function should return the results as <code>Path</code> objects, but the documentation notes: “This is an <em>unsized</em> type, 
+<span class="keep-together">meaning</span> that it must always be used behind a pointer like <code>&amp;</code> or <code>Box</code>.<a data-primary="pointers" data-secondary="Path type behind" data-type="indexterm" id="id1506"/> For an owned version of this type, see <code>PathBuf</code>.”<a data-primary="PathBuf struct" data-type="indexterm" id="id1507"/><a data-primary="usize type" data-type="indexterm" id="id1508"/><a data-primary="Box pointer type" data-type="indexterm" id="id1509"/></p>
+
+<p>This leads us to <a href="https://oreil.ly/Mth0r"><code>PathBuf</code></a>, the second useful module for representing paths.
+Just as <code>String</code> is an owned, modifiable version of <code>&amp;str</code>, <code>PathBuf</code> is an owned, modifiable version of <code>Path</code>.
+Returning a <code>Path</code> from my function would lead to compiler errors, as my code would be trying to reference dropped values, but there will be no such problem returning a <code>PathBuf</code>.
+You are not required to use either of these structs, but they will make your program portable across operating systems and will save you a lot of work that’s been done to parse paths correctly.
+Following is the signature of my <code>find_files</code> function, which you are welcome to use.<a data-primary="find_files function" data-type="indexterm" id="id1510"/><a data-primary="std::path::PathBuf" data-type="indexterm" id="id1511"/>
+Be sure to add <code>use std::path::PathBuf</code> to your imports:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">find_files</code><code class="p">(</code><code class="n">paths</code>: <code class="kp">&amp;</code><code class="p">[</code><code class="nb">String</code><code class="p">])</code><code class="w"> </code>-&gt; <code class="nb">Result</code><code class="o">&lt;</code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">PathBuf</code><code class="o">&gt;&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">unimplemented!</code><code class="p">();</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Add the following unit <a data-primary="unit tests" data-secondary="test_find_files in fortuner" data-type="indexterm" id="id1512"/>test to <em>src/main.rs</em>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[</code><code class="cp">cfg(test)</code><code class="cp">]</code><code class="w">
+</code><code class="k">mod</code><code> </code><code class="nn">tests</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="k">use</code><code class="w"> </code><code class="k">super</code><code>::</code><code class="n">find_files</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO4-1" id="co_fortunate_son_CO4-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+
+    </code><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="w">    </code><code class="k">fn</code><code> </code><code class="nf">test_find_files</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="c1">// Verify that the function finds a file known to exist
+</code><code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">res</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">find_files</code><code class="p">(</code><code class="o">&amp;</code><code class="p">[</code><code class="s">"</code><code class="s">./tests/inputs/jokes</code><code class="s">"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="p">]</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="fm">assert!</code><code class="p">(</code><code class="n">res</code><code class="p">.</code><code class="n">is_ok</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">files</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">res</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">files</code><code class="p">.</code><code class="n">len</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><code class="mi">1</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="w">
+</code><code class="w">            </code><code class="n">files</code><code class="p">.</code><code class="n">get</code><code class="p">(</code><code class="mi">0</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">to_string_lossy</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s">./tests/inputs/jokes</code><code class="s">"</code><code class="w">
+</code><code class="w">        </code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">        </code><code class="c1">// Fails to find a bad file
+</code><code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">res</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">find_files</code><code class="p">(</code><code class="o">&amp;</code><code class="p">[</code><code class="s">"</code><code class="s">/path/does/not/exist</code><code class="s">"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="p">]</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="fm">assert!</code><code class="p">(</code><code class="n">res</code><code class="p">.</code><code class="n">is_err</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">        </code><code class="c1">// Finds all the input files, excludes ".dat"
+</code><code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">res</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">find_files</code><code class="p">(</code><code class="o">&amp;</code><code class="p">[</code><code class="s">"</code><code class="s">./tests/inputs</code><code class="s">"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="p">]</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="fm">assert!</code><code class="p">(</code><code class="n">res</code><code class="p">.</code><code class="n">is_ok</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">        </code><code class="c1">// Check number and order of files
+</code><code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">files</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">res</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">files</code><code class="p">.</code><code class="n">len</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><code class="mi">5</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO4-2" id="co_fortunate_son_CO4-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+        </code><code class="kd">let</code><code class="w"> </code><code class="n">first</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">files</code><code class="p">.</code><code class="n">get</code><code class="p">(</code><code class="mi">0</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">display</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="fm">assert!</code><code class="p">(</code><code class="n">first</code><code class="p">.</code><code class="n">contains</code><code class="p">(</code><code class="s">"</code><code class="s">ascii-art</code><code class="s">"</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">last</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">files</code><code class="p">.</code><code class="n">last</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">display</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="fm">assert!</code><code class="p">(</code><code class="n">last</code><code class="p">.</code><code class="n">contains</code><code class="p">(</code><code class="s">"</code><code class="s">quotes</code><code class="s">"</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">        </code><code class="c1">// Test for multiple sources, path must be unique and sorted
+</code><code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">res</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">find_files</code><code class="p">(</code><code class="o">&amp;</code><code class="p">[</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s">./tests/inputs/jokes</code><code class="s">"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s">./tests/inputs/ascii-art</code><code class="s">"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s">./tests/inputs/jokes</code><code class="s">"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">]</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="fm">assert!</code><code class="p">(</code><code class="n">res</code><code class="p">.</code><code class="n">is_ok</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">files</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">res</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">files</code><code class="p">.</code><code class="n">len</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><code class="mi">2</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">filename</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">files</code><code class="p">.</code><code class="n">first</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">file_name</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">filename</code><code class="p">.</code><code class="n">to_string_lossy</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><code class="s">"</code><code class="s">ascii-art</code><code class="s">"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">filename</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">files</code><code class="p">.</code><code class="n">last</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">file_name</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">filename</code><code class="p">.</code><code class="n">to_string_lossy</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><code class="s">"</code><code class="s">jokes</code><code class="s">"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist nobreakinside">
+<dt><a class="co" href="#co_fortunate_son_CO4-1" id="callout_fortunate_son_CO4-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Import <code>find_files</code>.</p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO4-2" id="callout_fortunate_son_CO4-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <em>tests/inputs/empty</em> directory contains the empty, hidden file <em>.gitkeep</em> so that Git will track this directory. If you choose to ignore empty files, you can change the expected number of files from five to four.</p></dd>
+</dl>
+
+<p>Note that the <code>find_files</code> function must return the paths in sorted order.
+Different operating systems will return the files in different orders, which will lead to the fortunes being in different orders, leading to difficulties in testing.<a data-primary="sorted order" data-secondary="paths in" data-type="indexterm" id="id1513"/><a data-primary="find_files function" data-secondary="returning paths in sorted order" data-type="indexterm" id="id1514"/>
+You will nip the problem in the bud if you return the files in a consistent, sorted order.<a data-primary="Vec::sort function" data-type="indexterm" id="id1515"/><a data-primary="Vec::dedup function" data-type="indexterm" id="id1516"/>
+Furthermore, the returned paths should be unique, and you can use a combination of <a href="https://oreil.ly/ua40G"><code>Vec::sort</code></a> and <a href="https://oreil.ly/7FvsZ"><code>Vec::dedup</code></a> for this.</p>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Stop reading and write the function that will satisfy <strong><code>cargo test find_files</code></strong>.</p>
+</div>
+
+<p>Next, update your <code>run</code> function to print the found files:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">run</code><code class="p">(</code><code class="n">args</code>: <code class="nc">Args</code><code class="p">)</code><code class="w"> </code>-&gt; <code class="nb">Result</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">_pattern</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="c1">// Sames as before</code>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">files</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">find_files</code><code class="p">(</code><code class="o">&amp;</code><code class="n">args</code><code class="p">.</code><code class="n">sources</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{files:#?}"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(())</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p class="pagebreak-before">When given a list of existing, readable files, it should print them in order:</p>
+
+<pre data-type="programlisting">$ cargo run tests/inputs/jokes tests/inputs/ascii-art
+[
+    "tests/inputs/ascii-art",
+    "tests/inputs/jokes",
+]</pre>
+
+<p>Test your program to see if it will find the files (that don’t end with <em>.dat</em>) in the <em>tests​/⁠inputs</em> directory:</p>
+
+<pre data-type="programlisting">$ cargo run tests/inputs/
+[
+    "tests/inputs/ascii-art",
+    "tests/inputs/empty/.gitkeep",
+    "tests/inputs/jokes",
+    "tests/inputs/literature",
+    "tests/inputs/quotes",
+]</pre>
+
+<p>Previous challenge programs in this book would note unreadable or nonexistent files and move on, but <code>fortune</code> dies immediately when given even one file it can’t use.<a data-primary="files" data-secondary="invalid or unreadable, handling by fortune" data-type="indexterm" id="id1517"/>
+Be sure your program does the same if you provide an invalid file, such as the nonexistent <em>blargh</em>:</p>
+
+<pre data-type="programlisting">$ cargo run tests/inputs/jokes <strong>blargh</strong> tests/inputs/ascii-art
+<strong>blargh: No such file or directory (os error 2)</strong></pre>
+
+<p>Note that my version of <code>find_files</code> tries only to <em>find</em> files and does not try to open them, which means an unreadable file does not trigger a failure at this point:</p>
+
+<pre data-type="programlisting">$ touch hammer &amp;&amp; chmod 000 hammer
+$ cargo run -- hammer
+[
+    "hammer",
+]</pre>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Reading the Fortune Files" data-type="sect2"><div class="sect2" id="id126">
+<h2>Reading the Fortune Files</h2>
+
+<p>Once you have found the input files, the next step is to read the records of text from them.<a data-primary="fortune program" data-secondary="writing fortuner version" data-startref="ix_frtnwrfndin" data-tertiary="finding input sources" data-type="indexterm" id="id1518"/><a data-primary="input sources, finding in fortuner" data-startref="ix_inptsrc" data-type="indexterm" id="id1519"/><a data-primary="fortune program" data-secondary="writing fortuner version" data-tertiary="reading fortune files" data-type="indexterm" id="ix_frtnwrrdfrtn"/>
+I wrote a function that accepts the list of found files and possibly returns a list of the contained fortunes.
+When the program is run with the <code>-m</code> option to find all the matching fortunes for a given pattern, I will need both the fortune text and the source filename, so I decided to create a struct called <code>Fortune</code> to contain these.<a data-primary="Fortune struct" data-type="indexterm" id="id1520"/><a data-primary="-m option (fortuner)" data-primary-sortas="m" data-type="indexterm" id="id1521"/>
+If you want to use this idea, add the following struct perhaps just after the <code>Args</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[</code><code class="cp">derive(Debug)</code><code class="cp">]</code><code class="w">
+</code><code class="k">struct</code><code> </code><code class="nc">Fortune</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="n">source</code><code>:</code><code> </code><code class="nb">String</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO5-1" id="co_fortunate_son_CO5-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="n">text</code><code>:</code><code> </code><code class="nb">String</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO5-2" id="co_fortunate_son_CO5-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_fortunate_son_CO5-1" id="callout_fortunate_son_CO5-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <code>source</code> is the filename containing the record.</p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO5-2" id="callout_fortunate_son_CO5-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <code>text</code> is the contents of the record up to but not including the terminating percent sign (<code>%</code>).</p></dd>
+</dl>
+
+<p>My <code>read_fortunes</code> function accepts a list of input paths and possibly returns a vector of <code>Fortune</code> structs.<a data-primary="read_fortunes function" data-type="indexterm" id="id1522"/>
+In the event of a problem such as an unreadable file, the function will return an error.
+If you would like to write this function, here is the signature you can use:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">read_fortunes</code><code class="p">(</code><code class="n">paths</code>: <code class="kp">&amp;</code><code class="p">[</code><code class="n">PathBuf</code><code class="p">])</code><code class="w"> </code>-&gt; <code class="nb">Result</code><code class="o">&lt;</code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">Fortune</code><code class="o">&gt;&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">unimplemented!</code><code class="p">();</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Following is a <code>test_read_fortunes</code> unit<a data-primary="unit tests" data-secondary="test_read_fortunes in fortuner" data-type="indexterm" id="id1523"/> test you can add to the <code>tests</code> module:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[</code><code class="cp">cfg(test)</code><code class="cp">]</code><code class="w">
+</code><code class="k">mod</code><code> </code><code class="nn">tests</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="k">use</code><code class="w"> </code><code class="k">super</code><code>:</code><code>:</code><code class="p">{</code><code class="n">find_files</code><code class="p">,</code><code class="w"> </code><code class="n">read_fortunes</code><code class="p">,</code><code class="w"> </code><code class="n">Fortune</code><code class="p">}</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO6-1" id="co_fortunate_son_CO6-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="k">use</code><code class="w"> </code><code class="n">std</code><code>::</code><code class="n">path</code><code>::</code><code class="n">PathBuf</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="w">    </code><code class="k">fn</code><code> </code><code class="nf">test_find_files</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="p">}</code><code class="w"> </code><code class="c1">// Same as before
+</code><code class="w">
+</code><code class="w">    </code><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="w">    </code><code class="k">fn</code><code> </code><code class="nf">test_read_fortunes</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="c1">// One input file
+</code><code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">res</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">read_fortunes</code><code class="p">(</code><code class="o">&amp;</code><code class="p">[</code><code class="n">PathBuf</code><code>::</code><code class="n">from</code><code class="p">(</code><code class="s">"</code><code class="s">./tests/inputs/jokes</code><code class="s">"</code><code class="p">)</code><code class="p">]</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="fm">assert!</code><code class="p">(</code><code class="n">res</code><code class="p">.</code><code class="n">is_ok</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Ok</code><code class="p">(</code><code class="n">fortunes</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">res</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="c1">// Correct number and sorting
+</code><code class="w">            </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">fortunes</code><code class="p">.</code><code class="n">len</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><code class="mi">6</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO6-2" id="co_fortunate_son_CO6-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+            </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="w">
+</code><code class="w">                </code><code class="n">fortunes</code><code class="p">.</code><code class="n">first</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">text</code><code class="p">,</code><code class="w">
+</code><code class="w">                </code><code class="s">"</code><code class="s">Q. What do you call a head of lettuce in a shirt and tie?</code><code class="se">\n</code><code class="s">\</code><code class="s">
+                A. Collared greens.</code><code class="s">"</code><code class="w">
+</code><code class="w">            </code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">            </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="w">
+</code><code class="w">                </code><code class="n">fortunes</code><code class="p">.</code><code class="n">last</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">text</code><code class="p">,</code><code class="w">
+</code><code class="w">                </code><code class="s">"</code><code class="s">Q: What do you call a deer wearing an eye patch?</code><code class="se">\n</code><code class="s">\</code><code class="s">
+                A: A bad idea (bad-eye deer).</code><code class="s">"</code><code class="w">
+</code><code class="w">            </code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="w">        </code><code class="c1">// Multiple input files
+</code><code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">res</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">read_fortunes</code><code class="p">(</code><code class="o">&amp;</code><code class="p">[</code><code class="w">
+</code><code class="w">            </code><code class="n">PathBuf</code><code>::</code><code class="n">from</code><code class="p">(</code><code class="s">"</code><code class="s">./tests/inputs/jokes</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="n">PathBuf</code><code>::</code><code class="n">from</code><code class="p">(</code><code class="s">"</code><code class="s">./tests/inputs/quotes</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">]</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="fm">assert!</code><code class="p">(</code><code class="n">res</code><code class="p">.</code><code class="n">is_ok</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">res</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">len</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><code class="mi">11</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_fortunate_son_CO6-1" id="callout_fortunate_son_CO6-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Import <code>read_fortunes</code>, <code>Fortune</code>, and <code>PathBuf</code> for testing.</p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO6-2" id="callout_fortunate_son_CO6-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <em>tests/inputs/jokes</em> file contains an empty fortune that is expected to be removed.</p></dd>
+</dl>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Stop here and implement a version of the function that passes <strong><code>cargo test read_fortunes</code></strong>.</p>
+</div>
+
+<p>Update <code>run</code> to print, for instance, one of the found records:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">run</code><code class="p">(</code><code class="n">args</code>: <code class="nc">Args</code><code class="p">)</code><code class="w"> </code>-&gt; <code class="nb">Result</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">_pattern</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="c1">// Same as before</code>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">files</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">find_files</code><code class="p">(</code><code class="o">&amp;</code><code class="n">args</code><code class="p">.</code><code class="n">sources</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">fortunes</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">read_fortunes</code><code class="p">(</code><code class="o">&amp;</code><code class="n">files</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{:#?}"</code><code class="p">,</code><code class="w"> </code><code class="n">fortunes</code><code class="p">.</code><code class="n">last</code><code class="p">());</code><code class="w"/>
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(())</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>When passed good input sources, the program should print a fortune like so:</p>
+
+<pre data-type="programlisting">$ cargo run tests/inputs
+Some(
+    Fortune {
+        source: "quotes",
+        text: "You can observe a lot just by watching.\n-- Yogi Berra",
+    },
+)</pre>
+
+<p>When provided an unreadable file, such as the previously created <em>hammer</em> file, the program should die with a useful error message:</p>
+
+<pre data-type="programlisting">$ cargo run <strong>hammer</strong>
+<strong>hammer: Permission denied (os error 13)</strong></pre>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Randomly Selecting a Fortune" data-type="sect2"><div class="sect2" id="id127">
+<h2>Randomly Selecting a Fortune</h2>
+
+<p>The program will have two possible outputs.<a data-primary="fortune program" data-secondary="writing fortuner version" data-startref="ix_frtnwrrdfrtn" data-tertiary="reading fortune files" data-type="indexterm" id="id1524"/><a data-primary="fortune program" data-secondary="writing fortuner version" data-tertiary="selecting fortunes randomly" data-type="indexterm" id="ix_frtnwrrandfrtn"/>
+When the user supplies a <code>pattern</code>, the program should print all the fortunes matching the pattern; otherwise, the pro­gram should randomly select one fortune to print.<a data-primary="pattern matching" data-secondary="fortunes in fortuner program" data-type="indexterm" id="id1525"/>
+For the latter option, I wrote a 
+<span class="keep-together"><code>pick_fortune</code></span> function that<a data-primary="pick_fortune function" data-type="indexterm" id="id1526"/> takes some fortunes and an optional seed and returns an optional string:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">pick_fortune</code><code class="p">(</code><code class="n">fortunes</code>: <code class="kp">&amp;</code><code class="p">[</code><code class="n">Fortune</code><code class="p">],</code><code class="w"> </code><code class="n">seed</code>: <code class="nb">Option</code><code class="o">&lt;</code><code class="kt">u64</code><code class="o">&gt;</code><code class="p">)</code><code class="w"> </code>-&gt; <code class="nb">Option</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">unimplemented!</code><code class="p">();</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>My function uses the <code>rand</code> crate to select the fortune using a <em>random number generator</em> (RNG), as described earlier in the chapter.<a data-primary="random number generators" data-type="indexterm" id="id1527"/><a data-primary="RNG" data-see="random number generators" data-type="indexterm" id="id1528"/><a data-primary="rand crate" data-type="indexterm" id="id1529"/><a data-primary="seed value for random number generator" data-type="indexterm" id="id1530"/>
+When there is no seed value, I use <a href="https://oreil.ly/V2gh5"><code>rand::thread_rng</code></a> to create an RNG that is seeded by the system.<a data-primary="rand::thread_rng function" data-type="indexterm" id="id1531"/><a data-primary="rand::rngs::StdRng::seed_from_u64" data-type="indexterm" id="id1532"/>
+When there is a seed value, I use <a href="https://oreil.ly/hcrzg"><code>rand::rngs::StdRng::seed_from_u64</code></a>.
+Finally, I use <a href="https://oreil.ly/hBg3S"><code>Slice​Ran⁠dom::choose</code></a> with the RNG to select a fortune.<a data-primary="SliceRandom::choose function" data-type="indexterm" id="id1533"/></p>
+
+<p>Following is how you can expand your <code>tests</code> module<a data-primary="unit tests" data-secondary="test_read_fortunes in fortuner" data-type="indexterm" id="id1534"/> to include the <code>test_read​_for⁠tunes</code> unit test:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[</code><code class="cp">cfg(test)</code><code class="cp">]</code><code class="w">
+</code><code class="k">mod</code><code> </code><code class="nn">tests</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="k">use</code><code class="w"> </code><code class="k">super</code><code>:</code><code>:</code><code class="p">{</code><code class="n">find_files</code><code class="p">,</code><code class="w"> </code><code class="n">pick_fortune</code><code class="p">,</code><code class="w"> </code><code class="n">read_fortunes</code><code class="p">,</code><code class="w"> </code><code class="n">Fortune</code><code class="p">}</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO7-1" id="co_fortunate_son_CO7-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="k">use</code><code class="w"> </code><code class="n">std</code><code>::</code><code class="n">path</code><code>::</code><code class="n">PathBuf</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="w">    </code><code class="k">fn</code><code> </code><code class="nf">test_find_files</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="p">}</code><code class="w"> </code><code class="c1">// Same as before
+</code><code class="w">
+</code><code class="w">    </code><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="w">    </code><code class="k">fn</code><code> </code><code class="nf">test_read_fortunes</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="p">}</code><code class="w"> </code><code class="c1">// Same as before
+</code><code class="w">
+</code><code class="w">    </code><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="w">    </code><code class="k">fn</code><code> </code><code class="nf">test_pick_fortune</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="c1">// Create a slice of fortunes
+</code><code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">fortunes</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="p">[</code><code class="w">
+</code><code class="w">            </code><code class="n">Fortune</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="n">source</code><code>:</code><code> </code><code class="s">"</code><code class="s">fortunes</code><code class="s">"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">                </code><code class="n">text</code><code>:</code><code> </code><code class="s">"</code><code class="s">You cannot achieve the impossible without </code><code class="s">\</code><code class="s">
+                      attempting the absurd.</code><code class="s">"</code><code class="w">
+</code><code class="w">                    </code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="n">Fortune</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="n">source</code><code>:</code><code> </code><code class="s">"</code><code class="s">fortunes</code><code class="s">"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">                </code><code class="n">text</code><code>:</code><code> </code><code class="s">"</code><code class="s">Assumption is the mother of all screw-ups.</code><code class="s">"</code><code class="w">
+</code><code class="w">                    </code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="n">Fortune</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="n">source</code><code>:</code><code> </code><code class="s">"</code><code class="s">fortunes</code><code class="s">"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">                </code><code class="n">text</code><code>:</code><code> </code><code class="s">"</code><code class="s">Neckties strangle clear thinking.</code><code class="s">"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">]</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">        </code><code class="c1">// Pick a fortune with a seed
+</code><code class="w">        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="w">
+</code><code class="w">            </code><code class="n">pick_fortune</code><code class="p">(</code><code class="n">fortunes</code><code class="p">,</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="mi">1</code><code class="p">)</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO7-2" id="co_fortunate_son_CO7-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+            </code><code class="s">"</code><code class="s">Neckties strangle clear thinking.</code><code class="s">"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_fortunate_son_CO7-1" id="callout_fortunate_son_CO7-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Import the <code>pick_fortune</code> function for testing.</p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO7-2" id="callout_fortunate_son_CO7-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Supply a seed to verify that the pseudorandom selection is reproducible.</p></dd>
+</dl>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Stop reading and write the function that will pass <strong><code>cargo test pick_fortune</code></strong>.</p>
+</div>
+
+<p>You can integrate this function into your <code>run</code> like so:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">run</code><code class="p">(</code><code class="n">args</code>: <code class="nc">Args</code><code class="p">)</code><code class="w"> </code>-&gt; <code class="nb">Result</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">_pattern</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="c1">// Same as before</code>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">files</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">find_files</code><code class="p">(</code><code class="o">&amp;</code><code class="n">args</code><code class="p">.</code><code class="n">sources</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">fortunes</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">read_fortunes</code><code class="p">(</code><code class="o">&amp;</code><code class="n">files</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{:#?}"</code><code class="p">,</code><code class="w"> </code><code class="n">pick_fortune</code><code class="p">(</code><code class="o">&amp;</code><code class="n">fortunes</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">seed</code><code class="p">));</code><code class="w"/>
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(())</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Run your program with no seed and revel in the ensuing chaos of randomness:</p>
+
+<pre data-type="programlisting">$ cargo run tests/inputs/
+Some(
+    "Q: Why did the gardener quit his job?\nA: His celery wasn't high enough.",
+)</pre>
+
+<p>When provided a seed, the program should always select the same fortune:</p>
+
+<pre data-type="programlisting">$ cargo run tests/inputs/ -s 1
+Some(
+    "You can observe a lot just by watching.\n-- Yogi Berra",
+)</pre>
+<div data-type="tip"><h6>Tip</h6>
+<p>The tests I wrote are predicated on the fortunes being in a particular order. <a data-primary="sorted order" data-secondary="fortunes in" data-type="indexterm" id="id1535"/>I wrote <code>find_files</code> to return the files in sorted order, which means the list of fortunes passed to <code>pick_fortune</code> are ordered first by their source filename and then by their order inside the file. If you use a different data structure to represent the fortunes or parse them in a different order, then you’ll need to change the tests to reflect your decisions. The key is to find a way to make your pseudorandom choices predictable and testable.<a data-primary="fortune program" data-secondary="writing fortuner version" data-startref="ix_frtnwrrandfrtn" data-tertiary="selecting fortunes randomly" data-type="indexterm" id="id1536"/></p>
+</div>
+</div></section>
+
+
+
+
+
+
+
+
+<section class="pagebreak-before less_space" data-pdf-bookmark="Printing Records Matching a Pattern" data-type="sect2"><div class="sect2" id="id153">
+<h2>Printing Records Matching a Pattern</h2>
+
+<p>You now have all the pieces for finishing the program.<a data-primary="fortune program" data-secondary="writing fortuner version" data-tertiary="printing records matching a pattern" data-type="indexterm" id="id1537"/><a data-primary="regular expressions" data-secondary="printing records matching a regular expression" data-type="indexterm" id="id1538"/>
+The last step is to decide whether to print all the fortunes that match a given regular expression or to randomly select one fortune.
+You can expand your <code>run</code> function like so:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">run</code><code class="p">(</code><code class="n">args</code>: <code class="nc">Args</code><code class="p">)</code><code class="w"> </code>-&gt; <code class="nb">Result</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="c1">// Same as before</code>
+
+<code class="w">    </code><code class="k">match</code><code class="w"> </code><code class="n">pattern</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="nb">Some</code><code class="p">(</code><code class="n">pattern</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="k">for</code><code class="w"> </code><code class="n">fortune</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">fortunes</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                </code><code class="c1">// Print all the fortunes matching the pattern</code>
+<code class="w">            </code><code class="p">}</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">        </code><code class="n">_</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="c1">// Select and print one fortune</code>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(())</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Remember that the program should let the user know when there are no fortunes, such as when using the <em>tests/inputs/empty</em> directory:</p>
+
+<pre data-type="programlisting">$ cargo run tests/inputs/empty
+No fortunes found</pre>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>That should be enough information for you to finish this program using the provided tests. This is a tough problem, but don’t give up.</p>
+</div>
+</div></section>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Solution" data-type="sect1"><div class="sect1" id="id128">
+<h1>Solution</h1>
+
+<p>For my solution, you will need<a data-primary="fortune program" data-secondary="writing fortuner version" data-tertiary="solution" data-type="indexterm" id="ix_frtnwrsol"/> to include the following imports:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">use</code><code class="w"> </code><code class="n">anyhow</code>::<code class="p">{</code><code class="n">anyhow</code><code class="p">,</code><code class="w"> </code><code class="n">bail</code><code class="p">,</code><code class="w"> </code><code class="nb">Result</code><code class="p">};</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">rand</code>::<code class="n">prelude</code>::<code class="n">SliceRandom</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">rand</code>::<code class="p">{</code><code class="n">rngs</code>::<code class="n">StdRng</code><code class="p">,</code><code class="w"> </code><code class="n">RngCore</code><code class="p">,</code><code class="w"> </code><code class="n">SeedableRng</code><code class="p">};</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">regex</code>::<code class="n">RegexBuilder</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code>::<code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">ffi</code>::<code class="n">OsStr</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">fs</code>::<code class="p">{</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">File</code><code class="p">},</code><code class="w"/>
+<code class="w">    </code><code class="n">io</code>::<code class="p">{</code><code class="n">BufRead</code><code class="p">,</code><code class="w"> </code><code class="n">BufReader</code><code class="p">},</code><code class="w"/>
+<code class="w">    </code><code class="n">path</code>::<code class="n">PathBuf</code><code class="p">,</code><code class="w"/>
+<code class="p">};</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">walkdir</code>::<code class="n">WalkDir</code><code class="p">;</code><code class="w"/></pre>
+
+<p>I’ll show you how I wrote each of the functions I described in the previous section, starting with the <code>find_files</code> function.<a data-primary="find_files function" data-type="indexterm" id="id1539"/>
+You will notice that it filters out files that have the extension <em>.dat</em> using the type <a href="https://oreil.ly/CAeUi"><code>OsStr</code></a>, which is a Rust type for an operating system’s preferred representation of a string that might not be a valid UTF-8 string.<a data-primary="OsStr type" data-type="indexterm" id="id1540"/>
+The type <code>OsStr</code> is borrowed, and the owned version is <a href="https://oreil.ly/J3nFa"><code>OsString</code></a>.<a data-primary="OsString type" data-type="indexterm" id="id1541"/>
+These are similar to the <code>Path</code> and <code>PathBuf</code> distinctions.
+Both versions encapsulate the complexities of dealing with filenames on both Windows and Unix platforms.<a data-primary="Path::extension" data-type="indexterm" id="id1542"/>
+In the following code, you’ll see that I use <a href="https://oreil.ly/aOffl"><code>Path::extension</code></a>, which returns <code>Option&lt;&amp;OsStr&gt;</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">find_files</code><code class="p">(</code><code class="n">paths</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="p">[</code><code class="nb">String</code><code class="p">]</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">PathBuf</code><code class="o">&gt;</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">dat</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">OsStr</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">dat</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO8-1" id="co_fortunate_son_CO8-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">files</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="p">]</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO8-2" id="co_fortunate_son_CO8-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+
+    </code><code class="k">for</code><code class="w"> </code><code class="n">path</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">paths</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="k">match</code><code class="w"> </code><code class="n">fs</code><code>::</code><code class="n">metadata</code><code class="p">(</code><code class="n">path</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="n">bail</code><code class="o">!</code><code class="p">(</code><code class="s">"</code><code class="s">{path}: {e}</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO8-3" id="co_fortunate_son_CO8-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+            </code><code class="nb">Ok</code><code class="p">(</code><code class="n">_</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="n">files</code><code class="p">.</code><code class="n">extend</code><code class="p">(</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO8-4" id="co_fortunate_son_CO8-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+                </code><code class="n">WalkDir</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="n">path</code><code class="p">)</code><code class="w">  </code><a class="co" href="#callout_fortunate_son_CO8-5" id="co_fortunate_son_CO8-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+                    </code><code class="p">.</code><code class="n">into_iter</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">                    </code><code class="p">.</code><code class="n">filter_map</code><code class="p">(</code><code class="nb">Result</code><code>::</code><code class="n">ok</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO8-6" id="co_fortunate_son_CO8-6"><img alt="6" src="assets/6.png"/></a><code class="w">
+                    </code><code class="p">.</code><code class="n">filter</code><code class="p">(</code><code class="o">|</code><code class="n">e</code><code class="o">|</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                        </code><code class="n">e</code><code class="p">.</code><code class="n">file_type</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">is_file</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO8-7" id="co_fortunate_son_CO8-7"><img alt="7" src="assets/7.png"/></a><code class="w">
+                            </code><code class="o">&amp;</code><code class="o">&amp;</code><code class="w"> </code><code class="n">e</code><code class="p">.</code><code class="n">path</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">extension</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="o">!</code><code class="o">=</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">dat</code><code class="p">)</code><code class="w">
+</code><code class="w">                    </code><code class="p">}</code><code class="p">)</code><code class="w">
+</code><code class="w">                    </code><code class="p">.</code><code class="n">map</code><code class="p">(</code><code class="o">|</code><code class="n">e</code><code class="o">|</code><code class="w"> </code><code class="n">e</code><code class="p">.</code><code class="n">path</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">into</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO8-8" id="co_fortunate_son_CO8-8"><img alt="8" src="assets/8.png"/></a><code class="w">
+            </code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="n">files</code><code class="p">.</code><code class="n">sort</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO8-9" id="co_fortunate_son_CO8-9"><img alt="9" src="assets/9.png"/></a><code class="w">
+    </code><code class="n">files</code><code class="p">.</code><code class="n">dedup</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO8-10" id="co_fortunate_son_CO8-10"><img alt="10" src="assets/10.png"/></a><code class="w">
+    </code><code class="nb">Ok</code><code class="p">(</code><code class="n">files</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO8-11" id="co_fortunate_son_CO8-11"><img alt="11" src="assets/11.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_fortunate_son_CO8-1" id="callout_fortunate_son_CO8-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Create an <code>OsStr</code> value for the string <em>dat</em>.</p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO8-2" id="callout_fortunate_son_CO8-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Create a mutable vector for the results.</p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO8-3" id="callout_fortunate_son_CO8-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>If <a href="https://oreil.ly/VsRxb"><code>fs::metadata</code></a> fails, return a useful error message.<a data-primary="fs::metadata function" data-type="indexterm" id="id1543"/></p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO8-4" id="callout_fortunate_son_CO8-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Use <a href="https://oreil.ly/nWMcd"><code>Vec::extend</code></a> to add the results from <code>WalkDir</code> to the results.<a data-primary="Vec::extend function" data-type="indexterm" id="id1544"/><a data-primary="WalkDir type" data-type="indexterm" id="id1545"/></p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO8-5" id="callout_fortunate_son_CO8-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>Use <a href="https://oreil.ly/o6mZn"><code>walkdir::WalkDir</code></a> to find all the entries from the starting path.<a data-primary="walkdir::WalkDir" data-type="indexterm" id="id1546"/></p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO8-6" id="callout_fortunate_son_CO8-6"><img alt="6" src="assets/6.png"/></a></dt>
+<dd><p>This will ignore any errors for unreadable files or directories, which is the behavior of the original program.</p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO8-7" id="callout_fortunate_son_CO8-7"><img alt="7" src="assets/7.png"/></a></dt>
+<dd><p>Take only regular files that do not have the <em>.dat</em> extension.</p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO8-8" id="callout_fortunate_son_CO8-8"><img alt="8" src="assets/8.png"/></a></dt>
+<dd><p>The <a href="https://oreil.ly/1dWxe"><code>walkdir::DirEntry::path</code> function</a> returns a <code>Path</code>, so convert it into a 
+<span class="keep-together"><code>PathBuf</code></span>.<a data-primary="Path struct" data-secondary="converting to PathBuf" data-type="indexterm" id="id1547"/><a data-primary="PathBuf struct" data-type="indexterm" id="id1548"/></p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO8-9" id="callout_fortunate_son_CO8-9"><img alt="9" src="assets/9.png"/></a></dt>
+<dd><p>Use <a href="https://oreil.ly/ua40G"><code>Vec::sort</code></a> to sort the entries in place.</p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO8-10" id="callout_fortunate_son_CO8-10"><img alt="10" src="assets/10.png"/></a></dt>
+<dd><p>Use <a href="https://oreil.ly/7FvsZ"><code>Vec::dedup</code></a> to remove consecutive repeated values.<a data-primary="Vec::dedup function" data-type="indexterm" id="id1549"/><a data-primary="Vec::sort function" data-type="indexterm" id="id1550"/></p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO8-11" id="callout_fortunate_son_CO8-11"><img alt="11" src="assets/11.png"/></a></dt>
+<dd><p>Return the sorted, unique files.</p></dd>
+</dl>
+
+<p>The files found by the preceding function<a data-primary="read_fortunes function" data-type="indexterm" id="id1551"/> are the inputs to the <code>read_fortunes</code> 
+<span class="keep-together">function:</span></p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">read_fortunes</code><code class="p">(</code><code class="n">paths</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="p">[</code><code class="n">PathBuf</code><code class="p">]</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">Fortune</code><code class="o">&gt;</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">fortunes</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="p">]</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO9-1" id="co_fortunate_son_CO9-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">buffer</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="p">]</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">path</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">paths</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO9-2" id="co_fortunate_son_CO9-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+        </code><code class="kd">let</code><code class="w"> </code><code class="n">basename</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO9-3" id="co_fortunate_son_CO9-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+            </code><code class="n">path</code><code class="p">.</code><code class="n">file_name</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">to_string_lossy</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">into_owned</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">file</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">File</code><code>::</code><code class="n">open</code><code class="p">(</code><code class="n">path</code><code class="p">)</code><code class="w">
+</code><code class="w">            </code><code class="p">.</code><code class="n">map_err</code><code class="p">(</code><code class="o">|</code><code class="n">e</code><code class="o">|</code><code class="w"> </code><code class="n">anyhow</code><code class="o">!</code><code class="p">(</code><code class="s">"</code><code class="s">{}: {e}</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="n">path</code><code class="p">.</code><code class="n">to_string_lossy</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO9-4" id="co_fortunate_son_CO9-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+
+        </code><code class="k">for</code><code class="w"> </code><code class="n">line</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">BufReader</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="n">file</code><code class="p">)</code><code class="p">.</code><code class="n">lines</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">map_while</code><code class="p">(</code><code class="nb">Result</code><code>::</code><code class="n">ok</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO9-5" id="co_fortunate_son_CO9-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+            </code><code class="k">if</code><code class="w"> </code><code class="n">line</code><code class="w"> </code><code class="o">=</code><code class="o">=</code><code class="w"> </code><code class="s">"</code><code class="s">%</code><code class="s">"</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO9-6" id="co_fortunate_son_CO9-6"><img alt="6" src="assets/6.png"/></a><code class="w">
+                </code><code class="k">if</code><code class="w"> </code><code class="o">!</code><code class="n">buffer</code><code class="p">.</code><code class="n">is_empty</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO9-7" id="co_fortunate_son_CO9-7"><img alt="7" src="assets/7.png"/></a><code class="w">
+                    </code><code class="n">fortunes</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="n">Fortune</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                        </code><code class="n">source</code><code>:</code><code> </code><code class="nc">basename</code><code class="p">.</code><code class="n">clone</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">                        </code><code class="n">text</code><code>:</code><code> </code><code class="nc">buffer</code><code class="p">.</code><code class="n">join</code><code class="p">(</code><code class="s">"</code><code class="se">\n</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">                    </code><code class="p">}</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                    </code><code class="n">buffer</code><code class="p">.</code><code class="n">clear</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                </code><code class="p">}</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="n">buffer</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="n">line</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO9-8" id="co_fortunate_son_CO9-8"><img alt="8" src="assets/8.png"/></a><code class="w">
+            </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="n">fortunes</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist nobreakinside">
+<dt><a class="co" href="#co_fortunate_son_CO9-1" id="callout_fortunate_son_CO9-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Create mutable vectors for the fortunes and a record buffer.</p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO9-2" id="callout_fortunate_son_CO9-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Iterate through the given filenames.<a data-primary="Path::file_name, converting from OsStr to String" data-type="indexterm" id="id1552"/><a data-primary="String type" data-secondary="converting OsStr to" data-type="indexterm" id="id1553"/><a data-primary="OsStr type" data-secondary="converting to String" data-type="indexterm" id="id1554"/></p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO9-3" id="callout_fortunate_son_CO9-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Convert <a href="https://oreil.ly/PVqKf"><code>Path::file_name</code></a> from <code>OsStr</code> to <code>String</code>, using the <em>lossy</em> version in case this is not valid UTF-8. The result is a <em>clone-on-write</em> smart pointer, so use<a data-primary="clone-on-write smart pointer" data-type="indexterm" id="id1555"/> <a href="https://oreil.ly/Jpdd0"><code>Cow::into_owned</code></a> to clone the data if it is not already owned.<a data-primary="Cow::into_owned function" data-type="indexterm" id="id1556"/></p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO9-4" id="callout_fortunate_son_CO9-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Open the file or return an error message.</p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO9-5" id="callout_fortunate_son_CO9-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>Iterate through the lines of the file.<a data-primary="% (percent sign), indicating end of fortune record" data-type="indexterm" id="id1557"/></p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO9-6" id="callout_fortunate_son_CO9-6"><img alt="6" src="assets/6.png"/></a></dt>
+<dd><p>A sole percent sign (<code>%</code>) indicates the end of a record.</p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO9-7" id="callout_fortunate_son_CO9-7"><img alt="7" src="assets/7.png"/></a></dt>
+<dd><p>If the buffer is not empty, set the <code>text</code> to the buffer lines joined on newlines and then clear the buffer.</p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO9-8" id="callout_fortunate_son_CO9-8"><img alt="8" src="assets/8.png"/></a></dt>
+<dd><p>Otherwise, add the current line to the <code>buffer</code>.</p></dd>
+</dl>
+
+<p>Writing <a data-primary="pick_fortune function" data-type="indexterm" id="id1558"/>the <code>pick_fortune</code> function was a journey.
+I first tried to write it as follows:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="c1">// This will not compile</code>
+<code class="k">fn</code> <code class="nf">pick_fortune</code><code class="p">(</code><code class="n">fortunes</code>: <code class="kp">&amp;</code><code class="p">[</code><code class="n">Fortune</code><code class="p">],</code><code class="w"> </code><code class="n">seed</code>: <code class="nb">Option</code><code class="o">&lt;</code><code class="kt">u64</code><code class="o">&gt;</code><code class="p">)</code><code class="w"> </code>-&gt; <code class="nb">Option</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">rng</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="k">match</code><code class="w"> </code><code class="n">seed</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="nb">Some</code><code class="p">(</code><code class="n">val</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="n">StdRng</code>::<code class="n">seed_from_u64</code><code class="p">(</code><code class="n">val</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="n">_</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="n">rand</code>::<code class="n">thread_rng</code><code class="p">(),</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+
+<code class="w">    </code><code class="n">fortunes</code><code class="p">.</code><code class="n">choose</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">rng</code><code class="p">).</code><code class="n">map</code><code class="p">(</code><code class="o">|</code><code class="n">f</code><code class="o">|</code><code class="w"> </code><code class="n">f</code><code class="p">.</code><code class="n">text</code><code class="p">.</code><code class="n">to_string</code><code class="p">())</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>The compiler rejected this because one arm of the <code>match</code> returns the type <code>StdRng</code> and the other a <code>ThreadRng</code>:</p>
+
+<pre data-type="programlisting">error[E0308]: `match` arms have incompatible types
+   --&gt; src/main.rs:150:14
+    |
+148 |       let mut rng = match seed {
+    |  ___________________-
+149 | |         Some(val) =&gt; StdRng::seed_from_u64(val),
+    | |                      -------------------------- this is found to be
+    | |                                                 of type `StdRng`
+150 | |         _ =&gt; rand::thread_rng(),
+    | |              ^^^^^^^^^^^^^^^^^^ expected `StdRng`, found `ThreadRng`
+151 | |     };
+    | |_____- `match` arms have incompatible types</pre>
+
+<p class="pagebreak-before">So I thought I might place them <a data-primary="Box pointer type" data-type="indexterm" id="id1559"/>into a <code>Box</code> as follows:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="c1">// This will still not compile</code>
+<code class="k">fn</code> <code class="nf">pick_fortune</code><code class="p">(</code><code class="n">fortunes</code>: <code class="kp">&amp;</code><code class="p">[</code><code class="n">Fortune</code><code class="p">],</code><code class="w"> </code><code class="n">seed</code>: <code class="nb">Option</code><code class="o">&lt;</code><code class="kt">u64</code><code class="o">&gt;</code><code class="p">)</code><code class="w"> </code>-&gt; <code class="nb">Option</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">rng</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="k">match</code><code class="w"> </code><code class="n">seed</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="nb">Some</code><code class="p">(</code><code class="n">val</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">Box</code>::<code class="n">new</code><code class="p">(</code><code class="n">StdRng</code>::<code class="n">seed_from_u64</code><code class="p">(</code><code class="n">val</code><code class="p">)),</code><code class="w"/>
+<code class="w">        </code><code class="n">_</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">Box</code>::<code class="n">new</code><code class="p">(</code><code class="n">rand</code>::<code class="n">thread_rng</code><code class="p">()),</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+
+<code class="w">    </code><code class="n">fortunes</code><code class="p">.</code><code class="n">choose</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">rng</code><code class="p">).</code><code class="n">map</code><code class="p">(</code><code class="o">|</code><code class="n">f</code><code class="o">|</code><code class="w"> </code><code class="n">f</code><code class="p">.</code><code class="n">text</code><code class="p">.</code><code class="n">to_string</code><code class="p">())</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>That still creates incompatible types because one arm returns <code>Box&lt;StdRng&gt;</code> and the other <code>Box&lt;ThreadRng&gt;</code>.<a data-primary="rand::RngCore trait" data-type="indexterm" id="id1560"/><a data-primary="RngCore trait" data-type="indexterm" id="id1561"/><a data-primary="Slice::choose function" data-type="indexterm" id="id1562"/>
+The key to solving this error was to see that the <code>Slice::choose</code> function requires an argument that implements the trait <a href="https://oreil.ly/DLh4z"><code>rand::RngCore</code></a>, which I use as the type annotation for the contents of the <code>Box</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">pick_fortune</code><code class="p">(</code><code class="n">fortunes</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="p">[</code><code class="n">Fortune</code><code class="p">]</code><code class="p">,</code><code class="w"> </code><code class="n">seed</code><code>:</code><code> </code><code class="nb">Option</code><code class="o">&lt;</code><code class="kt">u64</code><code class="o">&gt;</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Option</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">rng</code><code>:</code><code> </code><code class="nb">Box</code><code class="o">&lt;</code><code class="k">dyn</code><code class="w"> </code><code class="n">RngCore</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="k">match</code><code class="w"> </code><code class="n">seed</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="nb">Some</code><code class="p">(</code><code class="n">val</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="nb">Box</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="n">StdRng</code><code>::</code><code class="n">seed_from_u64</code><code class="p">(</code><code class="n">val</code><code class="p">)</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO10-1" id="co_fortunate_son_CO10-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+        </code><code class="n">_</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="nb">Box</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="n">rand</code><code>::</code><code class="n">thread_rng</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO10-2" id="co_fortunate_son_CO10-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="p">}</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="n">fortunes</code><code class="p">.</code><code class="n">choose</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">rng</code><code class="p">)</code><code class="p">.</code><code class="n">map</code><code class="p">(</code><code class="o">|</code><code class="n">f</code><code class="o">|</code><code class="w"> </code><code class="n">f</code><code class="p">.</code><code class="n">text</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO10-3" id="co_fortunate_son_CO10-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_fortunate_son_CO10-1" id="callout_fortunate_son_CO10-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Create a PRNG using the provided seed.<a data-primary="pseudo random number generator (PRNG)" data-secondary="creating and using to select fortune" data-type="indexterm" id="id1563"/></p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO10-2" id="callout_fortunate_son_CO10-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Otherwise, use a PRNG seeded by the system.</p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO10-3" id="callout_fortunate_son_CO10-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Use the PRNG to select one of the fortunes.</p></dd>
+</dl>
+
+<p>I can bring all these ideas together in my <code>run</code> like so:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">pattern</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">args</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">pattern</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">map</code><code class="p">(</code><code class="o">|</code><code class="n">val</code><code>:</code><code> </code><code class="nb">String</code><code class="o">|</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="n">RegexBuilder</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="n">val</code><code class="p">.</code><code class="n">as_str</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">case_insensitive</code><code class="p">(</code><code class="n">args</code><code class="p">.</code><code class="n">insensitive</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">build</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">map_err</code><code class="p">(</code><code class="o">|</code><code class="n">_</code><code class="o">|</code><code class="w"> </code><code class="n">anyhow</code><code class="o">!</code><code class="p">(</code><code class="s">r#"Invalid --pattern "{val}""#</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">transpose</code><code class="p">(</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">files</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">find_files</code><code class="p">(</code><code class="o">&amp;</code><code class="n">args</code><code class="p">.</code><code class="n">sources</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">fortunes</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">read_fortunes</code><code class="p">(</code><code class="o">&amp;</code><code class="n">files</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="k">match</code><code class="w"> </code><code class="n">pattern</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="nb">Some</code><code class="p">(</code><code class="n">pattern</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO11-1" id="co_fortunate_son_CO11-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+            </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">prev_source</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">None</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO11-2" id="co_fortunate_son_CO11-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+            </code><code class="k">for</code><code class="w"> </code><code class="n">fortune</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">fortunes</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO11-3" id="co_fortunate_son_CO11-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+                </code><code class="p">.</code><code class="n">iter</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">filter</code><code class="p">(</code><code class="o">|</code><code class="n">fortune</code><code class="o">|</code><code class="w"> </code><code class="n">pattern</code><code class="p">.</code><code class="n">is_match</code><code class="p">(</code><code class="o">&amp;</code><code class="n">fortune</code><code class="p">.</code><code class="n">text</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="w">            </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="k">if</code><code class="w"> </code><code class="n">prev_source</code><code class="p">.</code><code class="n">as_ref</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">map_or</code><code class="p">(</code><code class="kc">true</code><code class="p">,</code><code class="w"> </code><code class="o">|</code><code class="n">s</code><code class="o">|</code><code class="w"> </code><code class="n">s</code><code class="w"> </code><code class="o">!</code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="n">fortune</code><code class="p">.</code><code class="n">source</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">{</code><code class="w">
+</code><code class="w">                    </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"</code><code class="s">({})</code><code class="se">\n</code><code class="s">%</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="n">fortune</code><code class="p">.</code><code class="n">source</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO11-4" id="co_fortunate_son_CO11-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+                    </code><code class="n">prev_source</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">fortune</code><code class="p">.</code><code class="n">source</code><code class="p">.</code><code class="n">clone</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO11-5" id="co_fortunate_son_CO11-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+                </code><code class="p">}</code><code class="w">
+</code><code class="w">                </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{}</code><code class="se">\n</code><code class="s">%</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="n">fortune</code><code class="p">.</code><code class="n">text</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO11-6" id="co_fortunate_son_CO11-6"><img alt="6" src="assets/6.png"/></a><code class="w">
+            </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="n">_</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="fm">println!</code><code class="p">(</code><code class="w"> </code><a class="co" href="#callout_fortunate_son_CO11-7" id="co_fortunate_son_CO11-7"><img alt="7" src="assets/7.png"/></a><code class="w">
+                </code><code class="s">"</code><code class="s">{}</code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">                </code><code class="n">pick_fortune</code><code class="p">(</code><code class="o">&amp;</code><code class="n">fortunes</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">seed</code><code class="p">)</code><code class="w">
+</code><code class="w">                    </code><code class="p">.</code><code class="n">or_else</code><code class="p">(</code><code class="o">|</code><code class="o">|</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="s">"</code><code class="s">No fortunes found</code><code class="s">"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="w">                    </code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">            </code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_fortunate_son_CO11-1" id="callout_fortunate_son_CO11-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Check if the user has provided a <code>pattern</code> option.<a data-primary="pattern option" data-type="indexterm" id="id1564"/></p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO11-2" id="callout_fortunate_son_CO11-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Initialize a mutable variable to remember the last fortune source.</p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO11-3" id="callout_fortunate_son_CO11-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Iterate over the found fortunes and filter for those matching the provided regular expression.</p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO11-4" id="callout_fortunate_son_CO11-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Print the source header if the current source is not the same as the previous one seen.</p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO11-5" id="callout_fortunate_son_CO11-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>Store the current fortune source.</p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO11-6" id="callout_fortunate_son_CO11-6"><img alt="6" src="assets/6.png"/></a></dt>
+<dd><p>Print the text of the fortune.</p></dd>
+<dt><a class="co" href="#co_fortunate_son_CO11-7" id="callout_fortunate_son_CO11-7"><img alt="7" src="assets/7.png"/></a></dt>
+<dd><p>Print a random fortune or a message that states that there are no fortunes to be found.</p></dd>
+</dl>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>The fortunes are stored with embedded newlines that may cause the regular expression matching to fail if the sought-after phrase spans multiple lines. <a data-primary="newlines" data-secondary="in stored fortunes" data-secondary-sortas="stored" data-type="indexterm" id="id1565"/>This mimics how the original <code>fortune</code> works but may not match the expectations of the user.</p>
+</div>
+
+<p>At this point, the program passes all the provided tests.
+I provided more guidance on this challenge because of the many steps involved in finding and reading files and then printing all the matching records or using a PRNG to randomly select one.
+I hope you enjoyed that as much as I did.<a data-primary="fortune program" data-secondary="writing fortuner version" data-startref="ix_frtnwrsol" data-tertiary="solution" data-type="indexterm" id="id1566"/></p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Going Further" data-type="sect1"><div class="sect1" id="id161">
+<h1>Going Further</h1>
+
+<p>Read the <code>fortune</code> manual page to learn about other options your program can implement.<a data-primary="fortune program" data-secondary="writing fortuner version" data-tertiary="going further" data-type="indexterm" id="id1567"/>
+For instance, you could add the <code>-n length</code> option to restrict fortunes to those less than the given length.
+Knowing the lengths of the fortunes would be handy for implementing the <code>-s</code> option, which picks only <em>short</em> fortunes.
+As noted in the final solution, the regular expression matching may fail because of the embedded newlines in the fortunes.
+Can you find a way around this limitation?</p>
+
+<p>Randomness is integral to many games that you could try to write.
+Perhaps start with a game where the user must guess a randomly selected number in a range; then you could move on to a more difficult game like “Wheel of Fortune,” where the user guesses letters in a randomly selected word or phrase.
+Many systems have the file <em>/usr/share/dict/words</em> that contains many thousands of English words; you could use that as a source, or you could create your own input file of words and phrases.</p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Summary" data-type="sect1"><div class="sect1" id="id129">
+<h1>Summary</h1>
+
+<p>Programs that incorporate randomness are some of my favorites.
+In my salad days of programming, I wrote a Perl script to stub out new Perl scripts that would include a random quote from one of my favorite poets.<sup><a data-type="noteref" href="ch12.html#id1568" id="id1568-marker">6</a></sup>
+Random events are useful for creating games as well as machine learning programs, so it’s important to understand how to control and test randomness.
+Here’s some of what you learned in this chapter:</p>
+
+<ul>
+<li>
+<p>The fortune records span multiple lines and use a lone percent sign to indicate the end of the record. You learned to read the lines into a buffer and dump the buffer when the record or file terminator is found.</p>
+</li>
+<li>
+<p>You can use the <code>rand</code> crate to make pseudorandom choices that can be controlled using a seed value.</p>
+</li>
+<li>
+<p>The <code>Path</code> (borrowed) and <code>PathBuf</code> (owned) types are useful abstractions for dealing with system paths on both Windows and Unix. They are similar to the <code>&amp;str</code> and <code>String</code> types for dealing with borrowed and owned strings.</p>
+</li>
+<li>
+<p>The names of files and directories may be invalid UTF-8, so Rust uses the types <code>OsStr</code> (borrowed) and <code>OsString</code> (owned) to represent these strings.</p>
+</li>
+<li>
+<p>Using abstractions like <code>Path</code> and <code>OsStr</code> makes your Rust code more portable across operating systems.<a data-primary="fortune program" data-startref="ix_frtn" data-type="indexterm" id="id1569"/></p>
+</li>
+</ul>
+
+<p>In the next chapter, you’ll learn to manipulate dates as you create a terminal-based calendar program.</p>
+</div></section>
+<div data-type="footnotes"><p data-type="footnote" id="id1449"><sup><a href="ch12.html#id1449-marker">1</a></sup> <em>ASCII art</em> is a term for graphics that use only ASCII text values.</p><p data-type="footnote" id="id1450"><sup><a href="ch12.html#id1450-marker">2</a></sup> This was in the 1990s, which I believe the kids nowadays refer to as “the late 1900s.”</p><p data-type="footnote" id="id1451"><sup><a href="ch12.html#id1451-marker">3</a></sup> On Ubuntu, <code>sudo apt install fortune-mod</code>; on macOS, <code>brew install fortune</code>.</p><p data-type="footnote" id="id1480"><sup><a href="ch12.html#id1480-marker">4</a></sup> Robert R. Coveyou, “Random Number Generation Is Too Important to Be Left to Chance,” <em>Studies in Applied Mathematics</em> 3(1969): 70–111.</p><p data-type="footnote" id="id1501"><sup><a href="ch12.html#id1501-marker">5</a></sup> “The art in engineering is not so much to make something very complicated. The art is to make a complicated problem simpler.” Niklaus Wirth, quoted in Ken Takara, “Programming Philosophy: Interviews with Donald Knuth and Niklaus Wirth,” <em>Computer Language</em> 2, no. 5 (May 1985): 25-35.</p><p data-type="footnote" id="id1568"><sup><a href="ch12.html#id1568-marker">6</a></sup> See, Mom, an English lit degree is actually useful.</p></div></div></section></body></html>

@@ -1,0 +1,1293 @@
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Finders Keepers</title><link href="epub.css" rel="stylesheet" type="text/css"/>
+<meta content="urn:uuid:e80a1ec8-ed8e-40f7-ba3d-26a647960341" name="Adept.expected.resource"/></head><body data-type="book"><section data-pdf-bookmark="Chapter 7. Finders Keepers" data-type="chapter" epub:type="chapter"><div class="chapter" id="ch07">
+<h1><span class="label">Chapter 7. </span>Finders Keepers</h1>
+
+<blockquote>
+<p>
+Then / Is when I maybe should have wrote it down / <br/>But when I looked around to find a pen / <br/>And then I tried to think of what you said / We broke in two
+</p>
+<p data-type="attribution">
+They Might be Giants, “Broke in Two” (2004)
+</p>
+</blockquote>
+
+<p>In this chapter, you will write a Rust version of the <code>find</code> utility, which will, unsurprisingly, find files and directories for you.<a data-primary="find utility" data-type="indexterm" id="ix_find"/>
+If you run <code>find</code> with no restrictions, it will recursively search one or more paths for entries such as files, symbolic links, sockets, and directories.
+You can add myriad matching restrictions, such as for names, file sizes, file types, modification times, permissions, and more.
+The challenge program will locate files, directories, or links in one or more directories having names that match one or more <em>regular expressions</em>, or patterns of text.<a data-primary="pattern matching" data-secondary="find utility" data-type="indexterm" id="id820"/><a data-primary="regular expressions" data-type="indexterm" id="id821"/></p>
+
+<p>You will learn how to do the following:</p>
+
+<ul>
+<li>
+<p>Use <code>clap</code> to constrain possible values for command-line arguments</p>
+</li>
+<li>
+<p>Use a regular expression to find a pattern of text</p>
+</li>
+<li>
+<p>Create an enumerated type with an implementation</p>
+</li>
+<li>
+<p>Recursively search filepaths using the <code>walkdir</code> crate</p>
+</li>
+<li>
+<p>Use the <code>Iterator::any</code> function</p>
+</li>
+<li>
+<p>Chain multiple <code>filter</code>, <code>map</code>, and <code>filter_map</code> operations</p>
+</li>
+<li>
+<p>Compile code conditionally when on Windows or not</p>
+</li>
+<li>
+<p>Refactor code</p>
+</li>
+</ul>
+
+
+
+
+
+
+<section data-pdf-bookmark="How find Works" data-type="sect1"><div class="sect1" id="id66">
+<h1>How find Works</h1>
+
+<p>Let’s begin by exploring what <code>find</code> can do by consulting the manual page, which goes on for about 500 lines detailing dozens of options.<a data-primary="find utility" data-secondary="how it works" data-type="indexterm" id="ix_findhow"/>
+The challenge program for this chapter will be required to find entries in one or more paths, and these entries can be filtered by files, links, and directories as well as by names that match an optional pattern.<a data-primary="BSD version" data-secondary="find utility" data-type="indexterm" id="id822"/>
+I’ll show the beginning of the BSD <code>find</code> manual page that shows part of the requirements for the challenge:</p>
+
+<pre data-type="programlisting">FIND(1)                   BSD General Commands Manual                  FIND(1)
+
+NAME
+     find -- walk a file hierarchy
+
+SYNOPSIS
+     find [-H | -L | -P] [-EXdsx] [-f path] path ... [expression]
+     find [-H | -L | -P] [-EXdsx] -f path [path ...] [expression]
+
+DESCRIPTION
+     The find utility recursively descends the directory tree for each path
+     listed, evaluating an expression (composed of the ''primaries'' and
+     ''operands'' listed below) in terms of each file in the tree.</pre>
+
+<p>The GNU <code>find</code> is <a data-primary="GNU version" data-secondary="find utility" data-type="indexterm" id="id823"/>similar:</p>
+
+<pre data-type="programlisting">$ find --help
+Usage: find [-H] [-L] [-P] [-Olevel]
+[-D help|tree|search|stat|rates|opt|exec] [path...] [expression]
+
+default path is the current directory; default expression is -print
+expression may consist of: operators, options, tests, and actions:
+
+operators (decreasing precedence; -and is implicit where no others are given):
+      ( EXPR )   ! EXPR   -not EXPR   EXPR1 -a EXPR2   EXPR1 -and EXPR2
+      EXPR1 -o EXPR2   EXPR1 -or EXPR2   EXPR1 , EXPR2
+
+positional options (always true): -daystart -follow -regextype
+
+normal options (always true, specified before other expressions):
+      -depth --help -maxdepth LEVELS -mindepth LEVELS -mount -noleaf
+      --version -xautofs -xdev -ignore_readdir_race -noignore_readdir_race
+
+tests (N can be +N or -N or N): -amin N -anewer FILE -atime N -cmin N
+      -cnewer FILE -ctime N -empty -false -fstype TYPE -gid N -group NAME
+      -ilname PATTERN -iname PATTERN -inum N -iwholename PATTERN
+      -iregex PATTERN -links N -lname PATTERN -mmin N -mtime N
+      -name PATTERN -newer FILE -nouser -nogroup -path PATTERN
+      -perm [-/]MODE -regex PATTERN -readable -writable -executable
+      -wholename PATTERN -size N[bcwkMG] -true -type [bcdpflsD] -uid N
+      -used N -user NAME -xtype [bcdpfls] -context CONTEXT
+
+actions: -delete -print0 -printf FORMAT -fprintf FILE FORMAT -print
+      -fprint0 FILE -fprint FILE -ls -fls FILE -prune -quit
+      -exec COMMAND ; -exec COMMAND {} + -ok COMMAND ;
+      -execdir COMMAND ; -execdir COMMAND {} + -okdir COMMAND ;</pre>
+
+<p>As usual, the challenge program will attempt to implement only a subset of these options that I’ll demonstrate forthwith using the files in <em>07_findr/tests/inputs</em>.
+In the following output from <code>tree</code> showing the directory and the file structure of that directory, the symbol <code>-&gt;</code> indicates<a data-primary="-&gt; symbol, indicating symbolic links" data-type="indexterm" id="id824"/><a data-primary="symbolic links" data-secondary="indicated by -&gt; symbol" data-type="indexterm" id="id825"/> that <em>d/b.csv</em> is a symbolic link to the file <em>a/b/b.csv</em>:</p>
+
+<pre data-type="programlisting">$ cd 07_findr/tests/inputs/
+$ tree
+.
+├── a
+│   ├── a.txt
+│   └── b
+│       ├── b.csv
+│       └── c
+│           └── c.mp3
+├── d
+│   ├── b.csv -&gt; ../a/b/b.csv
+│   ├── d.tsv
+│   ├── d.txt
+│   └── e
+│       └── e.mp3
+├── f
+│   └── f.txt
+└── g.csv
+
+6 directories, 9 files</pre>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>A <em>symbolic link</em> is a pointer or a shortcut to a file or directory.<a data-primary="symbolic links" data-secondary="defined" data-type="indexterm" id="id826"/><a data-primary="Windows" data-secondary="symbolic links and" data-type="indexterm" id="id827"/> Windows does not have symbolic links (aka <em>symlinks</em>), so the output will be different on that platform because the path <em>tests\inputs\d\b.csv</em> will exist as a regular file. I recommend Windows users also explore writing and testing this program in Windows Subsystem for Linux.<a data-primary="Windows Subsystem for Linux" data-type="indexterm" id="id828"/></p>
+</div>
+
+<p>Next, I will demonstrate the features of <code>find</code> that the challenge program is expected to implement.
+To start, <code>find</code> must have one or more positional arguments that indicate the paths to search.<a data-primary="paths" data-secondary="indicating for find utility search" data-type="indexterm" id="id829"/>
+For each path, <code>find</code> will recursively search for all files and directories found therein.
+If I am in the <em>tests/inputs</em> directory and indicate <code>.</code> for the current working directory, <code>find</code> will list all the contents.<a data-primary=". (dot)" data-secondary="indicating current directory" data-type="indexterm" id="id830"/><a data-primary="Linux" data-secondary="find output from GNU version" data-type="indexterm" id="id831"/><a data-primary="macOS" data-secondary="find output from BSD version" data-type="indexterm" id="id832"/>
+The ordering of the output from the BSD <code>find</code> on macOS differs from the GNU version on Linux, which I show on the left and right, respectively:</p>
+
+<pre class="pagebreak-before" data-type="programlisting">$ find .                          $ find .
+.                                 .
+./g.csv                           ./d
+./a                               ./d/d.txt
+./a/a.txt                         ./d/d.tsv
+./a/b                             ./d/e
+./a/b/b.csv                       ./d/e/e.mp3
+./a/b/c                           ./d/b.csv
+./a/b/c/c.mp3                     ./f
+./f                               ./f/f.txt
+./f/f.txt                         ./g.csv
+./d                               ./a
+./d/b.csv                         ./a/a.txt
+./d/d.txt                         ./a/b
+./d/d.tsv                         ./a/b/c
+./d/e                             ./a/b/c/c.mp3
+./d/e/e.mp3                       ./a/b/b.csv</pre>
+
+<p>I can<a data-primary="-type option (find)" data-primary-sortas="type" data-type="indexterm" id="id833"/> use the <code>-type</code> option<sup><a data-type="noteref" href="ch07.html#id834" id="id834-marker">1</a></sup> to specify <code>f</code> and find only <em>files</em>:</p>
+
+<pre data-type="programlisting">$ find . -type f
+./g.csv
+./a/a.txt
+./a/b/b.csv
+./a/b/c/c.mp3
+./f/f.txt
+./d/d.txt
+./d/d.tsv
+./d/e/e.mp3</pre>
+
+<p>I can use <code>l</code> to find only <em>links</em>:</p>
+
+<pre data-type="programlisting">$ find . -type l
+./d/b.csv</pre>
+
+<p>I can also use <code>d</code> to find only <em>directories</em>:</p>
+
+<pre data-type="programlisting">$ find . -type d
+.
+./a
+./a/b
+./a/b/c
+./f
+./d
+./d/e</pre>
+
+<p class="pagebreak-before">While the challenge program will try to find only these types, <code>find</code> will accept several more <code>-type</code> values per the manual page:</p>
+
+<pre data-type="programlisting">-type t
+     True if the file is of the specified type.  Possible file types
+     are as follows:
+
+     b       block special
+     c       character special
+     d       directory
+     f       regular file
+     l       symbolic link
+     p       FIFO
+     s       socket</pre>
+
+<p>If you give a <code>-type</code> value not found in this list, <code>find</code> will stop with an error:</p>
+
+<pre data-type="programlisting">$ find . -type x
+find: -type: x: unknown type</pre>
+
+<p>The <code>-name</code> option can locate items matching a <a data-primary="file globs" data-secondary="finding items matching file glob pattern" data-type="indexterm" id="id835"/><a data-primary="-name option (find)" data-primary-sortas="name option" data-type="indexterm" id="id836"/>file glob pattern, such as <code>*.csv</code> for any entry ending with <em>.csv</em>.<a data-primary="* (asterisk)" data-secondary="escaping in bash" data-type="indexterm" id="id837"/><a data-primary="escaping special characters" data-secondary="asterisk (*) in bash shell" data-type="indexterm" id="id838"/><a data-primary="\ (backslash), escaping special characters" data-type="indexterm" id="id839"/>
+In <code>bash</code>, the asterisk (<code>*</code>) must be escaped with a backslash so that it is passed as a literal character and not interpreted by the shell:</p>
+
+<pre data-type="programlisting">$ find . -name \*.csv
+./g.csv
+./a/b/b.csv
+./d/b.csv</pre>
+
+<p>I can also<a data-primary="&quot; &quot; (quotation marks, double)" data-secondary="file glob patterns enclosed in" data-type="indexterm" id="id840"/> put the pattern in quotes:</p>
+
+<pre data-type="programlisting">$ find . -name "*.csv"
+./g.csv
+./a/b/b.csv
+./d/b.csv</pre>
+
+<p>I can search for multiple <code>-name</code> patterns <a data-primary="or expressions" data-type="indexterm" id="id841"/>by chaining them with <code>-o</code>, for <em>or</em>:</p>
+
+<pre data-type="programlisting">$ find . -name "*.txt" -o -name "*.csv"
+./g.csv
+./a/a.txt
+./a/b/b.csv
+./f/f.txt
+./d/b.csv
+./d/d.txt</pre>
+
+<p>I can combine <code>-type</code> and <code>-name</code> options.<a data-primary="-type option (find)" data-primary-sortas="type" data-secondary="combining with -name option" data-type="indexterm" id="id842"/>
+For instance, I can search for files or links matching <code>*.csv</code>:</p>
+
+<pre data-type="programlisting">$ find . -name "*.csv" -type f -o -type l
+./g.csv
+./a/b/b.csv
+./d/b.csv</pre>
+
+<p>I must use parentheses <a data-primary="() (parentheses)" data-secondary="grouping find utility arguments" data-type="indexterm" id="id843"/><a data-primary="or expressions" data-secondary="-name option following in find" data-secondary-sortas="name" data-type="indexterm" id="id844"/>to group the <code>-type</code> arguments when the <code>-name</code> condition follows an <em>or</em> expression:</p>
+
+<pre data-type="programlisting">$ find . \( -type f -o -type l \) -name "*.csv"
+./g.csv
+./a/b/b.csv
+./d/b.csv</pre>
+
+<p>I can also list multiple search paths<a data-primary="paths" data-secondary="listing multiple search paths as positional arguments for find" data-type="indexterm" id="id845"/> as positional arguments:</p>
+
+<pre data-type="programlisting">$ find a/b d -name "*.mp3"
+a/b/c/c.mp3
+d/e/e.mp3</pre>
+
+<p>If the given search path does not exist, <code>find</code> will print an error.
+In the following command, <em>blargh</em> represents a <a data-primary="errors" data-secondary="find utility searches" data-type="indexterm" id="id846"/><a data-primary="directories" data-secondary="nonexistent path error using find" data-type="indexterm" id="id847"/>nonexistent path:</p>
+
+<pre data-type="programlisting">$ find blargh
+find: blargh: No such file or directory</pre>
+
+<p>If an argument is the name of an existing file, <code>find</code> will print it:</p>
+
+<pre data-type="programlisting">$ find a/a.txt
+a/a.txt</pre>
+
+<p>When <code>find</code> encounters an unreadable directory, it will print a message to <code>STDERR</code> and move on.<a data-primary="directories" data-secondary="unreadable directory error using find" data-type="indexterm" id="id848"/>
+You can verify this on a Unix platform by creating a directory called <em>cant-touch-this</em> and using <code>chmod 000</code> to<a data-primary="chmod command" data-secondary="using chmod 000 to remove all permissions" data-type="indexterm" id="id849"/> remove all permissions:</p>
+
+<pre data-type="programlisting">$ mkdir cant-touch-this &amp;&amp; chmod 000 cant-touch-this
+$ find . -type d
+.
+./a
+./a/b
+./a/b/c
+./f
+./cant-touch-this
+<strong>find: ./cant-touch-this: Permission denied</strong>
+./d
+./d/e</pre>
+
+<p>Windows does not have a permissions system that would render a directory unreadable, so this will work only on Unix.
+Be sure to remove the directory so that this will not interfere with the tests:</p>
+
+<pre data-type="programlisting">$ chmod 700 cant-touch-this &amp;&amp; rmdir cant-touch-this</pre>
+
+<p>While <code>find</code> can do much more, this is as much as you will implement in this chapter.<a data-primary="find utility" data-secondary="how it works" data-startref="ix_findhow" data-type="indexterm" id="id850"/></p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Getting Started" data-type="sect1"><div class="sect1" id="id67">
+<h1>Getting Started</h1>
+
+<p>The program you write will be called <code>findr</code> (pronounced <em>find-er</em>), and I recommend you run <strong><code>cargo new findr</code></strong> to start.<a data-primary="find utility" data-secondary="writing findr version" data-tertiary="getting started" data-type="indexterm" id="id851"/>
+Update <em>Cargo.toml</em> with the following:</p>
+
+<pre data-code-language="toml" data-type="programlisting"><code class="k">[</code><code class="k">dependencies</code><code class="k">]</code><code class="w">
+</code><code class="n">anyhow</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">1.0.79</code><code class="s2">"</code><code class="w">
+</code><code class="n">clap</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">version</code><code class="w"> </code><code class="p">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">4.5.0</code><code class="s2">"</code><code class="p">,</code><code class="w"> </code><code class="n">features</code><code class="w"> </code><code class="p">=</code><code class="w"> </code><code class="p">[</code><code class="s2">"</code><code class="s2">derive</code><code class="s2">"</code><code class="p">]</code><code class="w"> </code><code class="p">}</code><code class="w">
+</code><code class="n">regex</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">1.10.3</code><code class="s2">"</code><code class="w">
+</code><code class="n">walkdir</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">2.4.0</code><code class="s2">"</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO1-1" id="co_finders_keepers_CO1-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+
+</code><code class="k">[</code><code class="k">dev-dependencies</code><code class="k">]</code><code class="w">
+</code><code class="n">assert_cmd</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">2.0.13</code><code class="s2">"</code><code class="w">
+</code><code class="n">predicates</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">3.0.4</code><code class="s2">"</code><code class="w">
+</code><code class="n">pretty_assertions</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">1.4.0</code><code class="s2">"</code><code class="w">
+</code><code class="n">rand</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">0.8.5</code><code class="s2">"</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_finders_keepers_CO1-1" id="callout_finders_keepers_CO1-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <a href="https://oreil.ly/d8DsV"><code>walkdir</code> crate</a> will be used to recursively search the paths for entries.<a data-primary="walkdir crate" data-type="indexterm" id="id852"/></p></dd>
+</dl>
+
+<p>At this point, I normally suggest that you copy the <em>tests</em> directory (<em>07_findr/tests</em>) into your project; however, in this case, special care must be taken to preserve the symlink in the <em>tests/inputs</em> directory or your tests will fail.
+In <a data-type="xref" href="ch03.html#ch03">Chapter 3</a>, I showed you how to use the <code>cp</code> (<em>copy</em>) command with the <code>-r</code> (<em>recursive</em>) option to copy the <em>tests</em> directory into your project.
+On both macOS and Linux, you can change <code>-r</code> to <code>-R</code> to recursively copy the directory and maintain symlinks.<a data-primary="recursive flag" data-type="indexterm" id="id853"/><a data-primary="-r (recursive) option" data-primary-sortas="r recursive" data-type="indexterm" id="id854"/><a data-primary="-R (recursive, maintain symlinks) option" data-primary-sortas="r recursive maintain" data-type="indexterm" id="id855"/>
+I’ve also provided a <code>bash</code> script in the <em>07_findr</em> directory that will copy <em>tests</em> into a destination directory and create the symlink manually.
+Run this with no arguments to see the usage:</p>
+
+<pre data-type="programlisting">$ ./cp-tests.sh
+Usage: cp-tests.sh DEST_DIR</pre>
+
+<p>Assuming you created your new project in <em>~/rust-solutions/findr</em>, you can use the program like this:</p>
+
+<pre data-type="programlisting">$ ./cp-tests.sh ~/rust-solutions/findr
+Copying "tests" to "/Users/kyclark/rust-solutions/findr"
+Fixing symlink
+Done.</pre>
+
+<p>Run <strong><code>cargo test</code></strong> to build the program and run the tests, all of which should fail.</p>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Defining the Arguments" data-type="sect2"><div class="sect2" id="id68">
+<h2>Defining the Arguments</h2>
+
+<p>Before I get you started writing code, I want<a data-primary="find utility" data-secondary="writing findr version" data-tertiary="defining the arguments" data-type="indexterm" id="ix_findwrarg"/> to show the expected command-line interface as it will affect how you define the arguments to <code>clap</code>:</p>
+
+<pre data-type="programlisting">$ cargo run -- --help
+Rust version of `find`
+
+Usage: findr [OPTIONS] [PATH]...
+
+Arguments:
+  [PATH]...  Search paths [default: .] <a class="co" href="#callout_finders_keepers_CO2-1" id="co_finders_keepers_CO2-1"><img alt="1" src="assets/1.png"/></a>
+
+Options:
+  -n, --name [&lt;NAME&gt;...]  Name <a class="co" href="#callout_finders_keepers_CO2-2" id="co_finders_keepers_CO2-2"><img alt="2" src="assets/2.png"/></a>
+  -t, --type [&lt;TYPE&gt;...]  Entry type [possible values: d, f, l] <a class="co" href="#callout_finders_keepers_CO2-3" id="co_finders_keepers_CO2-3"><img alt="3" src="assets/3.png"/></a>
+  -h, --help              Print help
+  -V, --version           Print version</pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_finders_keepers_CO2-1" id="callout_finders_keepers_CO2-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Zero or more directories can be supplied as positional arguments, and the default should be a dot (<code>.</code>) for the current working directory.<a data-primary=". (dot)" data-secondary="indicating current directory" data-type="indexterm" id="id856"/></p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO2-2" id="callout_finders_keepers_CO2-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <code>-n|--name</code> option can specify one or more patterns.</p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO2-3" id="callout_finders_keepers_CO2-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>The <code>-t|--type</code> option will be constrained to one or more of the values <code>f</code> for files, <code>d</code> for directories, or <code>l</code> for links.</p></dd>
+</dl>
+
+<p>You can model this however you like, but I suggest you update <em>src/main.rs</em> to  model the program’s argument as follows:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">use</code><code class="w"> </code><code class="n">regex</code><code>::</code><code class="n">Regex</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO3-1" id="co_finders_keepers_CO3-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+
+</code><code class="cp">#[</code><code class="cp">derive(Debug)</code><code class="cp">]</code><code class="w">
+</code><code class="k">struct</code><code> </code><code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="n">paths</code><code>:</code><code> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO3-2" id="co_finders_keepers_CO3-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="n">names</code><code>:</code><code> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">Regex</code><code class="o">&gt;</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO3-3" id="co_finders_keepers_CO3-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+    </code><code class="n">entry_types</code><code>:</code><code> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">EntryType</code><code class="o">&gt;</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO3-4" id="co_finders_keepers_CO3-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_finders_keepers_CO3-1" id="callout_finders_keepers_CO3-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <a href="https://oreil.ly/8PrIh"><code>regex::Regex</code></a> struct will represent a compiled regular expression.<a data-primary="regex::Regex type" data-type="indexterm" id="id857"/><a data-primary="paths" data-secondary="in findr program" data-secondary-sortas="findr" data-type="indexterm" id="id858"/><a data-primary="names" data-secondary="in findr program" data-secondary-sortas="findr" data-type="indexterm" id="id859"/><a data-primary="entry_types (in findr)" data-type="indexterm" id="id860"/></p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO3-2" id="callout_finders_keepers_CO3-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p><code>paths</code> will be a vector of strings and may name files or directories.</p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO3-3" id="callout_finders_keepers_CO3-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p><code>names</code> will be a vector of regular expressions.</p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO3-4" id="callout_finders_keepers_CO3-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p><code>entry_types</code> will be a vector of <code>EntryType</code> variants.<a data-primary="EntryType enum" data-type="indexterm" id="id861"/></p></dd>
+</dl>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Regular expressions use a unique syntax to describe patterns of text. The name comes from the concept of a <em>regular language</em> in 
+<span class="keep-together">linguistics.</span><a data-primary="regular expressions" data-secondary="about" data-type="indexterm" id="id862"/> Often the name is shortened to <em>regex</em>, and you will 
+<span class="keep-together">find them</span> used in many command-line tools and programming 
+<span class="keep-together">languages.</span><a data-primary="regex" data-seealso="regular expressions" data-type="indexterm" id="id863"/></p>
+</div>
+
+<p>In the following code, I’m introducing <a href="https://oreil.ly/SGi2B"><code>enum</code></a>, which is a type that can be one of several variants.<a data-primary="enum type" data-type="indexterm" id="id864"/>
+You’ve already been using <code>enum</code> types such as <code>Option</code>, which has the variants <code>Some&lt;T&gt;</code> or <code>None</code>, and <code>Result</code>, which has the variants <code>Ok&lt;T&gt;</code> and <code>Err&lt;E&gt;</code>.
+In a language without such a type, you’d probably have to use literal strings in your code like <code>"dir"</code>, <code>"file"</code>, and <code>"link"</code>.
+In Rust, you can create a new <code>enum</code> called <code>EntryType</code> with exactly three possibilities: <code>Dir</code>, <code>File</code>, or <code>Link</code>.
+You can use these values in pattern matching with much more precision than matching strings, which might be misspelled.<a data-primary="EntryType enum" data-secondary="Dir, File, or Link" data-type="indexterm" id="id865"/>
+
+<span class="keep-together">Additionally</span>, Rust will not allow you to match on <code>EntryType</code> values without considering all the variants, which adds yet another layer of safety in using them.<a data-primary="UpperCamelCase" data-type="indexterm" id="id866"/><a data-primary="PascalCase" data-type="indexterm" id="id867"/><a data-primary="naming conventions in Rust" data-type="indexterm" id="id868"/><a data-primary="types" data-secondary="naming conventions in Rust" data-type="indexterm" id="id869"/><a data-primary="structs" data-secondary="naming conventions in Rust" data-type="indexterm" id="id870"/><a data-primary="traits" data-secondary="naming conventions in Rust" data-type="indexterm" id="id871"/><a data-primary="enum type" data-secondary="naming conventions in Rust" data-type="indexterm" id="id872"/></p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[derive(Debug, Eq, PartialEq, Clone)]</code><code class="w"/>
+<code class="k">enum</code> <code class="nc">EntryType</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">Dir</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">File</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">Link</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+<div data-type="tip"><h6>Tip</h6>
+<p>Per <a href="https://oreil.ly/2tok7">Rust naming conventions</a>, types, structs, traits, and <code>enum</code> variants use <code>UpperCamelCase</code>, also called <code>PascalCase</code>.</p>
+</div>
+
+<p>If you <a data-primary="clap utility" data-secondary="constraining entry types from user for findr" data-type="indexterm" id="id873"/><a data-primary="clap::builder::PossibleValue" data-type="indexterm" id="id874"/><a data-primary="PossibleValue struct" data-type="indexterm" id="id875"/><a data-primary="clap::ValueEnum trait" data-type="indexterm" id="id876"/><a data-primary="ValueEnum trait" data-type="indexterm" id="id877"/>are interested in using <code>clap</code> to constrain the entry types from the user, you will need to write an implementation for the <a href="https://oreil.ly/RhN_g"><code>clap::ValueEnum</code> trait</a> to define <a href="https://oreil.ly/dXhAa"><code>clap::builder::PossibleValue</code></a>.
+You’ve encountered the <a href="https://oreil.ly/1Hz3j"><code>impl</code> keyword</a> in <a data-type="xref" href="ch05.html#ch05">Chapter 5</a>.
+In<a data-primary="impl keyword" data-secondary="extending EntryType to implement required methods for ValueEnum" data-type="indexterm" id="id878"/><a data-primary="EntryType enum" data-type="indexterm" id="id879"/> the following code, I’m using it to extend <code>EntryType</code> to implement the two required methods for the trait <code>ValueEnum</code>.
+Be sure to add <code>use clap::{builder::PossibleValue, ValueEnum}</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">impl</code><code class="w"> </code><code class="n">ValueEnum</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">EntryType</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="k">fn</code><code> </code><code class="nf">value_variants</code><code class="o">&lt;</code><code class="o">'</code><code class="na">a</code><code class="o">&gt;</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="kp">&amp;</code><code class="o">'</code><code class="na">a</code><code> </code><code class="p">[</code><code class="bp">Self</code><code class="p">]</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO4-1" id="co_finders_keepers_CO4-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+        </code><code class="o">&amp;</code><code class="p">[</code><code class="n">EntryType</code><code>::</code><code class="n">Dir</code><code class="p">,</code><code class="w"> </code><code class="n">EntryType</code><code>::</code><code class="n">File</code><code class="p">,</code><code class="w"> </code><code class="n">EntryType</code><code>::</code><code class="n">Link</code><code class="p">]</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="k">fn</code><code> </code><code class="nf">to_possible_value</code><code class="o">&lt;</code><code class="o">'</code><code class="na">a</code><code class="o">&gt;</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Option</code><code class="o">&lt;</code><code class="n">PossibleValue</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO4-2" id="co_finders_keepers_CO4-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+        </code><code class="nb">Some</code><code class="p">(</code><code class="k">match</code><code class="w"> </code><code class="bp">self</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="n">EntryType</code><code>::</code><code class="n">Dir</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="n">PossibleValue</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">d</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="n">EntryType</code><code>::</code><code class="n">File</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="n">PossibleValue</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">f</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="n">EntryType</code><code>::</code><code class="n">Link</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="n">PossibleValue</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">l</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="p">)</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_finders_keepers_CO4-1" id="callout_finders_keepers_CO4-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <code>value_variants</code> method returns the allowed variants.</p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO4-2" id="callout_finders_keepers_CO4-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <code>to_possible_value</code> converts one of the <code>enum</code> variants to strings.</p></dd>
+</dl>
+<div class="pagebreak-before" data-type="note" epub:type="note"><h6>Note</h6>
+<p>Try removing one of the preceding functions to see how Rust prevents you from compiling the code with an error message “not all trait items implemented.”</p>
+</div>
+
+<p>You can annotate the <code>Args</code> struct for the derive function or you could<a data-primary="get_args function" data-secondary="findr utility" data-type="indexterm" id="id880"/> start a <code>get_args</code> function like so:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">get_args</code><code class="p">()</code><code class="w"> </code>-&gt; <code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">matches</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code>::<code class="n">new</code><code class="p">(</code><code class="s">"findr"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">version</code><code class="p">(</code><code class="s">"0.1.0"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">author</code><code class="p">(</code><code class="s">"Ken Youens-Clark &lt;kyclark@gmail.com&gt;"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">about</code><code class="p">(</code><code class="s">"Rust version of `find`"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="c1">// What goes here?</code>
+<code class="w">        </code><code class="p">.</code><code class="n">get_matches</code><code class="p">()</code><code class="w"/>
+
+<code class="w">    </code><code class="n">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">paths</code>: <code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">        </code><code class="n">names</code>: <code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">        </code><code class="n">entry_types</code>: <code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Start the <code>main</code> function by printing the arguments:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">args</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Args</code>::<code class="n">parse</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{:?}"</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>When run with no arguments, the default <code>Args</code> values should look like this:<a data-primary="Args struct" data-secondary="findr utility" data-type="indexterm" id="id881"/></p>
+
+<pre data-type="programlisting">$ cargo run
+Args { paths: ["."], names: [], entry_types: [] }</pre>
+
+<p>The <code>entry_types</code> should include the <code>File</code> variant when given a <code>--type</code> argument 
+<span class="keep-together">of <code>f</code>:</span></p>
+
+<pre data-type="programlisting">$ cargo run -- --type f
+Args { paths: ["."], names: [], entry_types: [File] }</pre>
+
+<p>or <code>Dir</code> when the value is <code>d</code>:</p>
+
+<pre data-type="programlisting">$ cargo run -- --type d
+Args { paths: ["."], names: [], entry_types: [Dir] }</pre>
+
+<p>or <code>Link</code> when the value is <code>l</code>:</p>
+
+<pre data-type="programlisting">$ cargo run -- --type l
+Args { paths: ["."], names: [], entry_types: [Link] }</pre>
+
+<p>Any other value should be rejected:</p>
+
+<pre data-type="programlisting">$ cargo run -- --type x
+error: invalid value 'x' for '--type [&lt;TYPE&gt;...]'
+  [possible values: d, f, l]
+
+For more information, try '--help'.</pre>
+
+<p>I’ll be using the <a href="https://oreil.ly/VYPhC"><code>regex</code> crate</a> to match file and directory names, which means that the <code>--name</code> value must be a valid regular expression.<a data-primary="names" data-secondary="file and direcctory, matching with regex crate" data-type="indexterm" id="id882"/><a data-primary="regex crate" data-type="indexterm" id="id883"/>
+Regular expression syntax differs<a data-primary="regular expressions" data-secondary="syntax differences from file glob patterns" data-type="indexterm" id="id884"/><a data-primary="file glob patterns, differences in syntax from regular expressions" data-type="indexterm" id="id885"/><a data-primary=". (dot)" data-secondary="in file globs" data-secondary-sortas="file" data-type="indexterm" id="id886"/><a data-primary="* (asterisk)" data-secondary="matching zero or more of any characters in file globs" data-type="indexterm" id="id887"/> slightly from file glob patterns, as shown in <a data-type="xref" href="#fig_7.1">Figure 7-1</a>.
+For instance, the dot has no special meaning in a file glob,<sup><a data-type="noteref" href="ch07.html#id888" id="id888-marker">2</a></sup> and the asterisk (<code>*</code>) in the glob <code>*.txt</code> means <em>zero or more of any character</em>, so this will match files that end in <em>.txt</em>.
+In regex syntax, however, the dot (<code>.</code>) is a metacharacter that means <em>any one character</em>, and the <a data-primary=". (dot)" data-secondary="any one character in regular expressions" data-type="indexterm" id="id889"/><a data-primary="* (asterisk)" data-secondary="matching zero or more occurrences in regular expressions" data-type="indexterm" id="id890"/>asterisk means <em>zero or more of the previous character</em>, so <code>.*</code> is the equivalent regex.</p>
+
+<figure><div class="figure" id="fig_7.1">
+<img alt="clru 0701" src="assets/clru_0701.png"/>
+<h6><span class="label">Figure 7-1. </span>The dot (<code>.</code>) and asterisk (<code>*</code>) have different meanings in file globs and regular expressions.</h6>
+</div></figure>
+
+<p>This <a data-primary="\ (backslash), escaping special characters" data-type="indexterm" id="id891"/>means that the equivalent regex should use a backslash to escape the literal dot, as in <code>.*\.txt</code>, and the backslash must itself be backslash-escaped on the command line:</p>
+
+<pre data-type="programlisting">$ cargo run -- --name .*\\.txt
+Args { paths: ["."], names: [Regex(".*\\.txt")], entry_types: [] }</pre>
+
+<p>Alternatively, you can <a data-primary=". (dot)" data-secondary="placing inside character class [.]" data-type="indexterm" id="id892"/><a data-primary="[] (square brackets)" data-secondary="indicating character classes in regular expressions" data-type="indexterm" id="id893"/>place the dot inside a character class like <code>[.]</code>, where it is no longer a metacharacter:</p>
+
+<pre data-type="programlisting">$ cargo run -- --name .*[.]txt
+Args { paths: ["."], names: [Regex(".*[.]txt")], entry_types: [] }</pre>
+
+<p>Technically, the regular expression will match anywhere in the string, even at the beginning, because <code>.*</code> means <em>zero</em> or more of anything:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="kd">let</code><code class="w"> </code><code class="n">re</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Regex</code>::<code class="n">new</code><code class="p">(</code><code class="s">".*[.]csv"</code><code class="p">).</code><code class="n">unwrap</code><code class="p">();</code><code class="w"/>
+<code class="fm">assert!</code><code class="p">(</code><code class="n">re</code><code class="p">.</code><code class="n">is_match</code><code class="p">(</code><code class="s">"foo.csv"</code><code class="p">));</code><code class="w"/>
+<code class="fm">assert!</code><code class="p">(</code><code class="n">re</code><code class="p">.</code><code class="n">is_match</code><code class="p">(</code><code class="s">".csv.foo"</code><code class="p">));</code><code class="w"/></pre>
+
+<p>If I want to insist that <a data-primary="$ (dollar sign)" data-secondary="end of string matching in regular expressions" data-type="indexterm" id="id894"/>the regex matches at the end of the string, I can add <code>$</code> at the end of the pattern to indicate the end of the string:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="kd">let</code><code class="w"> </code><code class="n">re</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Regex</code><code>::</code><code class="n">new</code><code class="p">(</code><strong><code class="s">"</code><code class="s">.*[.]csv$</code><code class="s">"</code></strong><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="fm">assert!</code><code class="p">(</code><code class="n">re</code><code class="p">.</code><code class="n">is_match</code><code class="p">(</code><code class="s">"</code><code class="s">foo.csv</code><code class="s">"</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="fm">assert!</code><code class="p">(</code><code class="o">!</code><code class="n">re</code><code class="p">.</code><code class="n">is_match</code><code class="p">(</code><code class="s">"</code><code class="s">.csv.foo</code><code class="s">"</code><code class="p">)</code><code class="p">)</code><code class="p">;</code></pre>
+<div data-type="tip"><h6>Tip</h6>
+<p>The converse of using <code>$</code> to anchor a pattern to the end of a string is to use <code>^</code> to indicate the beginning of the string.<a data-primary="^ (caret)" data-secondary="beginning of string matching in regular expressions" data-type="indexterm" id="id895"/> For instance, the pattern <code>^foo</code> would match <em>foobar</em> and <em>football</em> because those strings start with <em>foo</em>, but it would not match <em>barefoot</em>.</p>
+</div>
+
+<p>If I try to use the same file glob pattern that <code>find</code> expects, it should be rejected as invalid syntax:</p>
+
+<pre data-type="programlisting">$ cargo run -- --name \*.txt
+error: invalid value '*.txt' for '--name [&lt;NAME&gt;...]': regex parse error:
+    *.txt
+    ^
+error: repetition operator missing expression</pre>
+
+<p>Finally, all the <code>Args</code> fields <a data-primary="Args struct" data-secondary="findr utility" data-type="indexterm" id="id896"/>should accept multiple values.
+I will pretty-print the structure so it’s easier for you to see:</p>
+
+<pre data-type="programlisting">$ cargo run -- -t f l -n txt mp3 -- tests/inputs/a tests/inputs/d
+Args {
+    paths: [
+        "tests/inputs/a",
+        "tests/inputs/d",
+    ],
+    names: [
+        Regex(
+            "txt",
+        ),
+        Regex(
+            "mp3",
+        ),
+    ],
+    entry_types: [
+        File,
+        Link,
+    ],
+}</pre>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Stop reading and get this much working before attempting to solve the rest of the program. Don’t proceed until your program can replicate the preceding output and can pass at least <strong><code>cargo test dies</code></strong>:</p>
+
+<pre data-type="programlisting">running 2 tests
+test dies_bad_type ... ok
+test dies_bad_name ... ok</pre>
+</div>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Validating the Arguments" data-type="sect2"><div class="sect2" id="id69">
+<h2>Validating the Arguments</h2>
+
+<p>Following is my <code>get_args</code> function, <a data-primary="find utility" data-secondary="writing findr version" data-startref="ix_findwrarg" data-tertiary="defining the arguments" data-type="indexterm" id="id897"/><a data-primary="find utility" data-secondary="writing findr version" data-tertiary="validating the arguments" data-type="indexterm" id="ix_findwrvalarg"/><a data-primary="get_args function" data-secondary="findr utility" data-type="indexterm" id="id898"/>so that we can regroup on the task at hand.
+First, bring in the following dependencies:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">use</code><code class="w"> </code><code class="n">clap</code>::<code class="p">{</code><code class="n">builder</code>::<code class="n">PossibleValue</code><code class="p">,</code><code class="w"> </code><code class="n">Arg</code><code class="p">,</code><code class="w"> </code><code class="n">ArgAction</code><code class="p">,</code><code class="w"> </code><code class="n">Command</code><code class="p">,</code><code class="w"> </code><code class="n">ValueEnum</code><code class="p">};</code><code class="w"/></pre>
+
+<p>Following is how I wrote the function:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">get_args</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">matches</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">findr</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">version</code><code class="p">(</code><code class="s">"</code><code class="s">0.1.0</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">author</code><code class="p">(</code><code class="s">"</code><code class="s">Ken Youens-Clark &lt;kyclark@gmail.com&gt;</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">about</code><code class="p">(</code><code class="s">"</code><code class="s">Rust version of `find`</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w">
+</code><code class="w">            </code><code class="n">Arg</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">paths</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO5-1" id="co_finders_keepers_CO5-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+                </code><code class="p">.</code><code class="n">value_name</code><code class="p">(</code><code class="s">"</code><code class="s">PATH</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"</code><code class="s">Search paths</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">default_value</code><code class="p">(</code><code class="s">"</code><code class="s">.</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">num_args</code><code class="p">(</code><code class="mi">0</code><code class="o">..</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w">
+</code><code class="w">            </code><code class="n">Arg</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">names</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO5-2" id="co_finders_keepers_CO5-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+                </code><code class="p">.</code><code class="n">value_name</code><code class="p">(</code><code class="s">"</code><code class="s">NAME</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">short</code><code class="p">(</code><code class="sc">'n'</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">long</code><code class="p">(</code><code class="s">"</code><code class="s">name</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"</code><code class="s">Name</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">value_parser</code><code class="p">(</code><code class="n">Regex</code><code>::</code><code class="n">new</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">action</code><code class="p">(</code><code class="n">ArgAction</code><code>::</code><code class="n">Append</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">num_args</code><code class="p">(</code><code class="mi">0</code><code class="o">..</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w">
+</code><code class="w">            </code><code class="n">Arg</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">types</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">value_name</code><code class="p">(</code><code class="s">"</code><code class="s">TYPE</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">short</code><code class="p">(</code><code class="sc">'t'</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">long</code><code class="p">(</code><code class="s">"</code><code class="s">type</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"</code><code class="s">Entry type</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">value_parser</code><code class="p">(</code><code class="n">clap</code><code>::</code><code class="n">value_parser</code><code class="o">!</code><code class="p">(</code><code class="n">EntryType</code><code class="p">)</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO5-3" id="co_finders_keepers_CO5-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+                </code><code class="p">.</code><code class="n">action</code><code class="p">(</code><code class="n">ArgAction</code><code>::</code><code class="n">Append</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">num_args</code><code class="p">(</code><code class="mi">0</code><code class="o">..</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">get_matches</code><code class="p">(</code><code class="p">)</code><code class="p">;</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_finders_keepers_CO5-1" id="callout_finders_keepers_CO5-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <code>paths</code> argument requires at least one value and defaults to a dot (<code>.</code>).<a data-primary="paths" data-secondary="paths argument, findr utility" data-type="indexterm" id="id899"/></p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO5-2" id="callout_finders_keepers_CO5-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <code>names</code> option accepts zero or more values that must parse to a valid regex.<a data-primary="names" data-secondary="names option in findr program" data-type="indexterm" id="id900"/></p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO5-3" id="callout_finders_keepers_CO5-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>The <code>types</code> option accepts zero or more values restricted to the values <code>f</code>, <code>d</code>, or <code>l</code>.<a data-primary="types" data-secondary="types option in findr" data-type="indexterm" id="id901"/></p></dd>
+</dl>
+
+<p>I finish by returning the <code>Args</code> structure:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="w">    </code><code class="n">Args</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="n">paths</code><code>:</code><code> </code><code class="nc">matches</code><code class="p">.</code><code class="n">get_many</code><code class="p">(</code><code class="s">"</code><code class="s">paths</code><code class="s">"</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">cloned</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">collect</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="n">names</code><code>:</code><code> </code><code class="nc">matches</code><code class="w">
+</code><code class="w">            </code><code class="p">.</code><code class="n">get_many</code><code class="p">(</code><code class="s">"</code><code class="s">names</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">            </code><code class="p">.</code><code class="n">unwrap_or_default</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO6-1" id="co_finders_keepers_CO6-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+            </code><code class="p">.</code><code class="n">cloned</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">            </code><code class="p">.</code><code class="n">collect</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="n">entry_types</code><code>:</code><code> </code><code class="nc">matches</code><code class="w">
+</code><code class="w">            </code><code class="p">.</code><code class="n">get_many</code><code class="p">(</code><code class="s">"</code><code class="s">types</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">            </code><code class="p">.</code><code class="n">unwrap_or_default</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">            </code><code class="p">.</code><code class="n">cloned</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">            </code><code class="p">.</code><code class="n">collect</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_finders_keepers_CO6-1" id="callout_finders_keepers_CO6-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <a href="https://oreil.ly/juX-y"><code>Option::unwrap_or_default</code></a> will return the default value for the underlying <code>Vec</code> type, which will be an empty vector.<a data-primary="Vec type" data-type="indexterm" id="id902"/><a data-primary="Option::unwrap_or_default" data-type="indexterm" id="id903"/></p></dd>
+</dl>
+
+<p>Following is how you can use the derive pattern.<a data-primary="derive pattern" data-secondary="using for findr program" data-type="indexterm" id="id904"/>
+Be sure to add <code>use clap::{ArgAction, Parser}</code> for the following code:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[derive(Debug, Parser)]</code><code class="w"/>
+<code class="cp">#[command(author, version, about)]</code><code class="w"/>
+<code class="sd">/// Rust version of `find`</code>
+<code class="k">struct</code> <code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="sd">/// Search path(s)</code>
+<code class="w">    </code><code class="cp">#[arg(value_name = </code><code class="s">"PATH"</code><code class="cp">, default_value = </code><code class="s">"."</code><code class="cp">)]</code><code class="w"/>
+<code class="w">    </code><code class="n">paths</code>: <code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Names</code>
+<code class="w">    </code><code class="cp">#[arg(</code>
+<code class="cp">        short('n'),</code>
+<code class="cp">        long(</code><code class="s">"name"</code><code class="cp">),</code>
+<code class="cp">        value_name = </code><code class="s">"NAME"</code><code class="cp">,</code>
+<code class="cp">        value_parser(Regex::new),</code>
+<code class="cp">        action(ArgAction::Append),</code>
+<code class="cp">        num_args(0..)</code>
+<code class="cp">    )]</code><code class="w"/>
+<code class="w">    </code><code class="n">names</code>: <code class="nb">Vec</code><code class="o">&lt;</code><code class="n">Regex</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Entry types</code>
+<code class="w">    </code><code class="cp">#[arg(</code>
+<code class="cp">        short('t'),</code>
+<code class="cp">        long(</code><code class="s">"type"</code><code class="cp">),</code>
+<code class="cp">        value_name = </code><code class="s">"TYPE"</code><code class="cp">,</code>
+<code class="cp">        value_parser(clap::value_parser!(EntryType)),</code>
+<code class="cp">        action(ArgAction::Append),</code>
+<code class="cp">        num_args(0..)</code>
+<code class="cp">    )]</code><code class="w"/>
+<code class="w">    </code><code class="n">entry_types</code>: <code class="nb">Vec</code><code class="o">&lt;</code><code class="n">EntryType</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Finding All the Things" data-type="sect2"><div class="sect2" id="id70">
+<h2>Finding All the Things</h2>
+
+<p>Now that you have validated the arguments from the user, it’s time to look for the items that match the conditions.<a data-primary="find utility" data-secondary="writing findr version" data-startref="ix_findwrvalarg" data-tertiary="validating the arguments" data-type="indexterm" id="id905"/><a data-primary="find utility" data-secondary="writing findr version" data-tertiary="finding all items matching conditions" data-type="indexterm" id="ix_findwrfindmtch"/>
+Start by passing these arguments to a <code>run</code> function as in previous chapters:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">run</code><code class="p">(</code><code class="n">Args</code>::<code class="n">parse</code><code class="p">())</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"{e}"</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="n">std</code>::<code class="n">process</code>::<code class="n">exit</code><code class="p">(</code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>You might start by iterating over the given paths and trying to find all the files contained in each.
+You can use the <code>walkdir</code> crate for this.<a data-primary="walkdir crate" data-type="indexterm" id="id906"/>
+Be sure to add <code>use anyhow::Result</code> and <code>use walkdir::WalkDir</code> for the following code, which shows how to print all the entries:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">path</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">paths</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="k">for</code><code class="w"> </code><code class="n">entry</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">WalkDir</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="n">path</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="k">match</code><code class="w"> </code><code class="n">entry</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO7-1" id="co_finders_keepers_CO7-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+                </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"</code><code class="s">{e}</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO7-2" id="co_finders_keepers_CO7-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+                </code><code class="nb">Ok</code><code class="p">(</code><code class="n">entry</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{}</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="n">entry</code><code class="p">.</code><code class="n">path</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">display</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO7-3" id="co_finders_keepers_CO7-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+            </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_finders_keepers_CO7-1" id="callout_finders_keepers_CO7-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Each directory entry is returned as a <code>Result</code>.</p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO7-2" id="callout_finders_keepers_CO7-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Print errors to <code>STDERR</code>.</p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO7-3" id="callout_finders_keepers_CO7-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Print the display name of <code>Ok</code> values.</p></dd>
+</dl>
+
+<p>To see if this works, list the contents of <em>tests/inputs/a/b</em>.
+Note that this is the order I see on macOS:</p>
+
+<pre data-type="programlisting">$ cargo run -- tests/inputs/a/b
+tests/inputs/a/b
+tests/inputs/a/b/b.csv
+tests/inputs/a/b/c
+tests/inputs/a/b/c/c.mp3</pre>
+
+<p>On Linux, I see the following output:</p>
+
+<pre data-type="programlisting">$ cargo run -- tests/inputs/a/b
+tests/inputs/a/b
+tests/inputs/a/b/c
+tests/inputs/a/b/c/c.mp3
+tests/inputs/a/b/b.csv</pre>
+
+<p>On Windows/PowerShell, I see this output:</p>
+
+<pre data-type="programlisting">&gt; cargo run -- tests/inputs/a/b
+tests/inputs/a/b
+tests/inputs/a/b\b.csv
+tests/inputs/a/b\c
+tests/inputs/a/b\c\c.mp3</pre>
+
+<p>The test suite checks the output irrespective of order.
+It also includes output files for Windows to ensure the backslashes are correct and to deal with the fact that symlinks don’t exist on that platform.
+Note that this program skips nonexistent directories such as <em>blargh</em>:</p>
+
+<pre data-type="programlisting">$ cargo run -- <strong>blargh</strong> tests/inputs/a/b
+<strong>IO error for operation on blargh: No such file or directory (os error 2)</strong>
+tests/inputs/a/b
+tests/inputs/a/b/b.csv
+tests/inputs/a/b/c
+tests/inputs/a/b/c/c.mp3</pre>
+
+<p>This means that the program passes <strong><code>cargo test skips_bad_dir</code></strong> at this point:</p>
+
+<pre data-type="programlisting">running 1 test
+test skips_bad_dir ... ok</pre>
+
+<p>It will also handle<a data-primary="errors" data-secondary="unreadable directories in findr" data-type="indexterm" id="id907"/> unreadable directories, printing a message to <code>STDERR</code>:</p>
+
+<pre data-type="programlisting">$ mkdir tests/inputs/hammer &amp;&amp; chmod 000 tests/inputs/hammer
+$ cargo run -- tests/inputs 1&gt;/dev/null
+<strong>IO error for operation on tests/inputs/cant-touch-this:</strong>
+<strong>Permission denied (os error 13)</strong>
+$ chmod 700 tests/inputs/hammer &amp;&amp; rmdir tests/inputs/hammer</pre>
+
+<p>A quick check with <strong><code>cargo test</code></strong> shows that this simple version of the program already passes several tests.</p>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Now it’s your turn. Take what I’ve shown you so far and build the rest of the program. Iterate over the contents of the directory and show files, directories, or links when <code>args.entry_types</code> contains the appropriate <code>EntryType</code>. Next, filter out entry names that fail to match any of the given regular expressions when they are present. I would encourage you to read the tests in <em>tests/cli.rs</em> to ensure you understand what the program should be able to handle.<a data-primary="find utility" data-secondary="writing findr version" data-startref="ix_findwrfindmtch" data-tertiary="finding all items matching conditions" data-type="indexterm" id="id908"/></p>
+</div>
+</div></section>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Solution" data-type="sect1"><div class="sect1" id="id71">
+<h1>Solution</h1>
+
+<p>Remember, you may have solved this differently from me, but a passing test suite is all that matters.<a data-primary="find utility" data-secondary="writing findr version" data-tertiary="solution" data-type="indexterm" id="ix_findwrsol"/>
+I will walk you through how I arrived at a solution, starting with how I filter <a data-primary="entry types" data-secondary="filtering for in findr" data-type="indexterm" id="id909"/>for entry types:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">path</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">paths</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="k">for</code><code class="w"> </code><code class="n">entry</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">WalkDir</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="n">path</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="k">match</code><code class="w"> </code><code class="n">entry</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"</code><code class="s">{e}</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">                </code><code class="nb">Ok</code><code class="p">(</code><code class="n">entry</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                    </code><code class="k">if</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">entry_types</code><code class="p">.</code><code class="n">is_empty</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO8-1" id="co_finders_keepers_CO8-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+                        </code><code class="o">|</code><code class="o">|</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">entry_types</code><code class="p">.</code><code class="n">iter</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">any</code><code class="p">(</code><code class="o">|</code><code class="n">entry_type</code><code class="o">|</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                            </code><code class="k">match</code><code class="w"> </code><code class="n">entry_type</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO8-2" id="co_finders_keepers_CO8-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+                                </code><code class="n">EntryType</code><code>::</code><code class="n">Link</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                                    </code><code class="n">entry</code><code class="p">.</code><code class="n">file_type</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">is_symlink</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">                                </code><code class="p">}</code><code class="w">
+</code><code class="w">                                </code><code class="n">EntryType</code><code>::</code><code class="n">Dir</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="n">entry</code><code class="p">.</code><code class="n">file_type</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">is_dir</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">                                </code><code class="n">EntryType</code><code>::</code><code class="n">File</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                                    </code><code class="n">entry</code><code class="p">.</code><code class="n">file_type</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">is_file</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">                                </code><code class="p">}</code><code class="w">
+</code><code class="w">                            </code><code class="p">}</code><code class="w">
+</code><code class="w">                        </code><code class="p">}</code><code class="p">)</code><code class="w">
+</code><code class="w">                    </code><code class="p">{</code><code class="w">
+</code><code class="w">                        </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{}</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="n">entry</code><code class="p">.</code><code class="n">path</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">display</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO8-3" id="co_finders_keepers_CO8-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+                    </code><code class="p">}</code><code class="w">
+</code><code class="w">                </code><code class="p">}</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_finders_keepers_CO8-1" id="callout_finders_keepers_CO8-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Check if no entry types are indicated.</p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO8-2" id="callout_finders_keepers_CO8-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>If there are entry types, use <a href="https://oreil.ly/HvVrb"><code>Iterator::any</code></a> to see if any of the desired types match the given entry type.</p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO8-3" id="callout_finders_keepers_CO8-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Print only those entries matching the selection criteria.</p></dd>
+</dl>
+
+<p>Recall that I used <code>Iterator::all</code> in <a data-type="xref" href="ch05.html#ch05">Chapter 5</a> to return <code>true</code> if <em>all</em> of the elements in a vector passed some predicate.<a data-primary="Iterator::any function" data-type="indexterm" id="id910"/><a data-primary="Iterator::all function" data-type="indexterm" id="id911"/>
+In the preceding code, I’m using <code>Iterator::any</code> to return <code>true</code> if <em>at least one</em> of the elements proves <code>true</code> for the predicate, which in this case is whether the entry’s type matches one of the desired types.
+When I check the output, it seems to be finding, for instance, all the directories:</p>
+
+<pre data-type="programlisting">$ cargo run -- tests/inputs/ -t d
+tests/inputs/
+tests/inputs/a
+tests/inputs/a/b
+tests/inputs/a/b/c
+tests/inputs/f
+tests/inputs/d
+tests/inputs/d/e</pre>
+
+<p>I can run <strong><code>cargo test type</code></strong> to verify that I’m now passing all of the tests that check for types alone.<a data-primary="types" data-secondary="types option in findr" data-tertiary="finding all the entry types" data-type="indexterm" id="id912"/>
+The failures are for a combination of type and name, so next I also need to check the filenames with the given regular expressions:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">path</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">paths</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="k">for</code><code class="w"> </code><code class="n">entry</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">WalkDir</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="n">path</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="k">match</code><code class="w"> </code><code class="n">entry</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"</code><code class="s">{e}</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">                </code><code class="nb">Ok</code><code class="p">(</code><code class="n">entry</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                    </code><code class="k">if</code><code class="w"> </code><code class="p">(</code><code class="n">args</code><code class="p">.</code><code class="n">entry_types</code><code class="p">.</code><code class="n">is_empty</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO9-1" id="co_finders_keepers_CO9-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+                        </code><code class="o">|</code><code class="o">|</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">entry_types</code><code class="p">.</code><code class="n">iter</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">any</code><code class="p">(</code><code class="o">|</code><code class="n">entry_type</code><code class="o">|</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                            </code><code class="k">match</code><code class="w"> </code><code class="n">entry_type</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                                </code><code class="n">EntryType</code><code>::</code><code class="n">Link</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                                    </code><code class="n">entry</code><code class="p">.</code><code class="n">file_type</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">is_symlink</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">                                </code><code class="p">}</code><code class="w">
+</code><code class="w">                                </code><code class="n">EntryType</code><code>::</code><code class="n">Dir</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="n">entry</code><code class="p">.</code><code class="n">file_type</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">is_dir</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">                                </code><code class="n">EntryType</code><code>::</code><code class="n">File</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                                    </code><code class="n">entry</code><code class="p">.</code><code class="n">file_type</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">is_file</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">                                </code><code class="p">}</code><code class="w">
+</code><code class="w">                            </code><code class="p">}</code><code class="w">
+</code><code class="w">                        </code><code class="p">}</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="w">                        </code><code class="o">&amp;</code><code class="o">&amp;</code><code class="w"> </code><code class="p">(</code><code class="n">args</code><code class="p">.</code><code class="n">names</code><code class="p">.</code><code class="n">is_empty</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO9-2" id="co_finders_keepers_CO9-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+                            </code><code class="o">|</code><code class="o">|</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">names</code><code class="p">.</code><code class="n">iter</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">any</code><code class="p">(</code><code class="o">|</code><code class="n">re</code><code class="o">|</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO9-3" id="co_finders_keepers_CO9-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+                                </code><code class="n">re</code><code class="p">.</code><code class="n">is_match</code><code class="p">(</code><code class="w">
+</code><code class="w">                                    </code><code class="o">&amp;</code><code class="n">entry</code><code class="p">.</code><code class="n">file_name</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">to_string_lossy</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">                                </code><code class="p">)</code><code class="w">
+</code><code class="w">                            </code><code class="p">}</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="w">                    </code><code class="p">{</code><code class="w">
+</code><code class="w">                        </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{}</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="n">entry</code><code class="p">.</code><code class="n">path</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">display</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                    </code><code class="p">}</code><code class="w">
+</code><code class="w">                </code><code class="p">}</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_finders_keepers_CO9-1" id="callout_finders_keepers_CO9-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Check the entry type as before.</p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO9-2" id="callout_finders_keepers_CO9-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Combine the entry type check using <code>&amp;&amp;</code> with a similar check on the given names.</p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO9-3" id="callout_finders_keepers_CO9-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Use <code>Iterator::any</code> again to check if any of the provided regexes match the current filename.</p></dd>
+</dl>
+<div data-type="tip"><h6>Tip</h6>
+<p>In the preceding code, I’m using <a href="https://oreil.ly/WWDcU"><code>Boolean::and</code></a> (<code>&amp;&amp;</code>) and <a href="https://oreil.ly/NjWlZ"><code>Boolean::or</code></a> (<code>||</code>) to combine two Boolean values according to the standard truth tables shown in the documentation. The parentheses are necessary to group the evaluations in the correct order.<a data-primary="Boolean::or" data-type="indexterm" id="id913"/><a data-primary="|| (pipes)" data-secondary="or operator" data-type="indexterm" id="id914"/><a data-primary="Boolean::and" data-type="indexterm" id="id915"/><a data-primary="&amp;&amp; (logical and) operator" data-type="indexterm" id="id916"/></p>
+</div>
+
+<p>I can use this to find, for instance, any regular file matching <em>mp3</em>, and it seems to work:</p>
+
+<pre data-type="programlisting">$ cargo run -- tests/inputs/ -t f -n mp3
+tests/inputs/a/b/c/c.mp3
+tests/inputs/d/e/e.mp3</pre>
+
+<p>If I run <strong><code>cargo test</code></strong> at this point, all tests pass.
+Huzzah!
+I could stop now, but I feel my code could be more elegant.
+There are several <em>smell tests</em> that fail for me.<a data-primary="smell tests, failing, in findr program" data-type="indexterm" id="id917"/>
+I don’t like how the code continues to march to the right—there’s just too much indentation.
+All the Boolean operations and parentheses also make me nervous.
+This looks like it would be a difficult program to expand if I wanted to add more selection criteria.</p>
+
+<p>I want to <em>refactor</em> this code, which means I want to restructure it without changing the way it works.<a data-primary="refactoring code" data-type="indexterm" id="id918"/>
+Refactoring is only possible once I have a working solution, and tests help ensure that any changes I make still work as expected.
+Specifically, I want to find a less convoluted way to select the entries to display.<a data-primary="Iterator::filter function" data-type="indexterm" id="id919"/><a data-primary="filter operations for findr" data-type="indexterm" id="id920"/>
+These are <em>filter</em> operations, so I’d like to use <a href="https://oreil.ly/LDu90"><code>Iterator::filter</code></a>, and I’ll show you why.
+Following is my final <code>run</code> that still passes all the tests.<a data-primary="walkdir::DirEntry" data-type="indexterm" id="id921"/><a data-primary="DirEntry struct" data-type="indexterm" id="id922"/>
+Be sure you add <code>use walkdir::DirEntry</code> to your code for this:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">type_filter</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">|</code><code class="n">entry</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="nc">DirEntry</code><code class="o">|</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO10-1" id="co_finders_keepers_CO10-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+        </code><code class="n">args</code><code class="p">.</code><code class="n">entry_types</code><code class="p">.</code><code class="n">is_empty</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">            </code><code class="o">|</code><code class="o">|</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">entry_types</code><code class="p">.</code><code class="n">iter</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">any</code><code class="p">(</code><code class="o">|</code><code class="n">entry_type</code><code class="o">|</code><code class="w"> </code><code class="k">match</code><code class="w"> </code><code class="n">entry_type</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="n">EntryType</code><code>::</code><code class="n">Link</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="n">entry</code><code class="p">.</code><code class="n">file_type</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">is_symlink</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">                </code><code class="n">EntryType</code><code>::</code><code class="n">Dir</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="n">entry</code><code class="p">.</code><code class="n">file_type</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">is_dir</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">                </code><code class="n">EntryType</code><code>::</code><code class="n">File</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="n">entry</code><code class="p">.</code><code class="n">file_type</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">is_file</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="p">)</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">name_filter</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">|</code><code class="n">entry</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="nc">DirEntry</code><code class="o">|</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO10-2" id="co_finders_keepers_CO10-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+        </code><code class="n">args</code><code class="p">.</code><code class="n">names</code><code class="p">.</code><code class="n">is_empty</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">            </code><code class="o">|</code><code class="o">|</code><code class="w"> </code><code class="n">args</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">names</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">iter</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">any</code><code class="p">(</code><code class="o">|</code><code class="n">re</code><code class="o">|</code><code class="w"> </code><code class="n">re</code><code class="p">.</code><code class="n">is_match</code><code class="p">(</code><code class="o">&amp;</code><code class="n">entry</code><code class="p">.</code><code class="n">file_name</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">to_string_lossy</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">path</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="o">&amp;</code><code class="n">args</code><code class="p">.</code><code class="n">paths</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">entries</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">WalkDir</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="n">path</code><code class="p">)</code><code class="w">
+</code><code class="w">            </code><code class="p">.</code><code class="n">into_iter</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">            </code><code class="p">.</code><code class="n">filter_map</code><code class="p">(</code><code class="o">|</code><code class="n">e</code><code class="o">|</code><code class="w"> </code><code class="k">match</code><code class="w"> </code><code class="n">e</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO10-3" id="co_finders_keepers_CO10-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+                </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                    </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"</code><code class="s">{e}</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                    </code><code class="nb">None</code><code class="w">
+</code><code class="w">                </code><code class="p">}</code><code class="w">
+</code><code class="w">                </code><code class="nb">Ok</code><code class="p">(</code><code class="n">entry</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">entry</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="p">)</code><code class="w">
+</code><code class="w">            </code><code class="p">.</code><code class="n">filter</code><code class="p">(</code><code class="n">type_filter</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO10-4" id="co_finders_keepers_CO10-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+            </code><code class="p">.</code><code class="n">filter</code><code class="p">(</code><code class="n">name_filter</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO10-5" id="co_finders_keepers_CO10-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+            </code><code class="p">.</code><code class="n">map</code><code class="p">(</code><code class="o">|</code><code class="n">entry</code><code class="o">|</code><code class="w"> </code><code class="n">entry</code><code class="p">.</code><code class="n">path</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">display</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO10-6" id="co_finders_keepers_CO10-6"><img alt="6" src="assets/6.png"/></a><code class="w">
+            </code><code class="p">.</code><code class="n">collect</code><code>:</code><code>:</code><code class="o">&lt;</code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">_</code><code class="o">&gt;</code><code class="o">&gt;</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO10-7" id="co_finders_keepers_CO10-7"><img alt="7" src="assets/7.png"/></a><code class="w">
+
+        </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{}</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="n">entries</code><code class="p">.</code><code class="n">join</code><code class="p">(</code><code class="s">"</code><code class="se">\n</code><code class="s">"</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO10-8" id="co_finders_keepers_CO10-8"><img alt="8" src="assets/8.png"/></a><code class="w">
+    </code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_finders_keepers_CO10-1" id="callout_finders_keepers_CO10-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Create a closure to filter entries on <code>any</code> of the regular expressions.</p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO10-2" id="callout_finders_keepers_CO10-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Create a similar closure to filter entries by <code>any</code> of the types.</p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO10-3" id="callout_finders_keepers_CO10-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Turn <code>WalkDir</code> into an iterator and use<a data-primary="filter operations for findr" data-secondary="creating closures for" data-type="indexterm" id="id923"/> <a href="https://oreil.ly/nZ8Yi"><code>Iterator::filter_map</code></a> to remove and print bad results to <code>STDERR</code> while allowing <code>Ok</code> results to pass through.<a data-primary="Iterator::filter_map function" data-type="indexterm" id="id924"/></p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO10-4" id="callout_finders_keepers_CO10-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Filter out unwanted types.</p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO10-5" id="callout_finders_keepers_CO10-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>Filter out unwanted names.<a data-primary="DirEntry struct" data-type="indexterm" id="id925"/></p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO10-6" id="callout_finders_keepers_CO10-6"><img alt="6" src="assets/6.png"/></a></dt>
+<dd><p>Turn each <a href="https://oreil.ly/F0xri"><code>DirEntry</code></a> into a string to display.</p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO10-7" id="callout_finders_keepers_CO10-7"><img alt="7" src="assets/7.png"/></a></dt>
+<dd><p>Use <a href="https://oreil.ly/Xn28H"><code>Iterator::collect</code></a> to create a vector.</p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO10-8" id="callout_finders_keepers_CO10-8"><img alt="8" src="assets/8.png"/></a></dt>
+<dd><p>Join the found entries on newlines and print.<a data-primary="Iterator::collect function" data-type="indexterm" id="id926"/></p></dd>
+</dl>
+
+<p>In the preceding code, I <a data-primary="closures" data-secondary="filtering operations for findr" data-type="indexterm" id="id927"/>create two closures to use with <code>filter</code> operations.
+I chose to<a data-primary="DirEntry::file_type function" data-type="indexterm" id="id928"/> use closures because I wanted to capture values from the <code>args</code>.
+The first closure checks if any of the <code>args.entry_types</code> match the <a href="https://oreil.ly/9PU5P"><code>DirEntry::file_type</code></a>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="kd">let</code><code class="w"> </code><code class="n">type_filter</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">|</code><code class="n">entry</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="nc">DirEntry</code><code class="o">|</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="n">args</code><code class="p">.</code><code class="n">entry_types</code><code class="p">.</code><code class="n">is_empty</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO11-1" id="co_finders_keepers_CO11-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+        </code><code class="o">|</code><code class="o">|</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">entry_types</code><code class="p">.</code><code class="n">iter</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">any</code><code class="p">(</code><code class="o">|</code><code class="n">entry_type</code><code class="o">|</code><code class="w"> </code><code class="k">match</code><code class="w"> </code><code class="n">entry_type</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO11-2" id="co_finders_keepers_CO11-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+            </code><code class="n">EntryType</code><code>::</code><code class="n">Link</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="n">entry</code><code class="p">.</code><code class="n">file_type</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">is_symlink</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO11-3" id="co_finders_keepers_CO11-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+            </code><code class="n">EntryType</code><code>::</code><code class="n">Dir</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="n">entry</code><code class="p">.</code><code class="n">file_type</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">is_dir</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO11-4" id="co_finders_keepers_CO11-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+            </code><code class="n">EntryType</code><code>::</code><code class="n">File</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="n">entry</code><code class="p">.</code><code class="n">file_type</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">is_file</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO11-5" id="co_finders_keepers_CO11-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+        </code><code class="p">}</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code><code class="p">;</code></pre>
+<dl class="calloutlist pagebreak-before">
+<dt><a class="co" href="#co_finders_keepers_CO11-1" id="callout_finders_keepers_CO11-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Return <code>true</code> immediately if no entry types have been indicated.</p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO11-2" id="callout_finders_keepers_CO11-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Otherwise, iterate over the <code>args.entry_types</code> to compare to the given entry type.<a data-primary="entry types" data-secondary="args.entry_types" data-type="indexterm" id="id929"/></p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO11-3" id="callout_finders_keepers_CO11-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>When the entry type is <code>Link</code>, use the <code>DirEntry::file_type</code> function to call <a href="https://oreil.ly/6_XUV"><code>FileType::is_symlink</code></a>.<a data-primary="DirEntry::file_type function" data-type="indexterm" id="id930"/><a data-primary="symbolic links" data-type="indexterm" id="id931"/><a data-primary="FileType::is_symlink" data-type="indexterm" id="id932"/></p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO11-4" id="callout_finders_keepers_CO11-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>When the entry type is <code>Dir</code>, similarly use <a href="https://oreil.ly/Cmkjx"><code>FileType::is_dir</code></a>.<a data-primary="FileType::is_dir" data-type="indexterm" id="id933"/></p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO11-5" id="callout_finders_keepers_CO11-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>When the entry type is <code>File</code>, similarly use <a href="https://oreil.ly/hUsYz"><code>FileType::is_file</code></a>.<a data-primary="FileType::is_file" data-type="indexterm" id="id934"/></p></dd>
+</dl>
+
+<p>The preceding <code>match</code> takes advantage of the Rust compiler’s ability to ensure that all variants of <code>EntryType</code> have been covered.<a data-primary="EntryType enum" data-secondary="matching all variants of" data-type="indexterm" id="id935"/>
+For instance, comment out one arm like so:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="kd">let</code><code class="w"> </code><code class="n">type_filter</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">|</code><code class="n">entry</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="nc">DirEntry</code><code class="o">|</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="n">args</code><code class="p">.</code><code class="n">entry_types</code><code class="p">.</code><code class="n">is_empty</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">            </code><code class="o">|</code><code class="o">|</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">entry_types</code><code class="p">.</code><code class="n">iter</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">any</code><code class="p">(</code><code class="o">|</code><code class="n">entry_type</code><code class="o">|</code><code class="w"> </code><code class="k">match</code><code class="w"> </code><code class="n">entry_type</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="n">EntryType</code><code>::</code><code class="n">Link</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="n">entry</code><code class="p">.</code><code class="n">file_type</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">is_symlink</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="n">EntryType</code><code>::</code><code class="n">Dir</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="n">entry</code><code class="p">.</code><code class="n">file_type</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">is_dir</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><strong><code class="c1">//EntryType::File =&gt; entry.file_type().is_file(),</code></strong><code class="c1"> // Error!
+</code><code class="w">        </code><code class="p">}</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code><code class="p">;</code></pre>
+
+<p>The compiler stops and politely explains that you have not handled the case of the <code>EntryType::File</code> variant.<a data-primary="EntryType::File" data-type="indexterm" id="id936"/>
+You will not get this kind of safety if you use strings to model this.
+The <code>enum</code> type makes your code far safer and easier to verify and modify:</p>
+
+<pre data-type="programlisting">error[E0004]: non-exhaustive patterns: `&amp;EntryType::File` not covered
+  --&gt; src/main.rs:68:63
+   |
+68 |             || args.entry_types.iter().any(|entry_type| match entry_type {
+   |                                                               ^^^^^^^^^^
+   |                                     pattern `&amp;EntryType::File` not covered</pre>
+
+<p>The second closure is used<a data-primary="closures" data-secondary="removing filenames not matching regular expression for findr" data-type="indexterm" id="id937"/> to remove filenames that don’t match one of the given regular expressions:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="kd">let</code><code class="w"> </code><code class="n">name_filter</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">|</code><code class="n">entry</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="nc">DirEntry</code><code class="o">|</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="n">args</code><code class="p">.</code><code class="n">names</code><code class="p">.</code><code class="n">is_empty</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO12-1" id="co_finders_keepers_CO12-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+        </code><code class="o">|</code><code class="o">|</code><code class="w"> </code><code class="n">args</code><code class="w">
+</code><code class="w">            </code><code class="p">.</code><code class="n">names</code><code class="w">
+</code><code class="w">            </code><code class="p">.</code><code class="n">iter</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">            </code><code class="p">.</code><code class="n">any</code><code class="p">(</code><code class="o">|</code><code class="n">re</code><code class="o">|</code><code class="w"> </code><code class="n">re</code><code class="p">.</code><code class="n">is_match</code><code class="p">(</code><code class="o">&amp;</code><code class="n">entry</code><code class="p">.</code><code class="n">file_name</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">to_string_lossy</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO12-2" id="co_finders_keepers_CO12-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+</code><code class="p">}</code><code class="p">;</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_finders_keepers_CO12-1" id="callout_finders_keepers_CO12-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Return <code>true</code> immediately if no name regexes are present.</p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO12-2" id="callout_finders_keepers_CO12-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Use <code>Iterator::any</code> to check if the <a href="https://oreil.ly/3LGTA"><code>DirEntry::file_name</code></a> matches any one of the regexes.</p></dd>
+</dl>
+
+<p>The last thing I’ll highlight is the multiple operations I can chain together with iterators in the following code.<a data-primary="DirEntry::file_name" data-type="indexterm" id="id938"/><a data-primary="map, filter, and filter_map operations, chaining for findr" data-type="indexterm" id="id939"/><a data-primary="filter, map, and filter_map operations, chaining for findr" data-type="indexterm" id="id940"/><a data-primary="iterators" data-secondary="using to chain multiple operations for findr" data-type="indexterm" id="id941"/><a data-primary="chaining multiple operations in findr" data-type="indexterm" id="id942"/>
+As with reading lines from a file or entries in a directory, each value in the iterator is a <code>Result</code> that might yield a <code>DirEntry</code> value.<a data-primary="DirEntry struct" data-type="indexterm" id="id943"/><a data-primary="Iterator::filter_map function" data-type="indexterm" id="id944"/><a data-primary="Result type" data-secondary="mapping into closure printing errors to STDERR" data-type="indexterm" id="id945"/>
+I use <code>Itera⁠tor​::filter_map</code> to map each <code>Result</code> into a closure that prints errors to <code>STDERR</code> and removes by them by returning <code>None</code>; otherwise, the <code>Ok</code> values are allowed to pass by turning them into <code>Some</code> values.
+The valid <code>DirEntry</code> values are then passed to the filters for types and names before being shunted to the <code>map</code> operation to transform them into <code>String</code> values:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="kd">let</code><code class="w"> </code><code class="n">entries</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">WalkDir</code>::<code class="n">new</code><code class="p">(</code><code class="n">path</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">into_iter</code><code class="p">()</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">filter_map</code><code class="p">(</code><code class="o">|</code><code class="n">e</code><code class="o">|</code><code class="w"> </code><code class="k">match</code><code class="w"> </code><code class="n">e</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"{}"</code><code class="p">,</code><code class="w"> </code><code class="n">e</code><code class="p">);</code><code class="w"/>
+<code class="w">            </code><code class="nb">None</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">        </code><code class="nb">Ok</code><code class="p">(</code><code class="n">entry</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">entry</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="p">})</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">filter</code><code class="p">(</code><code class="n">type_filter</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">filter</code><code class="p">(</code><code class="n">name_filter</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">map</code><code class="p">(</code><code class="o">|</code><code class="n">entry</code><code class="o">|</code><code class="w"> </code><code class="n">entry</code><code class="p">.</code><code class="n">path</code><code class="p">().</code><code class="n">display</code><code class="p">().</code><code class="n">to_string</code><code class="p">())</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">collect</code>::<code class="o">&lt;</code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">_</code><code class="o">&gt;&gt;</code><code class="p">();</code><code class="w"/></pre>
+
+<p>Although this is fairly lean, compact code, I find it expressive.
+I appreciate how much these functions are doing for me and how well they fit together.
+Most importantly, I can clearly see a way to expand this code with additional filters for file size, modification time, ownership, and so forth, which would have been much more difficult without refactoring the code to use <code>Iterator::filter</code>.
+You are free to write code however you like so long as it passes the tests, but this is my preferred solution.<a data-primary="find utility" data-secondary="writing findr version" data-startref="ix_findwrsol" data-tertiary="solution" data-type="indexterm" id="id946"/></p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Conditionally Testing on Unix Versus Windows" data-type="sect1"><div class="sect1" id="id72">
+<h1>Conditionally Testing on Unix Versus Windows</h1>
+
+<p>It’s worth taking a moment to talk about how I wrote tests that pass on both Windows and Unix.<a data-primary="testing" data-secondary="conditionally testing Unix versus Windows for findr" data-type="indexterm" id="ix_tstfindr"/><a data-primary="Unix" data-secondary="conditionally testing Unix versus Windows for findr" data-type="indexterm" id="ix_unixfindr"/><a data-primary="Windows" data-secondary="conditionally testing Unix versus Windows for findr" data-type="indexterm" id="ix_Winfindr"/><a data-primary="find utility" data-secondary="writing findr version" data-tertiary="conditionally testing on Unix versus Windows" data-type="indexterm" id="ix_findwrcndtst"/>
+On Windows, the symlinked file becomes a regular file, so nothing will be found for <code>--type l</code>.
+This also means there will be an additional regular file found when searching with <code>--type f</code>.
+You will find all the tests in <em>tests/cli.rs</em>.
+As in previous tests, I wrote a helper function called <code>run</code> to run the program with various arguments and compare the output to the contents of a file:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="p">[</code><code class="o">&amp;</code><code class="kt">str</code><code class="p">]</code><code class="p">,</code><code class="w"> </code><code class="n">expected_file</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO13-1" id="co_finders_keepers_CO13-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="n">file</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">format_file_name</code><code class="p">(</code><code class="n">expected_file</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO13-2" id="co_finders_keepers_CO13-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="n">contents</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">fs</code><code>::</code><code class="n">read_to_string</code><code class="p">(</code><code class="n">file</code><code class="p">.</code><code class="n">as_ref</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO13-3" id="co_finders_keepers_CO13-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">expected</code><code>:</code><code> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="o">&amp;</code><code class="kt">str</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w">
+</code><code class="w">        </code><code class="n">contents</code><code class="p">.</code><code class="n">split</code><code class="p">(</code><code class="s">"</code><code class="se">\n</code><code class="s">"</code><code class="p">)</code><code class="p">.</code><code class="n">filter</code><code class="p">(</code><code class="o">|</code><code class="n">s</code><code class="o">|</code><code class="w"> </code><code class="o">!</code><code class="n">s</code><code class="p">.</code><code class="n">is_empty</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">.</code><code class="n">collect</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="n">expected</code><code class="p">.</code><code class="n">sort</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">cmd</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code>::</code><code class="n">cargo_bin</code><code class="p">(</code><code class="n">PRG</code><code class="p">)</code><code class="o">?</code><code class="p">.</code><code class="n">args</code><code class="p">(</code><code class="n">args</code><code class="p">)</code><code class="p">.</code><code class="n">assert</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">success</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO13-4" id="co_finders_keepers_CO13-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="n">out</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">cmd</code><code class="p">.</code><code class="n">get_output</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">stdout</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">String</code><code>::</code><code class="n">from_utf8</code><code class="p">(</code><code class="n">out</code><code class="p">.</code><code class="n">stdout</code><code class="p">.</code><code class="n">clone</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">lines</code><code>:</code><code> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="o">&amp;</code><code class="kt">str</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w">
+</code><code class="w">        </code><code class="n">stdout</code><code class="p">.</code><code class="n">split</code><code class="p">(</code><code class="s">"</code><code class="se">\n</code><code class="s">"</code><code class="p">)</code><code class="p">.</code><code class="n">filter</code><code class="p">(</code><code class="o">|</code><code class="n">s</code><code class="o">|</code><code class="w"> </code><code class="o">!</code><code class="n">s</code><code class="p">.</code><code class="n">is_empty</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">.</code><code class="n">collect</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="n">lines</code><code class="p">.</code><code class="n">sort</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">lines</code><code class="p">,</code><code class="w"> </code><code class="n">expected</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO13-5" id="co_finders_keepers_CO13-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_finders_keepers_CO13-1" id="callout_finders_keepers_CO13-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The function accepts the command-line arguments and the file containing the expected output.</p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO13-2" id="callout_finders_keepers_CO13-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Decide whether to use the file for Unix or Windows, which will be explained shortly.</p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO13-3" id="callout_finders_keepers_CO13-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Read the contents of the expected file, then split and sort the lines.</p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO13-4" id="callout_finders_keepers_CO13-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Run the program with the arguments, assert it runs successfully, then split and sort the lines of output.</p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO13-5" id="callout_finders_keepers_CO13-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>Assert that the output is equal to the expected values.</p></dd>
+</dl>
+
+<p>If you look in the <em>tests/expected</em> directory, you’ll see there are pairs of files for each test.
+That is, the test <code>name_a</code> has two possible output files, one for Unix and another for Windows:</p>
+
+<pre data-type="programlisting">$ ls tests/expected/name_a.txt*
+tests/expected/name_a.txt          tests/expected/name_a.txt.windows</pre>
+
+<p>The <code>name_a</code> test looks like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[test]</code><code class="w"/>
+<code class="k">fn</code> <code class="nf">name_a</code><code class="p">()</code><code class="w"> </code>-&gt; <code class="nb">Result</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">run</code><code class="p">(</code><code class="o">&amp;</code><code class="p">[</code><code class="s">"tests/inputs"</code><code class="p">,</code><code class="w"> </code><code class="s">"-n"</code><code class="p">,</code><code class="w"> </code><code class="s">"a"</code><code class="p">],</code><code class="w"> </code><code class="s">"tests/expected/name_a.txt"</code><code class="p">)</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>The <code>run</code> function uses the <code>format_file_name</code> function to create the appropriate filename.<a data-primary="format_file_name function" data-type="indexterm" id="id947"/>
+I use <a href="https://oreil.ly/AnpGk">conditional compilation</a> to decide which version of the function is compiled.<a data-primary="conditional compilation" data-type="indexterm" id="id948"/>
+Note that these functions require <code>use std::​bor⁠row::Cow</code>.
+When the program is compiled on Windows, the following function will be used to append the string <em>.windows</em> to the expected filename:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[cfg(windows)]</code><code class="w"/>
+<code class="k">fn</code> <code class="nf">format_file_name</code><code class="p">(</code><code class="n">expected_file</code>: <code class="kp">&amp;</code><code class="kt">str</code><code class="p">)</code><code class="w"> </code>-&gt; <code class="nc">Cow</code><code class="o">&lt;</code><code class="kt">str</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="c1">// Equivalent to: Cow::Owned(format!("{}.windows", expected_file))</code>
+<code class="w">    </code><code class="fm">format!</code><code class="p">(</code><code class="s">"{}.windows"</code><code class="p">,</code><code class="w"> </code><code class="n">expected_file</code><code class="p">).</code><code class="n">into</code><code class="p">()</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>When the program is <em>not</em> compiled on Windows, this version will use the given filename:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[cfg(not(windows))]</code><code class="w"/>
+<code class="k">fn</code> <code class="nf">format_file_name</code><code class="p">(</code><code class="n">expected_file</code>: <code class="kp">&amp;</code><code class="kt">str</code><code class="p">)</code><code class="w"> </code>-&gt; <code class="nc">Cow</code><code class="o">&lt;</code><code class="kt">str</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="c1">// Equivalent to: Cow::Borrowed(expected_file)</code>
+<code class="w">    </code><code class="n">expected_file</code><code class="p">.</code><code class="n">into</code><code class="p">()</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+<div data-type="tip"><h6>Tip</h6>
+<p>Using <a href="https://oreil.ly/f88Lq"><code>std::borrow::Cow</code></a> means that on Unix systems the string is not cloned, and on Windows, the modified filename is returned as an owned string.<a data-primary="clone-on-write smart pointer" data-type="indexterm" id="id949"/><a data-primary="Cow trait" data-type="indexterm" id="id950"/><a data-primary="std::borrow::Cow" data-type="indexterm" id="id951"/></p>
+</div>
+
+<p>Lastly, there is an <code>unreadable_dir</code> test that will run only on a non-Windows 
+<span class="keep-together">platform:</span></p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="cp">#[</code><code class="cp">cfg(not(windows))</code><code class="cp">]</code><code class="w">
+</code><code class="k">fn</code><code> </code><code class="nf">unreadable_dir</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">dirname</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"</code><code class="s">tests/inputs/cant-touch-this</code><code class="s">"</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO14-1" id="co_finders_keepers_CO14-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="k">if</code><code class="w"> </code><code class="o">!</code><code class="n">Path</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="n">dirname</code><code class="p">)</code><code class="p">.</code><code class="n">exists</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="n">fs</code><code>::</code><code class="n">create_dir</code><code class="p">(</code><code class="n">dirname</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="n">std</code><code>::</code><code class="n">process</code><code>::</code><code class="n">Command</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">chmod</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO14-2" id="co_finders_keepers_CO14-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+        </code><code class="p">.</code><code class="n">args</code><code class="p">(</code><code class="o">&amp;</code><code class="p">[</code><code class="s">"</code><code class="s">000</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="n">dirname</code><code class="p">]</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">status</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"</code><code class="s">failed</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">cmd</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code>::</code><code class="n">cargo_bin</code><code class="p">(</code><code class="n">PRG</code><code class="p">)</code><code class="o">?</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO14-3" id="co_finders_keepers_CO14-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="s">"</code><code class="s">tests/inputs</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">assert</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">success</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="n">fs</code><code>::</code><code class="n">remove_dir</code><code class="p">(</code><code class="n">dirname</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO14-4" id="co_finders_keepers_CO14-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+
+    </code><code class="kd">let</code><code class="w"> </code><code class="n">out</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">cmd</code><code class="p">.</code><code class="n">get_output</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO14-5" id="co_finders_keepers_CO14-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="n">stdout</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">String</code><code>::</code><code class="n">from_utf8</code><code class="p">(</code><code class="n">out</code><code class="p">.</code><code class="n">stdout</code><code class="p">.</code><code class="n">clone</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">lines</code><code>:</code><code> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="o">&amp;</code><code class="kt">str</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w">
+</code><code class="w">        </code><code class="n">stdout</code><code class="p">.</code><code class="n">split</code><code class="p">(</code><code class="s">"</code><code class="se">\n</code><code class="s">"</code><code class="p">)</code><code class="p">.</code><code class="n">filter</code><code class="p">(</code><code class="o">|</code><code class="n">s</code><code class="o">|</code><code class="w"> </code><code class="o">!</code><code class="n">s</code><code class="p">.</code><code class="n">is_empty</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">.</code><code class="n">collect</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">lines</code><code class="p">.</code><code class="n">len</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><code class="mi">17</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO14-6" id="co_finders_keepers_CO14-6"><img alt="6" src="assets/6.png"/></a><code class="w">
+
+    </code><code class="kd">let</code><code class="w"> </code><code class="n">stderr</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">String</code><code>::</code><code class="n">from_utf8</code><code class="p">(</code><code class="n">out</code><code class="p">.</code><code class="n">stderr</code><code class="p">.</code><code class="n">clone</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_finders_keepers_CO14-7" id="co_finders_keepers_CO14-7"><img alt="7" src="assets/7.png"/></a><code class="w">
+    </code><code class="fm">assert!</code><code class="p">(</code><code class="n">stderr</code><code class="p">.</code><code class="n">contains</code><code class="p">(</code><code class="s">"</code><code class="s">cant-touch-this: Permission denied</code><code class="s">"</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_finders_keepers_CO14-1" id="callout_finders_keepers_CO14-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Define and create the directory.</p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO14-2" id="callout_finders_keepers_CO14-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Set the permissions to make the directory unreadable.</p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO14-3" id="callout_finders_keepers_CO14-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Run <code>findr</code> and assert that it does not fail.</p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO14-4" id="callout_finders_keepers_CO14-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Remove the directory so that it does not interfere with future tests.</p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO14-5" id="callout_finders_keepers_CO14-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>Split the lines of <code>STDOUT</code>.</p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO14-6" id="callout_finders_keepers_CO14-6"><img alt="6" src="assets/6.png"/></a></dt>
+<dd><p>Verify there are 17 lines.</p></dd>
+<dt><a class="co" href="#co_finders_keepers_CO14-7" id="callout_finders_keepers_CO14-7"><img alt="7" src="assets/7.png"/></a></dt>
+<dd><p>Check that <code>STDERR</code> contains the expected warning.</p></dd>
+</dl>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Going Further" data-type="sect1"><div class="sect1" id="id73">
+<h1>Going Further</h1>
+
+<p>As with all the previous programs, I challenge you to implement all of the other features in <code>find</code>.<a data-primary="find utility" data-secondary="writing findr version" data-startref="ix_findwrcndtst" data-tertiary="conditionally testing on Unix versus Windows" data-type="indexterm" id="id952"/><a data-primary="Windows" data-secondary="conditionally testing Unix versus Windows for findr" data-startref="ix_Winfindr" data-type="indexterm" id="id953"/><a data-primary="Unix" data-secondary="conditionally testing Unix versus Windows for findr" data-startref="ix_unixfindr" data-type="indexterm" id="id954"/><a data-primary="testing" data-secondary="conditionally testing Unix versus Windows for findr" data-startref="ix_tstfindr" data-type="indexterm" id="id955"/><a data-primary="-max_depth and -min_depth options (find)" data-primary-sortas="max_depth" data-type="indexterm" id="id956"/>
+For instance, two very useful options of <code>find</code> are <code>-max_depth</code> and 
+<span class="keep-together"><code>-min_depth</code></span> to control how deeply into the directory structure it should search.<a data-primary="find utility" data-secondary="writing findr version" data-tertiary="going further" data-type="indexterm" id="id957"/>
+There are <a href="https://oreil.ly/J5iea"><code>WalkDir::min_depth</code></a> and <a href="https://oreil.ly/kpO18"><code>WalkDir::max_depth</code></a> options you might use.<a data-primary="WalkDir::max_depth" data-type="indexterm" id="id958"/><a data-primary="WalkDir::min_depth" data-type="indexterm" id="id959"/></p>
+
+<p>Next, perhaps try to find files by size.
+The <code>find</code> program has a particular syntax for indicating files less than, greater than, or exactly equal to the specified size:</p>
+
+<pre data-type="programlisting">-size n[ckMGTP]
+     True if the file's size, rounded up, in 512-byte blocks is n.  If
+     n is followed by a c, then the primary is true if the file's size
+     is n bytes (characters).  Similarly if n is followed by a scale
+     indicator then the file's size is compared to n scaled as:
+
+     k       kilobytes (1024 bytes)
+     M       megabytes (1024 kilobytes)
+     G       gigabytes (1024 megabytes)
+     T       terabytes (1024 gigabytes)
+     P       petabytes (1024 terabytes)</pre>
+
+<p>The <code>find</code> program can also take action on the results.
+For instance, there is a <code>-delete</code> option to remove an entry.
+This is useful for finding and removing empty files:</p>
+
+<pre data-type="programlisting">$ find . -size 0 -delete</pre>
+
+<p>I’ve often thought it would be nice to have a <code>-count</code> option to tell me how many items are found, like <code>uniqr -c</code> did in the last chapter.
+I can, of course, pipe this into <code>wc -l</code> (or, even better, <code>wcr</code>), but consider adding such an option to your program.</p>
+
+<p>Write a Rust version of the <code>tree</code> program that I’ve shown several times.<a data-primary="tree command" data-type="indexterm" id="id960"/> This program recursively searches a path for entries and creates a visual representation of the file and directory structure.
+It also has many options to customize the output; for instance, you can display only directories using the <code>-d</code> option:</p>
+
+<pre data-type="programlisting">$ tree -d
+.
+├── a
+│   └── b
+│       └── c
+├── d
+│   └── e
+└── f
+
+6 directories</pre>
+
+<p><code>tree</code> also allows you to use a file glob to display only entries matching a given pattern, with the <code>-P</code> option:</p>
+
+<pre class="nobreakinside" data-type="programlisting">$ tree -P \*.csv
+.
+├── a
+│   └── b
+│       ├── b.csv
+│       └── c
+├── d
+│   ├── b.csv -&gt; ../a/b/b.csv
+│   └── e
+├── f
+└── g.csv
+
+6 directories, 3 files</pre>
+
+<p>Finally, compare your version to <a href="https://oreil.ly/ralqD"><code>fd</code></a>, another Rust replacement for <code>find</code>, to see how someone else has solved these problems.<a data-primary="fd replacement for find" data-type="indexterm" id="id961"/></p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Summary" data-type="sect1"><div class="sect1" id="id74">
+<h1>Summary</h1>
+
+<p>I hope you have an appreciation now for how complex real-world programs can become.
+For instance, <code>find</code> can combine multiple comparisons to help you locate the large files eating up your disk or files that haven’t been modified in a long time that can be removed.</p>
+
+<p>Consider the skills you learned in this chapter:</p>
+<ul>
+<li>
+<p>You can use <code>clap</code> to constrain argument values to a limited set of strings, saving you time in validating user input.</p>
+</li>
+<li>
+<p>You learned to create an implementation block for an <code>enum</code>, which is an enumeration of possible values.</p>
+</li>
+<li>
+<p>You saw how to use a regular expression to find a pattern of text. You also learned that the caret (<code>^</code>) anchors the pattern to the beginning of the search string and the dollar sign (<code>$</code>) anchors the expression to the end.</p>
+</li>
+<li>
+<p>You can use <code>WalkDir</code> to recursively search through a directory structure and evaluate the <code>DirEntry</code> values to find files, directories, and links.</p>
+</li>
+<li>
+<p>You learned how to chain multiple operations like <code>any</code>, <code>filter</code>, <code>map</code>, and
+<span class="keep-together"><code>filter_map</code></span> with iterators.</p>
+</li>
+<li>
+<p>You can use <code>#[cfg(windows)]</code> to compile code conditionally if on Windows or <code>#[cfg(not(windows))]</code> if not on Windows.</p>
+</li>
+<li>
+<p>You saw a case for refactoring code to simplify the logic while using tests to ensure that the program still works.<a data-primary="find utility" data-startref="ix_find" data-type="indexterm" id="id-9wSmh3hbH9TjSa"/></p>
+</li>
+</ul>
+
+<p>In <a data-type="xref" href="ch08.html#ch08">Chapter 8</a> you will learn to read delimited text files, and in <a data-type="xref" href="ch09.html#ch09">Chapter 9</a> you will use regular expressions to find lines of text that match a given pattern.</p>
+</div></section>
+<div data-type="footnotes"><p data-type="footnote" id="id834"><sup><a href="ch07.html#id834-marker">1</a></sup> This is one of those odd programs that have no short <a data-primary="files" data-secondary="file types for find utility" data-type="indexterm" id="id962"/>flags and in which the long flags start with a single dash.</p><p data-type="footnote" id="id888"><sup><a href="ch07.html#id888-marker">2</a></sup> Sometimes a dot is just a dot.</p></div></div></section></body></html>

@@ -1,0 +1,802 @@
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Truth or Consequences</title><link href="epub.css" rel="stylesheet" type="text/css"/>
+<meta content="urn:uuid:e80a1ec8-ed8e-40f7-ba3d-26a647960341" name="Adept.expected.resource"/></head><body data-type="book"><section class="pagenumrestart" data-pdf-bookmark="Chapter 1. Truth or Consequences" data-type="chapter" epub:type="chapter"><div class="chapter" id="ch01">
+<h1><span class="label">Chapter 1. </span>Truth or Consequences</h1>
+
+<blockquote>
+<p>
+And the truth is, we don’t know anything
+</p>
+<p data-type="attribution">
+They Might Be Giants, “Ana Ng” (1988)
+</p>
+</blockquote>
+
+<p>In this chapter, I’ll show you how to organize, run, and test a Rust program.
+I’ll be using a Unix platform (macOS) to explain some basic ideas about command-line programs.<a data-primary="Rust programs" data-type="indexterm" id="ix_Rstprg"/><a data-primary="command-line programs" data-type="indexterm" id="ix_cmdlnpr"/>
+Only some of these ideas apply to the Windows operating system, but the Rust programs themselves will work the same no matter which platform you use.</p>
+
+<p>You will learn how to do the following:</p>
+
+<ul>
+<li>
+<p>Compile Rust code into an executable</p>
+</li>
+<li>
+<p>Use Cargo to start a new project</p>
+</li>
+<li>
+<p>Use the <code>$PATH</code> environment variable</p>
+</li>
+<li>
+<p>Include external Rust crates from <a class="orm:hideurl" href="https://crates.io"><em>crates.io</em></a></p>
+</li>
+<li>
+<p>Interpret the exit status of a program</p>
+</li>
+<li>
+<p>Use common system commands and options</p>
+</li>
+<li>
+<p>Write Rust versions of the <code>true</code> and <code>false</code> programs</p>
+</li>
+<li>
+<p>Organize, write, and run tests</p>
+</li>
+</ul>
+
+
+
+
+
+
+<section data-pdf-bookmark="Getting Started with “Hello, world!”" data-type="sect1"><div class="sect1" id="id3">
+<h1>Getting Started with “Hello, world!”</h1>
+
+<p>It seems <a data-primary="Rust programs" data-secondary="getting started with “Hello, world!”" data-type="indexterm" id="ix_RstprgHW"/>the universally agreed-upon way to start learning a programming language is printing “Hello, world!” to the screen.
+Change to a temporary directory with <strong><code>cd /tmp</code></strong> to write this first program.
+We’re just messing around, so we don’t need a real 
+<span class="keep-together">directory yet.</span>
+Then fire up a text editor and type the following code into a file called <em>hello.rs</em>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">main</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_truth_or_consequences_CO1-1" id="co_truth_or_consequences_CO1-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">Hello, world!</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_truth_or_consequences_CO1-2" id="co_truth_or_consequences_CO1-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+</code><code class="p">}</code><code class="w"> </code><a class="co" href="#callout_truth_or_consequences_CO1-3" id="co_truth_or_consequences_CO1-3"><img alt="3" src="assets/3.png"/></a></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_truth_or_consequences_CO1-1" id="callout_truth_or_consequences_CO1-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Functions are defined using <code>fn</code>. The name <a data-primary="functions" data-secondary="defining using fn" data-type="indexterm" id="id209"/><a data-primary="fn (function declaration)" data-type="indexterm" id="id210"/>of this function is <code>main</code>.<a data-primary="main function" data-type="indexterm" id="id211"/></p></dd>
+<dt><a class="co" href="#co_truth_or_consequences_CO1-2" id="callout_truth_or_consequences_CO1-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p><code>println!</code> (<em>print line</em>) is a macro and will print text to <code>STDOUT</code> (pronounced <em>standard out</em>). The semicolon indicates the end of the statement.</p></dd>
+<dt><a class="co" href="#co_truth_or_consequences_CO1-3" id="callout_truth_or_consequences_CO1-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>The body of the function is enclosed in curly braces.<a data-primary="{} (curly braces)" data-secondary="enclosing body of a function" data-type="indexterm" id="id212"/><a data-primary="println! macro" data-type="indexterm" id="id213"/></p></dd>
+</dl>
+
+<p>Rust will automatically start in the <code>main</code> function.
+Function arguments appear inside the parentheses that follow the name of the function.
+Because there are no arguments listed in <code>main()</code>, the function takes no arguments.
+The last thing I’ll point out here is that <a href="https://oreil.ly/GGmNx"><code>println!</code></a> looks like a function but is actually a <a href="https://oreil.ly/RFXMp"><em>macro</em></a>, which is essentially code that writes code.
+All the other macros I use in this book—such as <a href="https://oreil.ly/SQHyp"><code>assert!</code></a> and <a href="https://oreil.ly/KACU4"><code>vec!</code></a>—also end with an exclamation point.<a data-primary="! (exclamation point)" data-secondary="ending names of macros" data-type="indexterm" id="id214"/><a data-primary="macros" data-type="indexterm" id="id215"/></p>
+
+<p>To run this program, you must first use the Rust compiler, <code>rustc</code>, to <em>compile</em> the code into a form that your computer can execute:</p>
+
+<pre data-type="programlisting">$ rustc hello.rs</pre>
+
+<p>On Windows, you will use this command:</p>
+
+<pre data-type="programlisting">&gt; rustc.exe .\hello.rs</pre>
+
+<p>If all goes well, there will be no output from the preceding command, but you should now have a new file called <em>hello</em> on macOS and Linux or <em>hello.exe</em> on Windows.
+This is a binary-encoded file that can be directly executed by your operating system, so it’s common to call this an <em>executable</em> or a <em>binary</em>.<a data-primary="file command" data-type="indexterm" id="id216"/><a data-primary="executables" data-type="indexterm" id="id217"/><a data-primary="binary files" data-type="indexterm" id="id218"/>
+On macOS, you can use the <code>file</code> command to see what kind of file this is:</p>
+
+<pre data-type="programlisting">$ file hello
+hello: Mach-O 64-bit executable x86_64</pre>
+
+<p>You should be able to execute the program to see a charming and heartfelt message:</p>
+
+<pre data-type="programlisting">$ ./hello <a class="co" href="#callout_truth_or_consequences_CO2-1" id="co_truth_or_consequences_CO2-1"><img alt="1" src="assets/1.png"/></a>
+Hello, world!</pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_truth_or_consequences_CO2-1" id="callout_truth_or_consequences_CO2-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The dot (<code>.</code>) indicates the current<a data-primary=". (dot)" data-secondary="indicating current directory" data-type="indexterm" id="id219"/> directory.</p></dd>
+</dl>
+<div data-type="tip"><h6>Tip</h6>
+<p>I will shortly discuss the <code>$PATH</code> environment variable that lists the directories to search for programs to run. The current working directory is never included in this variable to prevent malicious code from being surreptitiously executed. For instance, a bad actor could create a program named <code>ls</code> that executes <code>rm -rf /</code> in an attempt to delete your entire filesystem. If you happened to execute that as the root user, it would ruin your whole day.</p>
+</div>
+
+<p>On Windows, you can execute it like so:</p>
+
+<pre data-type="programlisting">&gt; .\hello.exe
+Hello, world!</pre>
+
+<p>Congratulations if that was your first Rust program.
+Next, I’ll show you how to better organize your code.<a data-primary="Rust programs" data-secondary="getting started with “Hello, world!”" data-startref="ix_RstprgHW" data-type="indexterm" id="id220"/></p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Organizing a Rust Project Directory" data-type="sect1"><div class="sect1" id="id4">
+<h1>Organizing a Rust Project Directory</h1>
+
+<p>In your <a data-primary="Rust projects" data-secondary="organizing project directory" data-type="indexterm" id="id221"/><a data-primary="directories" data-secondary="organizing for Rust project" data-type="indexterm" id="id222"/>Rust projects, you will likely write many files of source code and will also use other people’s code from places like <a class="orm:hideurl" href="https://crates.io"><em>crates.io</em></a>.
+It’s best to create a directory for each project, with a <em>src</em> subdirectory for the Rust source code files.<a data-primary="src (source) directory" data-type="indexterm" id="id223"/>
+On a Unix system, you’ll first need to remove the <em>hello</em> binary with the command <strong><code>rm hello</code></strong> because that is the name of the directory you will create.<a data-primary="rm (remove) command" data-type="indexterm" id="id224"/>
+Then you can use the following command to make the directory structure:</p>
+
+<pre data-type="programlisting">$ mkdir -p hello/src <a class="co" href="#callout_truth_or_consequences_CO3-1" id="co_truth_or_consequences_CO3-1"><img alt="1" src="assets/1.png"/></a></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_truth_or_consequences_CO3-1" id="callout_truth_or_consequences_CO3-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <code>mkdir</code> command will make a directory.<a data-primary="mkdir command" data-type="indexterm" id="id225"/> The <code>-p</code> option says to create parent directories before creating child directories. PowerShell does not require this option.<a data-primary="mv (move) command" data-type="indexterm" id="id226"/></p></dd>
+</dl>
+
+<p>Move the <em>hello.rs</em> source file into <em>hello/src</em> using the <code>mv</code> command:</p>
+
+<pre data-type="programlisting">$ mv hello.rs hello/src</pre>
+
+<p>Use the <code>cd</code> command to change into<a data-primary="cd (change directory) command" data-type="indexterm" id="id227"/> that directory and compile<a data-primary="compiling Rust programs" data-type="indexterm" id="id228"/><a data-primary="rustc command" data-type="indexterm" id="id229"/> your program again:</p>
+
+<pre data-type="programlisting">$ cd hello
+$ rustc src/hello.rs</pre>
+
+<p>You should now have a <code>hello</code> executable in the directory.
+I will use the <code>tree</code> command (which you might need to install) to show you the contents <a data-primary="tree command" data-type="indexterm" id="id230"/>of my directory:</p>
+
+<pre data-type="programlisting">$ tree
+.
+├── hello
+└── src
+    └── hello.rs</pre>
+
+<p>This is the basic structure for a simple Rust project.</p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Creating and Running a Project with Cargo" data-type="sect1"><div class="sect1" id="id5">
+<h1>Creating and Running a Project with Cargo</h1>
+
+<p>An easier way to start a new Rust project is to use the Cargo tool.
+You can<a data-primary="Cargo tool" data-secondary="creating and running Rust project with" data-type="indexterm" id="ix_Crgo"/> delete your temporary <em>hello</em> directory:</p>
+
+<pre data-type="programlisting">$ cd .. <a class="co" href="#callout_truth_or_consequences_CO4-1" id="co_truth_or_consequences_CO4-1"><img alt="1" src="assets/1.png"/></a>
+$ rm -rf hello <a class="co" href="#callout_truth_or_consequences_CO4-2" id="co_truth_or_consequences_CO4-2"><img alt="2" src="assets/2.png"/></a></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_truth_or_consequences_CO4-1" id="callout_truth_or_consequences_CO4-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Change into the parent directory, which is indicated with two dots (<code>..</code>).</p></dd>
+<dt><a class="co" href="#co_truth_or_consequences_CO4-2" id="callout_truth_or_consequences_CO4-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <code>-r</code> <em>recursive</em> option will remove the contents of a directory, and the <code>-f</code> <em>force</em> option will skip any errors.<a data-primary="-r (recursive) option" data-primary-sortas="r recursive" data-type="indexterm" id="id231"/><a data-primary="-f (force) option" data-primary-sortas="f" data-type="indexterm" id="id232"/></p></dd>
+</dl>
+
+<p>If you would like to save the following program, change into the solutions directory for your projects.
+Then start your project anew using Cargo like so:</p>
+
+<pre data-type="programlisting">$ cargo new hello
+     Created binary (application) `hello` package</pre>
+
+<p>This should create a new <em>hello</em> directory that you can change into.
+I’ll use <code>tree</code> again to show you the contents:</p>
+
+<pre data-type="programlisting">$ cd hello
+$ tree
+.
+├── Cargo.toml <a class="co" href="#callout_truth_or_consequences_CO5-1" id="co_truth_or_consequences_CO5-1"><img alt="1" src="assets/1.png"/></a>
+└── src <a class="co" href="#callout_truth_or_consequences_CO5-2" id="co_truth_or_consequences_CO5-2"><img alt="2" src="assets/2.png"/></a>
+    └── main.rs <a class="co" href="#callout_truth_or_consequences_CO5-3" id="co_truth_or_consequences_CO5-3"><img alt="3" src="assets/3.png"/></a></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_truth_or_consequences_CO5-1" id="callout_truth_or_consequences_CO5-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p><em>Cargo.toml</em> is a configuration file for the project. The extension <em>.toml</em> stands for Tom’s Obvious, Minimal Language.</p></dd>
+<dt><a class="co" href="#co_truth_or_consequences_CO5-2" id="callout_truth_or_consequences_CO5-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <em>src</em> directory is for Rust source code files.</p></dd>
+<dt><a class="co" href="#co_truth_or_consequences_CO5-3" id="callout_truth_or_consequences_CO5-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p><em>main.rs</em> is the default starting point for Rust programs.</p></dd>
+</dl>
+
+<p>You can use the following <code>cat</code> command (for <em>concatenate</em>) to see the contents of the one source<a data-primary="cat (concatenate) command" data-type="indexterm" id="id233"/> file that Cargo created (in <a data-type="xref" href="ch03.html#ch03">Chapter 3</a>, you will write a Rust version of <code>cat</code>):</p>
+
+<pre data-type="programlisting">$ cat src/main.rs
+fn main() {
+    println!("Hello, world!");
+}</pre>
+
+<p>Rather <a data-primary="cargo run command" data-type="indexterm" id="id234"/><a data-primary="compiling Rust programs" data-type="indexterm" id="id235"/>than using <code>rustc</code> to compile the program, this time use <strong><code>cargo run</code></strong> to compile the source code and run it in one command:</p>
+
+<pre data-type="programlisting">$ cargo run
+   Compiling hello v0.1.0 (/private/tmp/hello) <a class="co" href="#callout_truth_or_consequences_CO6-1" id="co_truth_or_consequences_CO6-1"><img alt="1" src="assets/1.png"/></a>
+    Finished dev [unoptimized + debuginfo] target(s) in 1.26s
+     Running `target/debug/hello`
+Hello, world! <a class="co" href="#callout_truth_or_consequences_CO6-2" id="co_truth_or_consequences_CO6-2"><img alt="2" src="assets/2.png"/></a></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_truth_or_consequences_CO6-1" id="callout_truth_or_consequences_CO6-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The first three lines are information about what Cargo is doing.</p></dd>
+<dt><a class="co" href="#co_truth_or_consequences_CO6-2" id="callout_truth_or_consequences_CO6-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>This is the output from the program.</p></dd>
+</dl>
+
+<p>If you would like for Cargo to not print status messages about compiling and running the code, you can use the <code>-q</code>, or <code>--quiet</code>, option:</p>
+
+<pre data-type="programlisting">$ cargo run --quiet
+Hello, world!</pre>
+<aside data-type="sidebar" epub:type="sidebar"><div class="sidebar" id="id236">
+<h1>Cargo Commands</h1>
+<p>How did I know about the <code>-q|--quiet</code> option?
+Run <strong><code>cargo</code></strong> with no arguments and note that it will print some lengthy documentation.<a data-primary="-q|--quiet option" data-primary-sortas="q|" data-type="indexterm" id="id237"/>
+Good command-line tools will tell you how to use them, like how the cookie in <em>Alice in Wonderland</em> says “Eat me.”
+Notice that <em>Usage</em> is one of the first words in the documentation.
+It’s common to call this helpful message the <em>usage</em> statement.<a data-primary="Cargo tool" data-secondary="help with commands" data-type="indexterm" id="id238"/><a data-primary="usage statement" data-type="indexterm" id="id239"/>
+The programs in this book will also print their usage.
+You can request help for any of Cargo’s commands using <code><strong>cargo help <em>command</em></strong></code>.</p>
+</div></aside>
+
+<p>After running the program using Cargo, use the <code>ls</code> command to list the contents of the current working directory.<a data-primary="ls utility" data-type="indexterm" id="id240"/><a data-primary="target directory" data-type="indexterm" id="id241"/>
+(You will write a Rust version of <code>ls</code> in <a data-type="xref" href="ch14.html#ch14">Chapter 14</a>.)
+There should be a new directory called <em>target</em>.
+By default, Cargo will build a <em>debug</em> <a href="https://oreil.ly/1Fs8Q">target</a>, so you will see the directory <em>target/debug</em> that contains the build artifacts:</p>
+
+<pre data-type="programlisting">$ ls
+Cargo.lock  Cargo.toml  src/        target/</pre>
+
+<p>You can use the <code>tree</code> command from earlier or the <code>find</code> command (you will write a Rust version of <code>find</code> in <a data-type="xref" href="ch07.html#ch07">Chapter 7</a>) to look at all the files that Cargo and Rust created.<a data-primary="find utility" data-type="indexterm" id="id242"/><a data-primary="tree command" data-type="indexterm" id="id243"/>
+The executable file that ran should exist as <em>target/debug/hello</em>.
+You can execute this directly:</p>
+
+<pre data-type="programlisting">$ ./target/debug/hello
+Hello, world!</pre>
+
+<p>To summarize, Cargo found the source code in <em>src/main.rs</em>, used the <code>main</code> function there to build the binary <em>target/debug/hello</em>, and then ran it.
+Why was the binary file called <em>hello</em>, though, and not <em>main</em>?
+To answer that, look at <em>Cargo.toml</em>:</p>
+
+<pre data-type="programlisting">$ cat Cargo.toml
+[package]
+name = "hello" <a class="co" href="#callout_truth_or_consequences_CO7-1" id="co_truth_or_consequences_CO7-1"><img alt="1" src="assets/1.png"/></a>
+version = "0.1.0" <a class="co" href="#callout_truth_or_consequences_CO7-2" id="co_truth_or_consequences_CO7-2"><img alt="2" src="assets/2.png"/></a>
+edition = "2021" <a class="co" href="#callout_truth_or_consequences_CO7-3" id="co_truth_or_consequences_CO7-3"><img alt="3" src="assets/3.png"/></a>
+
+# See more keys and their definitions at <a class="co" href="#callout_truth_or_consequences_CO7-4" id="co_truth_or_consequences_CO7-4"><img alt="4" src="assets/4.png"/></a>
+# https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies] <a class="co" href="#callout_truth_or_consequences_CO7-5" id="co_truth_or_consequences_CO7-5"><img alt="5" src="assets/5.png"/></a></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_truth_or_consequences_CO7-1" id="callout_truth_or_consequences_CO7-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>This was the name of the project I created with Cargo, so it will also be the name of the executable.</p></dd>
+<dt><a class="co" href="#co_truth_or_consequences_CO7-2" id="callout_truth_or_consequences_CO7-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>This is the version of the program.</p></dd>
+<dt><a class="co" href="#co_truth_or_consequences_CO7-3" id="callout_truth_or_consequences_CO7-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>This is the <a href="https://oreil.ly/4fgvX">edition</a> of Rust that should be used to compile the program.<a data-primary="editions of Rust" data-type="indexterm" id="id244"/> Editions are how the Rust community introduces changes that are not backward compatible. I will use the 2021 edition for all the programs in this book.</p></dd>
+<dt><a class="co" href="#co_truth_or_consequences_CO7-4" id="callout_truth_or_consequences_CO7-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>This is a comment line that I will include only this one time. You can remove this line from your file, if you like.</p></dd>
+<dt><a class="co" href="#co_truth_or_consequences_CO7-5" id="callout_truth_or_consequences_CO7-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>This is where you will list any external crates your project uses. This project has none at this point, so this section is blank.</p></dd>
+</dl>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Rust libraries are called <em>crates</em>, and they are expected to use <em>semantic version numbers</em> in the form <code><em>major</em>.<em>minor</em>.<em>patch</em></code>, so that <code>1.2.4</code> is major version 1, minor version 2, patch version 4. A change in the major version indicates a breaking change in the crate’s public application programming interface (API).<a data-primary="semantic version numbers" data-type="indexterm" id="id245"/><a data-primary="crates" data-type="indexterm" id="id246"/><a data-primary="Cargo tool" data-secondary="creating and running Rust project with" data-startref="ix_Crgo" data-type="indexterm" id="id247"/></p>
+</div>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Writing and Running Integration Tests" data-type="sect1"><div class="sect1" id="id6">
+<h1>Writing and Running Integration Tests</h1>
+<blockquote>
+<p>“More than the act of testing, the act of designing tests is one of the best bug preventers known. <a data-primary="testing" data-secondary="writing and running integration tests" data-type="indexterm" id="ix_tstint"/><a data-primary="integration tests" data-secondary="writing and running" data-type="indexterm" id="ix_inttst"/>The thinking that must be done to create a useful test can discover and 
+<span class="keep-together">eliminate bugs</span> before they are coded—indeed, test-design thinking can discover 
+<span class="keep-together">and eliminate</span> bugs at every stage in the creation of software, from conception to specification, to design, coding, and the rest.”</p>
+<p data-type="attribution">Boris Beizer, <cite><em>Software Testing Techniques</em> (Van Nostrand Reinhold)</cite></p>
+</blockquote>
+
+<p>Even though “Hello, world!” is quite simple, there are still things that could bear testing.
+There are two broad categories of tests I will show in this book.<a data-primary="unit tests" data-type="indexterm" id="id248"/><a data-primary="testing" data-seealso="unit tests" data-type="indexterm" id="id249"/>
+<em>Inside-out</em> or <em>unit testing</em> is when you write tests for the functions inside your program.
+I’ll introduce unit testing in <a data-type="xref" href="ch05.html#ch05">Chapter 5</a>.
+<em>Outside-in</em> or <em>integration testing</em> is when you write tests that run your programs as the user might, and that’s what we’ll do for this program.
+The convention in Rust projects is to create a <em>tests</em> directory parallel to the <em>src</em> directory for testing code, and you can use the command <strong><code>mkdir tests</code></strong> for this.<a data-primary="tests directory" data-type="indexterm" id="id250"/></p>
+
+<p>The goal is to test the <code>hello</code> program by running it on the command line as the user will do.
+Create the file <em>tests/cli.rs</em> for <em>command-line interface</em> (CLI) with the following code.<a data-primary="command-line interface (CLI), creating test file for" data-type="indexterm" id="id251"/>
+Note that this function is meant to show the simplest possible test in Rust, but it doesn’t do anything useful yet:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w"> </code><a class="co" href="#callout_truth_or_consequences_CO8-1" id="co_truth_or_consequences_CO8-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+</code><code class="k">fn</code><code> </code><code class="nf">works</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="fm">assert!</code><code class="p">(</code><code class="kc">true</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_truth_or_consequences_CO8-2" id="co_truth_or_consequences_CO8-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_truth_or_consequences_CO8-1" id="callout_truth_or_consequences_CO8-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <code>#[test]</code> attribute tells Rust<a data-primary="#[test] attribute" data-type="indexterm" id="id252"/><a data-primary="#[test] attribute" data-primary-sortas="test" data-type="indexterm" id="id253"/> to run this function when testing.</p></dd>
+<dt><a class="co" href="#co_truth_or_consequences_CO8-2" id="callout_truth_or_consequences_CO8-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <a href="https://oreil.ly/SQHyp"><code>assert!</code> macro</a> asserts that a Boolean expression is <code>true</code>.<a data-primary="assert! macro" data-type="indexterm" id="id254"/></p></dd>
+</dl>
+
+<p>Your project should now look like this:</p>
+
+<pre data-type="programlisting">$ tree -L 2
+.
+├── Cargo.lock <a class="co" href="#callout_truth_or_consequences_CO9-1" id="co_truth_or_consequences_CO9-1"><img alt="1" src="assets/1.png"/></a>
+├── Cargo.toml
+├── src <a class="co" href="#callout_truth_or_consequences_CO9-2" id="co_truth_or_consequences_CO9-2"><img alt="2" src="assets/2.png"/></a>
+│   └── main.rs
+├── target <a class="co" href="#callout_truth_or_consequences_CO9-3" id="co_truth_or_consequences_CO9-3"><img alt="3" src="assets/3.png"/></a>
+│   ├── CACHEDIR.TAG
+│   ├── debug
+│   └── tmp
+└── tests <a class="co" href="#callout_truth_or_consequences_CO9-4" id="co_truth_or_consequences_CO9-4"><img alt="4" src="assets/4.png"/></a>
+    └── cli.rs</pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_truth_or_consequences_CO9-1" id="callout_truth_or_consequences_CO9-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <a href="https://oreil.ly/81q3a"><em>Cargo.lock</em> file</a> records the exact versions of the dependencies used to build your program. You should not edit this file.</p></dd>
+<dt><a class="co" href="#co_truth_or_consequences_CO9-2" id="callout_truth_or_consequences_CO9-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <em>src</em> directory is for the Rust source code files to build the program.</p></dd>
+<dt><a class="co" href="#co_truth_or_consequences_CO9-3" id="callout_truth_or_consequences_CO9-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>The <em>target</em> directory holds the build artifacts.</p></dd>
+<dt><a class="co" href="#co_truth_or_consequences_CO9-4" id="callout_truth_or_consequences_CO9-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>The <em>tests</em> directory holds the Rust source code for testing the program.</p></dd>
+</dl>
+
+<p>All the tests in this book will use <code>assert!</code> to verify that some expectation is <code>true</code>, or <a href="https://oreil.ly/P6Bfw"><code>assert_eq!</code></a> to verify that something is an expected value.<a data-primary="assert_eq! macro" data-type="indexterm" id="id255"/><a data-primary="true and false values" data-type="indexterm" id="id256"/><a data-primary="cargo test command" data-type="indexterm" id="id257"/>
+Since this test evaluates the literal value <code>true</code>, it will always succeed.
+To see this test in action, execute <strong><code>cargo test</code></strong>.
+You should see these lines among the output:</p>
+
+<pre data-type="programlisting">running 1 test
+test works ... ok</pre>
+
+<p class="pagebreak-before">To observe a <a data-primary="false values" data-type="indexterm" id="id258"/>failing test, change <code>true</code> to <code>false</code> in the <em>tests/cli.rs</em> file:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="k">fn</code><code> </code><code class="nf">works</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="fm">assert!</code><code class="p">(</code><strong><code class="kc">false</code></strong><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="p">}</code></pre>
+
+<p>Among the output, you should see the following failed test:</p>
+
+<pre data-type="programlisting">running 1 test
+test works ... FAILED</pre>
+<div data-type="tip"><h6>Tip</h6>
+<p>You can have as many <code>assert!</code> and <code>assert_eq!</code> calls in a test function as you like. At the first failure of one of them, the whole test fails.</p>
+</div>
+
+<p>Now, let’s create a more useful test that executes a command and checks the result.<a data-primary="ls utility" data-type="indexterm" id="id259"/>
+The <code>ls</code> command works on both Unix and Windows PowerShell, so we’ll start with that.
+Replace the contents of <em>tests/cli.rs</em> with the following code:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">use</code><code class="w"> </code><code class="n">std</code><code>::</code><code class="n">process</code><code>::</code><code class="n">Command</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_truth_or_consequences_CO10-1" id="co_truth_or_consequences_CO10-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+
+</code><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="k">fn</code><code> </code><code class="nf">runs</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">cmd</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">ls</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_truth_or_consequences_CO10-2" id="co_truth_or_consequences_CO10-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="n">res</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">cmd</code><code class="p">.</code><code class="n">output</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_truth_or_consequences_CO10-3" id="co_truth_or_consequences_CO10-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+    </code><code class="fm">assert!</code><code class="p">(</code><code class="n">res</code><code class="p">.</code><code class="n">is_ok</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_truth_or_consequences_CO10-4" id="co_truth_or_consequences_CO10-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_truth_or_consequences_CO10-1" id="callout_truth_or_consequences_CO10-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Import <a href="https://oreil.ly/ErqAX"><code>std::process::Command</code></a>. The <code>std</code> tells us this is in the <em>standard</em> library and is Rust code that is so universally useful it is included with the language.<a data-primary="standard (std) libraries" data-type="indexterm" id="id260"/></p></dd>
+<dt><a class="co" href="#co_truth_or_consequences_CO10-2" id="callout_truth_or_consequences_CO10-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Create a new <code>Command</code> to run <code>ls</code>. The <a href="https://oreil.ly/cYjVT"><code>let</code> keyword</a> will bind a value to a variable. The <a href="https://oreil.ly/SH6Qr"><code>mut</code> keyword</a> will make this variable <em>mutable</em> so that it can change.<a data-primary="let keyword" data-type="indexterm" id="id261"/><a data-primary="mut (mutable) keyword" data-type="indexterm" id="id262"/><a data-primary="variables (Rust)" data-type="indexterm" id="id263"/></p></dd>
+<dt><a class="co" href="#co_truth_or_consequences_CO10-3" id="callout_truth_or_consequences_CO10-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Run the command and capture the output, which will be a <a href="https://oreil.ly/EYxds"><code>Result</code></a>.</p></dd>
+<dt><a class="co" href="#co_truth_or_consequences_CO10-4" id="callout_truth_or_consequences_CO10-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Verify that the result is an <code>Ok</code> variant, indicating the action succeeded.</p></dd>
+</dl>
+<div class="pagebreak-before" data-type="tip"><h6>Tip</h6>
+<p>By default, Rust variables are immutable, meaning their values cannot be changed.<a data-primary="immutability of Rust variables" data-type="indexterm" id="id264"/></p>
+</div>
+
+<p>Run <strong><code>cargo test</code></strong> and verify that you see a passing test among all the output:</p>
+
+<pre data-type="programlisting">running 1 test
+test runs ... ok</pre>
+
+<p>Update <em>tests/cli.rs</em> with the following <a data-primary="runs function" data-type="indexterm" id="id265"/>code so that the <code>runs</code> function executes <code>hello</code> instead of <code>ls</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">use</code><code class="w"> </code><code class="n">std</code><code>::</code><code class="n">process</code><code>::</code><code class="n">Command</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="k">fn</code><code> </code><code class="nf">runs</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">cmd</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code>::</code><code class="n">new</code><code class="p">(</code><strong><code class="s">"</code><code class="s">hello</code><code class="s">"</code></strong><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">res</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">cmd</code><code class="p">.</code><code class="n">output</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="fm">assert!</code><code class="p">(</code><code class="n">res</code><code class="p">.</code><code class="n">is_ok</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="p">}</code></pre>
+
+<p>Run the test again and note that it fails because the <code>hello</code> program can’t be found:</p>
+
+<pre data-type="programlisting">running 1 test
+test runs ... FAILED</pre>
+
+<p>Recall that the binary exists in <em>target/debug/hello</em>.
+If you try to execute <code>hello</code> on the command line, you will see that the program can’t be found:</p>
+
+<pre data-type="programlisting">$ hello
+-bash: hello: command not found</pre>
+
+<p>When you execute any command, your operating system will look in a predefined set of directories for something by that name.<sup><a data-type="noteref" href="ch01.html#id266" id="id266-marker">1</a></sup>
+On Unix-type systems, you can inspect the <code>PATH</code> environment variable of your shell to see this list of directories, which are delimited by colons.<a data-primary="tr (translate characters) command" data-type="indexterm" id="id267"/><a data-primary="$PATH environment variable" data-primary-sortas="PATH" data-type="indexterm" id="id268"/><a data-primary="$env:Path variable (Windows)" data-primary-sortas="env:Path" data-type="indexterm" id="id269"/>
+(On Windows, this is <code>$env:Path</code>.)
+I can use <code>tr</code> (<em>translate characters</em>) to replace the colons (<code>:</code>) with newlines (<code>\n</code>) to show you my <code>PATH</code>:</p>
+
+<pre data-type="programlisting">$ echo $PATH | tr : '\n' <a class="co" href="#callout_truth_or_consequences_CO11-1" id="co_truth_or_consequences_CO11-1"><img alt="1" src="assets/1.png"/></a>
+/opt/homebrew/bin
+/Users/kyclark/.cargo/bin
+/Users/kyclark/.local/bin
+/usr/local/bin
+/usr/bin
+/bin
+/usr/sbin
+/sbin</pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_truth_or_consequences_CO11-1" id="callout_truth_or_consequences_CO11-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p><code>$PATH</code> tells <code>bash</code> to interpolate the variable. Use a pipe (<code>|</code>) to feed this to <code>tr</code>.<a data-primary="| (pipe) symbol" data-secondary="piping commands" data-type="indexterm" id="id270"/></p></dd>
+</dl>
+
+<p>Even if I change into the <em>target/debug</em> directory, <code>hello</code> still can’t be found due to the aforementioned security restrictions that exclude the current working directory from my <code>PATH</code>:</p>
+
+<pre data-type="programlisting">$ cd target/debug/
+$ hello
+-bash: hello: command not found</pre>
+
+<p>I must explicitly reference the current working directory for the program to run:</p>
+
+<pre data-type="programlisting">$ ./hello
+Hello, world!</pre>
+
+<p>Next, I need to find a way to execute binaries that exist only in the current crate.</p>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Adding Project Dependencies" data-type="sect2"><div class="sect2" id="id7">
+<h2>Adding Project Dependencies</h2>
+
+<p>Currently, the <code>hello</code> program exists only in the <em>target/debug</em> directory.<a data-primary="Rust projects" data-secondary="adding project dependency" data-type="indexterm" id="id271"/><a data-primary="dependencies" data-secondary="adding project dependency" data-type="indexterm" id="id272"/>
+If I copy it to any of the directories in my <code>PATH</code> (note that I include the <em>$HOME/.local/bin</em> directory for private programs), I can execute it and run the test successfully.
+But I don’t want to copy my program to test it; rather, I want to test the program that lives in the current crate.<a data-primary="assert_cmd crate" data-type="indexterm" id="id273"/>
+I can use the crate <a href="https://oreil.ly/Lw-gr"><code>assert_cmd</code></a> to find the program in my crate directory.<a data-primary="Cargo tool" data-secondary="adding a project dependency" data-type="indexterm" id="id274"/>
+I will also add the crate <a href="https://oreil.ly/VqD62"><code>pretty_assertions</code></a><a data-primary="pretty_assertions crate" data-type="indexterm" id="id275"/> to use a version of the <code>assert_eq!</code> macro that shows differences between two strings better than the default version.<a data-primary="assert_eq! macro" data-type="indexterm" id="id276"/></p>
+
+<p>I first need to add these as <a href="https://oreil.ly/pezix">development dependencies</a> to <em>Cargo.toml</em>.<a data-primary="development dependencies" data-type="indexterm" id="id277"/>
+This tells Cargo that I need these crates only for testing and benchmarking:</p>
+
+<pre data-code-language="toml" data-type="programlisting"><code class="k">[</code><code class="k">package</code><code class="k">]</code><code class="w">
+</code><code class="n">name</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">hello</code><code class="s2">"</code><code class="w">
+</code><code class="n">version</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">0.1.0</code><code class="s2">"</code><code class="w">
+</code><code class="n">edition</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">2021</code><code class="s2">"</code><code class="w">
+
+</code><code class="k">[</code><code class="k">dependencies</code><code class="k">]</code><code class="w">
+
+</code><strong><code class="k">[</code><code class="k">dev-dependencies</code><code class="k">]</code></strong><code class="w">
+</code><strong><code class="n">assert_cmd</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">2.0.13</code><code class="s2">"</code></strong><code class="w">
+</code><strong><code class="n">pretty_assertions</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">1.4.0</code><code class="s2">"</code></strong></pre>
+
+<p>I can then use <code>assert_cmd</code> to create a <code>Command</code> that looks in the Cargo binary directories.<a data-primary="Command type" data-secondary="creating" data-type="indexterm" id="id278"/>
+The following test does not verify that the program produces the correct output, only that it appears to succeed.<a data-primary="assert_cmd::Command" data-type="indexterm" id="id279"/>
+Update your <em>tests/cli.rs</em> with the following code so that the <code>runs</code> function will use <code>assert_cmd::Command</code> instead of <code>std::process::Command</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">use</code><code class="w"> </code><code class="n">assert_cmd</code><code>::</code><code class="n">Command</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_truth_or_consequences_CO12-1" id="co_truth_or_consequences_CO12-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+
+</code><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="k">fn</code><code> </code><code class="nf">runs</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">cmd</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code>::</code><code class="n">cargo_bin</code><code class="p">(</code><code class="s">"</code><code class="s">hello</code><code class="s">"</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_truth_or_consequences_CO12-2" id="co_truth_or_consequences_CO12-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="n">cmd</code><code class="p">.</code><code class="n">assert</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">success</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_truth_or_consequences_CO12-3" id="co_truth_or_consequences_CO12-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_truth_or_consequences_CO12-1" id="callout_truth_or_consequences_CO12-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Import <code>assert_cmd::Command</code>.</p></dd>
+<dt><a class="co" href="#co_truth_or_consequences_CO12-2" id="callout_truth_or_consequences_CO12-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Create a <code>Command</code> to run <code>hello</code> in the current crate. <a data-primary="Result type" data-type="indexterm" id="id280"/>This returns a <code>Result</code>, and the code calls <a href="https://oreil.ly/SV6w1"><code>Result::unwrap</code></a> because the binary should be found.<a data-primary="Result::unwrap function" data-type="indexterm" id="id281"/> If it isn’t, then <code>unwrap</code> will cause a panic and the test will fail, which is a good thing.</p></dd>
+<dt><a class="co" href="#co_truth_or_consequences_CO12-3" id="callout_truth_or_consequences_CO12-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Use <a href="https://oreil.ly/b2aIV"><code>Assert::success</code></a> to ensure the command succeeded.</p></dd>
+</dl>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>I’ll have more to say about the <code>Result</code> type in later chapters. For now, just know that this is a way to model something that could succeed or fail for which there are two possible variants, <code>Ok</code> and <code>Err</code>, respectively.</p>
+</div>
+
+<p>Run <strong><code>cargo test</code></strong> again and verify that you now see a passing test:</p>
+
+<pre data-type="programlisting">running 1 test
+test runs ... ok</pre>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Understanding Program Exit Values" data-type="sect2"><div class="sect2" id="id8">
+<h2>Understanding Program Exit Values</h2>
+
+<p>What does it mean for a program to run successfully?<a data-primary="program exit values" data-type="indexterm" id="id282"/><a data-primary="exit values (program)" data-type="indexterm" id="id283"/>
+Command-line programs should report a final exit status to the operating system to indicate success or failure.
+The Portable Operating System Interface (POSIX) standards dictate that the standard exit code is 0 to indicate success (think <em>zero</em> errors) and any number from 1 to 255 otherwise.<a data-primary="POSIX (Portable Operating System Interface) standards" data-type="indexterm" id="id284"/>
+I can show you this using the <code>bash</code> shell and the <code>true</code> command.
+Here <a data-primary="true command" data-type="indexterm" id="id285"/>is the manual page from <strong><code>man true</code></strong> for the version that exists on macOS:</p>
+
+<pre class="widows_orphans_44" data-type="programlisting">TRUE(1)                   BSD General Commands Manual                  TRUE(1)
+
+NAME
+     true -- Return true value.
+
+SYNOPSIS
+     true
+
+DESCRIPTION
+     The true utility always returns with exit code zero.
+
+SEE ALSO
+     csh(1), sh(1), false(1)
+
+STANDARDS
+     The true utility conforms to IEEE Std 1003.2-1992 (''POSIX.2'').
+
+BSD                              June 27, 1991                             BSD</pre>
+
+<p>As the documentation notes, this program does nothing except return the exit code zero.<a data-primary="$? bash variable" data-type="indexterm" id="id286"/>
+If I run <strong><code>true</code></strong>, it produces no output, but I can inspect the <code>bash</code> variable <code>$?</code> to see the exit status of the most recent command:</p>
+
+<pre data-type="programlisting">$ true
+$ echo $?
+0</pre>
+
+<p>The <code>false</code> command is a corollary in that it <a data-primary="false command" data-type="indexterm" id="id287"/>always exits with a nonzero exit code:</p>
+
+<pre data-type="programlisting">$ false
+$ echo $?
+1</pre>
+
+<p>All the programs you will write in this book will be expected to return zero when they terminate normally and a nonzero value when there is an error.
+You can write versions of <code>true</code> and <code>false</code> to see this.
+Start by creating a <em>src/bin</em> directory using <strong><code>mkdir src/bin</code></strong>, then create <em>src/bin/true.rs</em> with the following contents:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">main</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="n">std</code><code>::</code><code class="n">process</code><code>::</code><code class="n">exit</code><code class="p">(</code><code class="mi">0</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_truth_or_consequences_CO13-1" id="co_truth_or_consequences_CO13-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_truth_or_consequences_CO13-1" id="callout_truth_or_consequences_CO13-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Use the <a href="https://oreil.ly/hrM3X"><code>std::process::exit</code> function</a> to exit the program with the value zero.<a data-primary="std::process::exit function" data-type="indexterm" id="id288"/></p></dd>
+</dl>
+
+<p>Your <em>src</em> directory should now have the following structure:</p>
+
+<pre data-type="programlisting">$ tree src/
+src/
+├── bin
+│   └── true.rs
+└── main.rs</pre>
+
+<p>Run the program and manually check the exit value:</p>
+
+<pre data-type="programlisting">$ cargo run --quiet --bin true <a class="co" href="#callout_truth_or_consequences_CO14-1" id="co_truth_or_consequences_CO14-1"><img alt="1" src="assets/1.png"/></a>
+$ echo $?
+0</pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_truth_or_consequences_CO14-1" id="callout_truth_or_consequences_CO14-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <code>--bin</code> option is the name of the binary target to run.<a data-primary="cargo run command" data-secondary="--bin option" data-type="indexterm" id="id289"/></p></dd>
+</dl>
+
+<p>Add the following test to <em>tests/cli.rs</em> to ensure it works correctly.
+It does not matter if you add this before or after the existing <code>runs</code> function:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[test]</code><code class="w"/>
+<code class="k">fn</code> <code class="nf">true_ok</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">cmd</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code>::<code class="n">cargo_bin</code><code class="p">(</code><code class="s">"true"</code><code class="p">).</code><code class="n">unwrap</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="n">cmd</code><code class="p">.</code><code class="n">assert</code><code class="p">().</code><code class="n">success</code><code class="p">();</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>If you run <strong><code>cargo test</code></strong>, you should see the results of the two tests:</p>
+
+<pre data-type="programlisting">running 2 tests
+test true_ok ... ok
+test runs ... ok</pre>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>The tests are not necessarily run in the same order they are declared in the code.<a data-primary="concurrent code" data-type="indexterm" id="id290"/> This is because Rust is a safe language for writing <em>concurrent</em> code, which means code can be run across multiple threads. The testing takes advantage of this concurrency to run many tests in parallel, so the test results may appear in a different order each time you run them. This is a feature, not a bug. If you would like to run the tests in order, you can run them on a single thread via <strong><code>cargo test -- --test-threads=1</code></strong>.</p>
+</div>
+
+<p>Rust programs will exit with the value zero by default.
+Recall that <em>src/main.rs</em> doesn’t explicitly call <code>std::process::exit</code>.
+This means that the <code>true</code> program can do nothing at all.
+Want to be sure?
+Change <em>src/bin/true.rs</em> to the following:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{}</code><code class="w"/></pre>
+
+<p>Run the test suite and verify it still passes.
+Next, let’s write a version of the <code>false</code> program with the following source code in <em>src/bin/false.rs</em>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">main</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="n">std</code><code>::</code><code class="n">process</code><code>::</code><code class="n">exit</code><code class="p">(</code><code class="mi">1</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_truth_or_consequences_CO15-1" id="co_truth_or_consequences_CO15-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_truth_or_consequences_CO15-1" id="callout_truth_or_consequences_CO15-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Exit with any value between 1 and 255 to indicate an error.</p></dd>
+</dl>
+
+<p>Manually verify that the exit value of the program is not zero:</p>
+
+<pre data-type="programlisting">$ cargo run --quiet --bin false
+$ echo $?
+1</pre>
+
+<p>Then add this test to <em>tests/cli.rs</em> to verify that the program reports a failure when run:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="k">fn</code><code> </code><code class="nf">false_not_ok</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">cmd</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code>::</code><code class="n">cargo_bin</code><code class="p">(</code><code class="s">"</code><code class="s">false</code><code class="s">"</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="n">cmd</code><code class="p">.</code><code class="n">assert</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">failure</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_truth_or_consequences_CO16-1" id="co_truth_or_consequences_CO16-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_truth_or_consequences_CO16-1" id="callout_truth_or_consequences_CO16-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Use the <a href="https://oreil.ly/WLwK8"><code>Assert::failure</code> function</a> to ensure the command failed.<a data-primary="Assert::failure function" data-type="indexterm" id="id291"/></p></dd>
+</dl>
+
+<p>Run <strong><code>cargo test</code></strong> to verify that the programs all work as expected:</p>
+
+<pre data-type="programlisting">running 3 tests
+test runs ... ok
+test true_ok ... ok
+test false_not_ok ... ok</pre>
+
+<p>Another way to write the <code>false</code> program uses <a href="https://oreil.ly/HPsKS"><code>std::process::abort</code></a>. <a data-primary="std::process::abort function" data-type="indexterm" id="id292"/>Change <em>src/bin​/⁠false.rs</em> to the following:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">std</code>::<code class="n">process</code>::<code class="n">abort</code><code class="p">();</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Again, run the test suite to ensure that the program still works as expected.</p>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Testing the Program Output" data-type="sect2"><div class="sect2" id="id9">
+<h2>Testing the Program Output</h2>
+
+<p>While it’s nice to know that my <code>hello</code> program exits correctly, I’d like to ensure it actually prints the correct output to <code>STDOUT</code>, which is the standard place for output to appear and is usually the console.<a data-primary="Rust programs" data-secondary="testing program output" data-type="indexterm" id="id293"/>
+Update your <code>runs</code> function in <em>tests/cli.rs</em> to the 
+<span class="keep-together">following:</span></p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">use</code><code class="w"> </code><code class="n">assert_cmd</code><code>::</code><code class="n">Command</code><code class="p">;</code><code class="w">
+</code><code class="k">use</code><code class="w"> </code><code class="n">pretty_assertions</code><code>::</code><code class="n">assert_eq</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_truth_or_consequences_CO17-1" id="co_truth_or_consequences_CO17-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+
+</code><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="k">fn</code><code> </code><code class="nf">runs</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">cmd</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code>::</code><code class="n">cargo_bin</code><code class="p">(</code><code class="s">"</code><code class="s">hello</code><code class="s">"</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">cmd</code><code class="p">.</code><code class="n">output</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"</code><code class="s">fail</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_truth_or_consequences_CO17-2" id="co_truth_or_consequences_CO17-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="fm">assert!</code><code class="p">(</code><code class="n">output</code><code class="p">.</code><code class="n">status</code><code class="p">.</code><code class="n">success</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_truth_or_consequences_CO17-3" id="co_truth_or_consequences_CO17-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="n">stdout</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">String</code><code>::</code><code class="n">from_utf8</code><code class="p">(</code><code class="n">output</code><code class="p">.</code><code class="n">stdout</code><code class="p">)</code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"</code><code class="s">invalid UTF-8</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_truth_or_consequences_CO17-4" id="co_truth_or_consequences_CO17-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">stdout</code><code class="p">,</code><code class="w"> </code><code class="s">"</code><code class="s">Hello, world!</code><code class="se">\n</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_truth_or_consequences_CO17-5" id="co_truth_or_consequences_CO17-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_truth_or_consequences_CO17-1" id="callout_truth_or_consequences_CO17-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Import the <code>pretty_assertions::assert_eq</code> macro for comparing values instead of the standard Rust version.<a data-primary="pretty_assertions::assert_eq macro" data-type="indexterm" id="id294"/></p></dd>
+<dt><a class="co" href="#co_truth_or_consequences_CO17-2" id="callout_truth_or_consequences_CO17-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Call <a href="https://oreil.ly/29jfF"><code>Command::output</code></a> to execute the <code>hello</code> command. Use <a href="https://oreil.ly/InBqs"><code>Result::expect</code></a> to get the output of the command or die with the message “fail.”</p></dd>
+<dt><a class="co" href="#co_truth_or_consequences_CO17-3" id="callout_truth_or_consequences_CO17-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Verify that the command succeeded.<a data-primary="Result::expect function" data-type="indexterm" id="id295"/><a data-primary="Command::output method" data-type="indexterm" id="id296"/><a data-primary="assert_eq! macro" data-type="indexterm" id="id297"/></p></dd>
+<dt><a class="co" href="#co_truth_or_consequences_CO17-4" id="callout_truth_or_consequences_CO17-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Convert the output of the program to UTF-8, which I’ll discuss more in <a data-type="xref" href="ch04.html#ch04">Chapter 4</a>.</p></dd>
+<dt><a class="co" href="#co_truth_or_consequences_CO17-5" id="callout_truth_or_consequences_CO17-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>Compare the output from the program to an expected value. Note that this will use the <code>pretty_assertions</code> version of the <code>assert_eq</code> macro.</p></dd>
+</dl>
+
+<p>Run the tests and verify that <code>hello</code> does, indeed, work correctly.
+Next, change <em>src​/⁠main.rs</em> to add some more exclamation points:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"Hello, world!!!"</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Run the tests again to observe a failing test:</p>
+
+<pre data-type="programlisting">running 3 tests
+test true_ok ... ok
+test false_not_ok ... ok
+test runs ... FAILED
+
+failures:
+
+---- runs stdout ----
+thread <em>runs</em> panicked at tests/cli.rs:10:5:
+assertion failed: `(left == right)`
+
+Diff &lt; left / right &gt; :
+&lt;Hello, world!<strong>!!</strong>
+&gt;Hello, world!</pre>
+
+<p>The preceding test result is trying very hard to show you how the <em>expected</em> output (the “right”) differs from the <em>actual</em> output (the “left”).<a data-primary="expected output versus actual output" data-type="indexterm" id="id298"/><a data-primary="actual output versus expected output" data-type="indexterm" id="id299"/>
+The terminal output even includes red and green text and highlighted text that cannot be reproduced here.
+While this is a trivial program, I hope you can see the value in automatically checking all aspects of the programs we write.</p>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Exit Values Make Programs Composable" data-type="sect2"><div class="sect2" id="id10">
+<h2>Exit Values Make Programs Composable</h2>
+
+<p>Correctly reporting the exit status is a characteristic of well-behaved command-line programs.<a data-primary="composability, exit values making programs composable" data-type="indexterm" id="id300"/><a data-primary="exit values (program)" data-secondary="making programs composable" data-type="indexterm" id="id301"/>
+The exit value is important because a failed process used in conjunction with another process should cause the combination to fail.
+For instance, I can use the logical <em>and</em> operator <code>&amp;&amp;</code> in <code>bash</code> to chain the two commands <code>true</code> and <code>ls</code>.<a data-primary="&amp;&amp; (logical and) operator" data-type="indexterm" id="id302"/><a data-primary="true command" data-secondary="chaining to ls command" data-type="indexterm" id="id303"/><a data-primary="ls utility" data-secondary="chaining to true command" data-type="indexterm" id="id304"/>
+Only if the first process reports success will the second process run:</p>
+
+<pre data-type="programlisting">$ true &amp;&amp; ls
+Cargo.lock  Cargo.toml  src/        target/     tests/</pre>
+
+<p>If instead I execute <strong><code>false &amp;&amp; ls</code></strong>, the result is that the first process fails and <code>ls</code> never runs.<a data-primary="ls utility" data-secondary="chaining to false command" data-type="indexterm" id="id305"/><a data-primary="false command" data-secondary="chaining to ls command" data-type="indexterm" id="id306"/>
+Additionally, the exit status of the whole command is nonzero:</p>
+
+<pre data-type="programlisting">$ false &amp;&amp; ls
+$ echo $?
+1</pre>
+
+<p>Ensuring that command-line programs correctly report errors makes them composable with other programs.
+It’s extremely common in Unix environments to combine many small commands to make ad hoc programs on the command line.
+If a program encounters an error but fails to report it to the operating system, then the results could be incorrect.
+It’s far better for a program to abort so that the underlying problems can be fixed.<a data-primary="testing" data-secondary="writing and running integration tests" data-startref="ix_tstint" data-type="indexterm" id="id307"/><a data-primary="integration tests" data-secondary="writing and running" data-startref="ix_inttst" data-type="indexterm" id="id308"/></p>
+</div></section>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Summary" data-type="sect1"><div class="sect1" id="id11">
+<h1>Summary</h1>
+
+<p>This chapter introduced you to some key ideas about organizing a Rust project and some basic ideas about command-line programs. To recap:</p>
+
+<ul>
+<li>
+<p>The Rust compiler <code>rustc</code> compiles Rust source code into a machine-executable file on Windows, macOS, and Linux.</p>
+</li>
+<li>
+<p>The Cargo tool will create a new Rust project as well as compile, run, and test the code.</p>
+</li>
+<li>
+<p>By default, <strong><code>cargo new</code></strong> creates a new Rust program that prints “Hello, world!”</p>
+</li>
+<li>
+<p>Command-line tools like <code>ls</code>, <code>cd</code>, <code>mkdir</code>, and <code>rm</code> often accept command-line arguments like file or directory names as well as options like <code>-f</code> or <code>-p</code>.</p>
+</li>
+<li>
+<p>POSIX-compatible programs should exit with a value of 0 to indicate success and any value between 1 and 255 to indicate an error.</p>
+</li>
+<li>
+<p>You learned to add crate dependencies to <em>Cargo.toml</em> and use the crates in your code.</p>
+</li>
+<li>
+<p>You created a <em>tests</em> directory to organize testing code, and you used <code>#[test]</code> to mark functions that should be executed as tests.</p>
+</li>
+<li>
+<p>You learned how to test a program’s exit status as well as how to check the text printed to <code>STDOUT</code>.</p>
+</li>
+<li>
+<p>You learned how to write, run, and test alternate binaries in a Cargo project by creating source code files in the <em>src/bin</em> directory.</p>
+</li>
+<li>
+<p>You wrote your implementations of the <code>true</code> and <code>false</code> programs along with tests to verify that they succeed and fail as expected. You saw that by default a Rust program will exit with the value zero and that the <code>std::process::exit</code> function can be used to explicitly exit with a given code. Additionally, the <code>std::process::abort</code> function can be used to exit with a nonzero error code.<a data-primary="Rust programs" data-startref="ix_Rstprg" data-type="indexterm" id="id309"/><a data-primary="command-line programs" data-startref="ix_cmdlnpr" data-type="indexterm" id="id310"/></p>
+</li>
+</ul>
+
+<p>In the next chapter, I’ll show you how to write a program that uses command-line arguments to alter the output.</p>
+</div></section>
+<div data-type="footnotes"><p data-type="footnote" id="id266"><sup><a href="ch01.html#id266-marker">1</a></sup> Shell aliases and functions can also be executed like commands, but I’m only talking about finding programs to run at this point.</p></div></div></section></body></html>

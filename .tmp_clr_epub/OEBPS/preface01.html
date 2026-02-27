@@ -1,0 +1,388 @@
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Preface</title><link href="epub.css" rel="stylesheet" type="text/css"/>
+<meta content="urn:uuid:e80a1ec8-ed8e-40f7-ba3d-26a647960341" name="Adept.expected.resource"/></head><body data-type="book"><section data-pdf-bookmark="Preface" data-type="preface" epub:type="preface"><div class="preface" id="id189">
+<h1>Preface</h1>
+
+<blockquote>
+<p>I already know the ending \ It’s the part that makes your face implode</p>
+<p data-type="attribution">They Might Be Giants, “Experimental Film” (2004)</p>
+</blockquote>
+
+<p>To become proficient at a language, you must write many programs in that language.
+I remember back when this new language called “JavaScript” came out in 1995.
+I decided to learn it, so I bought a big, thick reference book and read it cover to cover.
+The book was well written and thoroughly explained the language in great detail, from strings to lists and objects.
+But when I finished the book, I still couldn’t write JavaScript to save my life.
+Without applying this knowledge by writing programs, I learned very little.
+I’ve since improved at learning how to learn a language, which is perhaps the most valuable skill you can develop as a programmer.
+For me, that means rewriting programs I already know, like tic-tac-toe.</p>
+
+<p>Rust is the new kid on the block now, and perhaps you’ve picked up this book to see what it’s all about.
+This book is not a reference on the language.
+Those already exist, and they’re quite good.
+Instead, I’ve written a book that challenges you to write many small programs that probably will be familiar to you.
+Rust is reputed to have a fairly steep learning curve, but I believe this approach will help you quickly become productive with the language.</p>
+
+<p>Specifically, you’re going to write Rust versions of core Unix command-line tools such as <code>head</code> and <code>cal</code>.
+This will teach you more about the tools and why they are so wildly useful while also providing the context to use Rust concepts like strings, vectors, and filehandles.
+If you are not familiar with Unix or command-line programming, then you will learn about concepts like program exit values, command-line arguments, output redirection, pipes to connect one program’s output (<code>STDOUT</code> or <em>standard out</em>) to the input of another program (<code>STDIN</code> or <em>standard in</em>), and how to use <code>STDERR</code> (<em>standard error</em>) to segregate error messages from other output.
+The programs you write will reveal patterns that you’ll be able to use when you create your own Rust programs—patterns like validating parameters, reading and writing files, parsing text, and using regular expressions.
+Many of these tools and concepts don’t even exist on Windows, so users of that platform will create decent versions of several core Unix programs.</p>
+
+
+
+
+
+
+<section data-pdf-bookmark="What Is Rust (and Why Is Everybody Talkin’ About It)?" data-type="sect1"><div class="sect1" id="id193">
+<h1>What Is Rust (and Why Is Everybody Talkin’ About It)?</h1>
+
+<p><a href="https://www.rust-lang.org">Rust</a> is “a language empowering everyone to build reliable and efficient software.”
+Rust was created by Graydon Hoare and many others around 2006, while Hoare was working at Mozilla Research.
+It gained enough interest and users that by 2010 Mozilla had sponsored the development effort.
+In the <a href="https://survey.stackoverflow.co/2023/">2023 Stack Overflow Developer Survey</a>, over 90,000 developers ranked Rust as the “most loved” language for the eighth year running.</p>
+
+<figure><div class="figure" id="fig_0.1">
+<img alt="clru 0001" src="assets/clru_0001.png"/>
+<h6><span class="label">Figure P-1. </span>Here is a logo I made from an old Rush logo. As a kid playing the drums in the 1980s, I listened to a lot of Rush. Anyway, Rust is cool, and this logo proves it.</h6>
+</div></figure>
+
+<p>The language is syntactically similar to C, so you’ll find things like <code>for</code> loops, semicolon-terminated statements, and curly braces denoting block structures.
+Crucially, Rust can guarantee memory safety through the use of a <em>borrow checker</em> that tracks which part of a program has safe access to different parts of memory.
+This safety does not come at the expense of performance, though.
+Rust programs compile to native binaries and often match or beat the speed of programs written in C or C++.
+For this reason, Rust is often described as a systems programming language that has been designed for performance and safety.</p>
+
+<p>Rust is a <em>statically typed</em> language like C/C++ or Java.
+This means that a variable can never change its type, such as from a number to a string, for example.
+You don’t always have to declare a variable’s type in Rust because the compiler can often figure it out from the context.
+This is in contrast to <em>dynamically typed</em> languages like Perl, JavaScript, or Python, where a variable can change its type at any point in the program, like from a string to a filehandle.</p>
+
+<p>Rust is <em>not</em> an object-oriented (OO) language like C++ or Java, as there are no classes or inheritance in Rust.
+Instead, Rust uses a <code>struct</code> (structure) to represent complex data types and <em>traits</em> to describe how types can behave.
+These structures can have methods, can mutate the internal state of the data, and might even be called <em>objects</em> in the documentation, but they are not objects in the formal sense of the word.</p>
+
+<p>Rust has borrowed many exciting concepts from other languages and programming paradigms, including purely functional languages such as Haskell.
+For instance, variables in Rust are <em>immutable</em> by default, meaning they can’t be changed from their initial value; you have to specifically inform the compiler that they are mutable.
+Functions are also <em>first-class</em> values, which means they can be passed as arguments to other so-called <em>higher-order functions</em>.
+Most exciting to my mind is Rust’s use of <em>enumerated</em> and <em>sum</em> types, also called <em>algebraic data types</em> (ADTs), which allow you to represent, for instance, that a function can return a <code>Result</code> that can be either an <code>Ok</code> containing some value or an <code>Err</code> containing some other kind of value.
+Any code that deals with these values must handle all possibilities, so you’re never at risk of forgetting to handle an error that could unexpectedly crash your program.</p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Who Should Read This Book" data-type="sect1"><div class="sect1" id="id194">
+<h1>Who Should Read This Book</h1>
+
+<p>You should read this book if you want to learn the basics of the Rust language by writing practical command-line programs that address common programming tasks.
+I imagine most readers will already know some basics about programming from at least one other language.
+For instance, you probably know about creating variables, using loops to repeat an action, creating functions, and so forth.
+I imagine that Rust might be a difficult first language as it uses types extensively and requires understanding some fine details about computer memory.
+I also assume you have at least some idea of how to use the command line and know some basic Unix commands, like how to create, remove, and change into directories.
+This book will focus on the practical side of things, showing you what you need to know to get things done.
+I’ll leave the nitty-gritty to more comprehensive books such as <a class="orm:hideurl" href="https://oreil.ly/DUQqG"><em>Programming Rust</em>, 2nd ed.</a>, by Jim Blandy, Jason Orendorff, and Leonora F. S. Tindall (O’Reilly); <a class="orm:hideurl" href="https://oreil.ly/HZWyF"><em>The Rust Programming Language</em></a> by Steve Klabnik and Carol Nichols (No Starch Press), and <a href="https://oreil.ly/Izwlo">Rust In Action</a> by Tim McNamara (Manning).
+I highly recommend that you read one or more of those along with this book to dig deeper into the language itself.</p>
+
+<p>You should also read this book if you’d like to see how to write and run tests to check Rust programs.
+I’m an advocate for using tests not only to verify that programs work properly but also as an aid to breaking a problem into small, understandable, testable parts.
+I will demonstrate how to use tests that I have provided for you as well as how to use <em>test-driven development</em> (TDD), where you write tests first and then write code that passes those tests.
+I hope that this book will show that the strictness of the Rust compiler combined with testing leads to better programs that are easier to maintain and modify.</p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Why You Should Learn Rust" data-type="sect1"><div class="sect1" id="id195">
+<h1>Why You Should Learn Rust</h1>
+
+<p>There are plenty of reasons to learn Rust.
+First, I find that Rust’s type checking prevents me from making many basic errors.
+My background is in more dynamically typed languages like Perl, Python, and JavaScript where there is little to no checking of types.
+The more I used statically typed languages like Rust, the more I realized that dynamically typed languages force much more work onto me, requiring me to verify my programs and write many more tests.
+I gradually came to feel that the Rust compiler, while very strict, was my dance partner and not my enemy.
+Granted, it’s a dance partner who will tell you every time you step on their toes or miss a cue, but that eventually makes you a better dancer, which is the goal after all.
+Generally speaking, when I get a Rust program to compile, it usually works as I intended.</p>
+
+<p>Second, it’s easy to share a Rust program with someone who doesn’t know Rust or is not a developer at all.
+If I write a Python program for a workmate, I must give them the Python source code to run and ensure they have the right version of Python and all the required modules to execute my code.
+In contrast, Rust programs are compiled directly into a machine-executable file.
+I can write and debug a program on my machine, build an executable for the architecture it needs to run on, and give my colleague a copy of the program.
+Assuming they have the correct architecture, they will not need to install Rust and can run the program directly.</p>
+
+<p>Third, I often build containers using Docker or Singularity to encapsulate workflows.
+I find that the containers for Rust programs are often orders of magnitude smaller than those for Python programs.
+For instance, a Docker container with the Python runtime may require several hundred MB.
+In contrast, I can build a bare-bones Linux virtual machine with a Rust binary that may only be tens of MB in size.
+Unless I really need some particular features of Python, such as machine learning or natural 
+<span class="keep-together">language processing</span> modules, I prefer to write in Rust and have smaller, leaner 
+<span class="keep-together">containers.</span></p>
+
+<p>Finally, I find that I’m extremely productive with Rust because of the rich ecosystem of available modules.
+I have found many useful Rust crates—which is what libraries are called in Rust—on <a class="orm:hideurl" href="https://crates.io"><em>crates.io</em></a>, and the documentation at <a class="orm:hideurl" href="https://docs.rs"><em>Docs.rs</em></a> is thorough and easy to navigate.</p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="The Coding Challenges" data-type="sect1"><div class="sect1" id="id196">
+<h1>The Coding Challenges</h1>
+
+<p>In this book, you will learn how to write and test Rust code by creating complete programs.
+Each chapter will show you how to start a program from scratch, add features, work through error messages, and test your logic.
+I don’t want you to passively read this book on the bus to work and put it away.
+You will learn the most by writing your own solutions, but I believe that even typing the source code I present will prove 
+<span class="keep-together">beneficial.</span></p>
+
+<p>The problems I’ve selected for this book hail from the Unix command-line <a href="https://oreil.ly/fYV82">coreutils</a>, because I expect these will already be quite familiar to many readers.
+For instance, I assume you’ve used <code>head</code> and <code>tail</code> to look at the first or last few lines of a file, but have you ever written your own versions of these programs?
+Other <a href="https://www.rustaceans.org">Rustaceans</a> (people who use Rust) have had the same idea, so there are plenty of <a href="https://oreil.ly/RmiBN">other Rust implementations</a> of these programs you can find on the internet.
+Beyond that, these are fairly small programs that each lend themselves to teaching a few skills.
+I’ve sequenced the projects so that they build upon one another, so it’s probably best if you work through the chapters in order.</p>
+
+<p>One reason I’ve chosen many of these programs is that they provide a sort of ground truth.
+While there are many flavors of Unix and many implementations of these programs, they usually all work the same and produce the same results.
+I use macOS for my development, which means I’m running mostly the BSD (Berkeley Standard Distribution) or <a href="https://www.gnu.org">GNU</a> (GNU’s Not Unix) variants of these programs.
+Generally speaking, the BSD versions predate the GNU versions and have fewer options.
+For each challenge program, I use a shell script to redirect the output from the original program into an output file.
+The goal is then to have the Rust programs create the same output for the same inputs.
+I’ve been careful to include files encoded on Windows as well as simple ASCII text mixed with Unicode characters to force my programs to deal with various ideas of line endings and characters in the same way as the original programs.</p>
+
+<p>For most of the challenges, I’ll implement only a subset of the original programs as they can get pretty complicated.
+I also have chosen to make a few small changes in the output from some of the programs so that they are easier to teach.
+Consider this to be like learning to play an instrument by playing along with a recording.
+You don’t have to play every note from the original version.
+The important thing is to learn common patterns like handling arguments and reading inputs so you can move on to writing your material.
+As a bonus challenge, try writing these programs in other languages so you can see how the solutions differ from Rust.</p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Getting Rust and the Code" data-type="sect1"><div class="sect1" id="id197">
+<h1>Getting Rust and the Code</h1>
+
+<p>To start, you’ll need to install Rust.
+One of my favorite parts about Rust is the ease of using the <code>rustup</code> tool for installing, upgrading, and managing Rust.
+It works equally well on Windows and Unix-type operating systems (OSs) like Linux and macOS.
+You will need to follow the <a href="https://oreil.ly/camNw">installation instructions</a> for your OS.
+If you have already installed <code>rustup</code>, you might want to run <strong><code>rustup update</code></strong> to get the latest version of the language and tools, as Rust updates about every six weeks.
+Execute <strong><code>rustup doc</code></strong> to read copious volumes of documentation.
+You can check your version of the <code>rustc</code> compiler with the following command:</p>
+
+<pre data-type="programlisting">$ rustc --version
+rustc 1.76.0 (07dca489a 2024-02-04)</pre>
+
+<p>All the tests, data, and solutions for the programs can be found in <a href="https://oreil.ly/pfhMC">the book’s GitHub repository</a>.
+You can use the <a href="https://git-scm.com">Git source code management tool</a> (which you may need to install) to copy this to your machine.
+The following command will create a new directory on your computer called <em>command-line-rust</em> with the contents of the book’s repository:</p>
+
+<pre data-type="programlisting">$ git clone https://github.com/kyclark/command-line-rust.git</pre>
+
+<p>You should <em>not</em> write your code in the directory you cloned in the preceding step.
+You should create a separate directory elsewhere for your projects.
+I suggest that you create your own Git repository to hold the programs you’ll write.
+For example, if you use GitHub and call it <em>rust-solutions</em>, then you can use the following command to clone your repository.
+Be sure to replace <em>YOUR_GITHUB_ID</em> with your actual GitHub ID:</p>
+
+<pre data-type="programlisting">$ git clone https://github.com/<em>YOUR_GITHUB_ID</em>/rust-solutions.git</pre>
+
+<p>One of the first tools you will encounter in Rust is <a href="https://oreil.ly/OhYek">Cargo</a>, which is its build tool, package manager, and test runner.
+Each chapter will instruct you to create a new project using Cargo, and I recommend that you do this inside your solutions directory.
+You will copy each chapter’s <em>tests</em> directory from the book’s repository into your project directory to test your code.
+If you’re curious what testing code looks like with Cargo and Rust, you can run the tests for <a data-type="xref" href="ch01.html#ch01">Chapter 1</a>.
+Change into the book’s <em>01_hello</em> directory and run the tests with <strong><code>cargo test</code></strong>:</p>
+
+<pre data-type="programlisting">$ cd command-line-rust/01_hello
+$ cargo test</pre>
+
+<p>If all goes well, you should see some passing tests (in no particular order):</p>
+
+<pre data-type="programlisting">running 3 tests
+test false_not_ok ... ok
+test true_ok ... ok
+test runs ... ok</pre>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>I tested all the programs on macOS, Linux, Windows 10/PowerShell, and Ubuntu Linux/Windows Subsystem for Linux (WSL). While I love how well Rust works on both Windows and Unix operating systems, two programs (<code>findr</code> and <code>lsr</code>) work slightly differently on Windows due to some fundamental differences in the operating system from Unix-type systems. I recommend that Windows/PowerShell users consider also installing WSL and working through the programs in that environment.</p>
+</div>
+
+<p>All the code in this book has been formatted using <code>rustfmt</code>, which is a handy tool for making your code look pretty and readable.
+You can use <strong><code>cargo fmt</code></strong> to run it on all the source code in a project, or you can integrate it into your code editor to run on demand.
+For instance, I prefer to use the text editor <code>vim</code>, which I have configured to automatically run <code>rustfmt</code> every time I save my work.
+I find this makes it much easier to read my code and find mistakes.</p>
+
+<p>I recommend you use <a href="https://oreil.ly/XyzTS">Clippy</a>, a linter for Rust code.
+<em>Linting</em> is automatically checking code for common mistakes, and it seems most languages offer one or more linters.
+Both <code>rustfmt</code> and <code>clippy</code> should be installed by default, but you can use <strong><code>rustup <span class="keep-together">component</span> add clippy</code></strong> if you need to install it.
+Then you can run <strong><code>cargo clippy</code></strong> to have it check the source code and make recommendations.
+No output from Clippy means that it has no suggestions.</p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="March 2024 Update" data-type="sect1"><div class="sect1" id="id1">
+<h1>March 2024 Update</h1>
+
+<p>This book was originally published in 2022.
+The Rust language and crates evolved quickly in the following two years, and I am grateful to O’Reilly for allowing me to update my code examples to reflect these changes.<a data-primary="pretty_assertions crate" data-type="indexterm" id="id207"/>
+I have simplified the programs to make them easier to teach and improved the test output by using the  
+<span class="keep-together"><code>pretty_assertions</code></span> crate.
+The biggest change by far is in the <code>clap</code> (command-line argument parser) crate used in every program starting from Chapter 2.
+The <code>clap</code> crate was at version 2.33 when I wrote the book and had just one method (builder) to parse arguments.
+The version jumped to 4 soon after publication and introduced a second method (derive).<a data-primary="clap utility" data-secondary="updates in version 4" data-type="indexterm" id="id208"/>
+I rewrote all my programs to use these new patterns, being sure to isolate the parsing so that the reader is free to substitute any code they would prefer.
+The code examples in this version of the book can be found using <code>git checkout</code> of the branches <em>clap_v4</em> and <em>clap_v4_derive</em> for the builder and derive patterns, 
+<span class="keep-together">respectively</span>.</p>
+
+<p>Now you’re ready to write some Rust!</p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Conventions Used in This Book" data-type="sect1"><div class="sect1" id="id198">
+<h1>Conventions Used in This Book</h1>
+
+<p>The following typographical conventions are used in this book:</p>
+<dl>
+<dt><em>Italic</em></dt>
+<dd>
+<p>Indicates new terms, URLs, email addresses, filenames, and file extensions.</p>
+</dd>
+<dt><code>Constant width</code></dt>
+<dd>
+<p>Used for program listings, as well as within paragraphs to refer to program elements such as variable or function names, databases, data types, environment variables, statements, and keywords.</p>
+</dd>
+<dt><strong><code>Constant width bold</code></strong></dt>
+<dd>
+<p>In blocks of code, unless stated otherwise, this style calls special attention to elements being described in the surrounding discussion. In discursive text, it highlights commands that can be used by the reader as they follow along.</p>
+</dd>
+<dt><em><code>Constant width italic</code></em></dt>
+<dd>
+<p>Shows text that should be replaced with user-supplied values or by values determined by context.</p>
+</dd>
+</dl>
+<div data-type="tip"><h6>Tip</h6>
+<p>This element signifies a tip or suggestion.</p>
+</div>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>This element signifies a general note.</p>
+</div>
+<div data-type="warning" epub:type="warning"><h6>Warning</h6>
+<p>This element indicates a warning or caution.</p>
+</div>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Using Code Examples" data-type="sect1"><div class="sect1" id="id199">
+<h1>Using Code Examples</h1>
+<!--PROD: Please reach out to author to find out if they will be uploading code examples to oreilly.com or their own site (e.g., GitHub). If there is no code download, delete this whole section. If there is, when you email digidist with the link, let them know what you filled in for title_title (should be as close to book title as possible, i.e., learning_python_2e). This info will determine where digidist loads the files.-->
+
+<p>Supplemental material (code examples, exercises, etc.) is available for download at <a class="bare" href="https://oreil.ly/commandlinerust_code"><em class="hyperlink">https://oreil.ly/commandlinerust_code</em></a>.</p>
+
+<p>If you have a technical question or a problem using the code examples, please send email to <a class="email" href="mailto:bookquestions@oreilly.com"><em>bookquestions@oreilly.com</em></a>.</p>
+
+<p>This book is here to help you get your job done. In general, if example code is offered with this book, you may use it in your programs and documentation. You do not need to contact us for permission unless you’re reproducing a significant portion of the code. For example, writing a program that uses several chunks of code from this book does not require permission. Selling or distributing examples from O’Reilly books does require permission. Answering a question by citing this book and quoting example code does not require permission. Incorporating a significant amount of example code from this book into your product’s documentation does require 
+<span class="keep-together">permission.</span></p>
+
+<p>We appreciate, but generally do not require, attribution. An attribution usually includes the title, author, publisher, and ISBN. For example: “<em>Command-Line Rust</em> by Ken Youens-Clark (O’Reilly). Copyright 2022 Charles Kenneth Youens-Clark, 978-1-098-10943-1.”</p>
+
+<p>If you feel your use of code examples falls outside fair use or the permission given above, feel free to contact us at <a class="email" href="mailto:permissions@oreilly.com"><em>permissions@oreilly.com</em></a>.</p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="O’Reilly Online Learning" data-type="sect1"><div class="sect1" id="id200">
+<h1>O’Reilly Online Learning</h1>
+<div class="ormenabled" data-type="note" epub:type="note"><h6>Note</h6>
+<p>For more than 40 years, <a class="orm:hideurl" href="https://oreilly.com"><em class="hyperlink">O’Reilly Media</em></a> has provided technology and business training, knowledge, and insight to help companies succeed.</p>
+</div>
+
+<p>Our unique network of experts and innovators share their knowledge and expertise through books, articles, and our online learning platform. O’Reilly’s online learning platform gives you on-demand access to live training courses, in-depth learning paths, interactive coding environments, and a vast collection of text and video from O’Reilly and 200+ other publishers. For more information, visit <a class="orm:hideurl" href="https://oreilly.com"><em>https://oreilly.com</em></a>.</p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="How to Contact Us" data-type="sect1"><div class="sect1" id="id201">
+<h1>How to Contact Us</h1>
+
+<p>Please address comments and questions concerning this book to the publisher:</p>
+<ul class="simplelist">
+  <li>O’Reilly Media, Inc.</li>
+  <li>1005 Gravenstein Highway North</li>
+  <li>Sebastopol, CA 95472</li>
+  <li>800-889-8969 (in the United States or Canada)</li>
+  <li>707-827-7019 (international or local)</li>
+  <li>707-829-0104 (fax)</li>
+  <li><a class="email" href="mailto:support@oreilly.com"><em>support@oreilly.com</em></a></li>
+  <li><a href="https://www.oreilly.com/about/contact.html"><em>https://www.oreilly.com/about/contact.html</em></a></li>
+</ul>
+
+<p>We have a web page for this book, where we list errata, examples, and any additional information. You can access this page at <a class="bare" href="https://oreil.ly/commandLineRust"><em class="hyperlink">https://oreil.ly/commandLineRust</em></a>.</p>
+<!--Don't forget to update the link above.-->
+
+<p>Email <a class="email" href="mailto:bookquestions@oreilly.com"><em>bookquestions@oreilly.com</em></a> to comment or ask technical questions about this book.</p>
+
+<p>For news and information about our books and courses, visit <a class="bare" href="https://oreilly.com"><em class="hyperlink">https://oreilly.com</em></a>.</p>
+
+<p>Find us on LinkedIn: <a class="bare" href="https://linkedin.com/company/oreilly-media"><em class="hyperlink">https://linkedin.com/company/oreilly-media</em></a></p>
+
+<p>Watch us on YouTube: <a class="bare" href="https://www.youtube.com/oreillymedia"><em class="hyperlink">https://www.youtube.com/oreillymedia</em></a></p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Acknowledgments" data-type="sect1"><div class="sect1" id="id202">
+<h1>Acknowledgments</h1>
+
+<p>My first debt of gratitude is to the Rust community for creating such an incredible language and body of resources for learning.
+When I started writing Rust, I quickly learned that I could try to write a naive program and just let the compiler tell me what to fix.
+I would blindly add or subtract <code>&amp;</code> and <code>*</code> and clone and borrow until my program compiled, and then I’d figure out how to make it better.
+When I got stuck, I invariably found help at <a class="bare" href="https://users.rust-lang.org"><em class="hyperlink">https://users.rust-lang.org</em></a>.
+Everyone I’ve encountered in Rust, from Twitter to Reddit, has been kind and helpful.</p>
+
+<p>I would like to thank the BSD and GNU communities for the programs and documentation upon which each chapter’s project is based. I appreciate the generous licenses that allow me to include portions of the help documentation from their 
+<span class="keep-together">programs:</span></p>
+
+<ul>
+<li>
+<p><a class="bare" href="https://www.freebsd.org/copyright/freebsd-license"><em class="hyperlink">https://www.freebsd.org/copyright/freebsd-license</em></a></p>
+</li>
+<li>
+<p><a class="bare" href="https://creativecommons.org/licenses/by-nd/4.0"><em class="hyperlink">https://creativecommons.org/licenses/by-nd/4.0</em></a></p>
+</li>
+</ul>
+
+<p>I further wish to thank my development editors, Corbin Collins and Rita Fernando, and my production editors, Caitlin Ghegan, Greg Hyman, and Kristen Brown.
+I am deeply indebted to the technical reviewers Carol Nichols, Brad Fulton, Erik Nordin, and Jeremy Gailor, who kept me on the straight and narrow path, as well as others who gave of their time to make comments, including Joshua Lynch, Andrew Olson, Jasper Zanjani, and William Evans.
+I also owe thanks to my bosses over the last few years, Dr. Bonnie Hurwitz at the University of Arizona and Amanda Borens at the Critical Path Institute, who have tolerated the time and effort I’ve spent learning new languages such as Rust in my professional job.</p>
+
+<p>In my personal life, I could not have written this book without the love and support of my wife, Lori Kindler, and our three extremely interesting children.
+Finally, I would also like to thank my friend Brian Castle, who tried so hard in high school to redirect my musical tastes from hard and progressive rock to alternative bands like Depeche Mode, The Smiths, and They Might Be Giants, only the last of which really took.</p>
+</div></section>
+</div></section></body></html>

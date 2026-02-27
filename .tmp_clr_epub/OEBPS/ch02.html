@@ -1,0 +1,1291 @@
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Test for Echo</title><link href="epub.css" rel="stylesheet" type="text/css"/>
+<meta content="urn:uuid:e80a1ec8-ed8e-40f7-ba3d-26a647960341" name="Adept.expected.resource"/></head><body data-type="book"><section data-pdf-bookmark="Chapter 2. Test for Echo" data-type="chapter" epub:type="chapter"><div class="chapter" id="ch02">
+<h1><span class="label">Chapter 2. </span>Test for Echo</h1>
+
+<blockquote>
+<p>
+By the time you get this note / We’ll no longer be alive / <br/>We’ll have all gone up in smoke / There’ll be no way to reply
+</p>
+<p data-type="attribution">
+They Might Be Giants, “By the Time You Get This” (2018)
+</p>
+</blockquote>
+
+<p>In <a data-type="xref" href="ch01.html#ch01">Chapter 1</a>, you wrote three programs—<code>hello</code>, <code>true</code>, and <code>false</code>—that take no arguments and always produce the same output.<a data-primary="echo utility" data-type="indexterm" id="ix_echo"/>
+In this chapter, I’ll show you how to use arguments from the command line to change the behavior of the program at runtime.
+The challenge program you’ll write is a clone of <code>echo</code>, which will print its arguments on the command line, optionally terminated with a newline.</p>
+
+<p>In this chapter, you’ll learn how to do the following:</p>
+
+<ul>
+<li>
+<p>Process command-line arguments with the <code>clap</code> crate</p>
+</li>
+<li>
+<p>Use Rust types like strings, vectors, slices, and the unit type</p>
+</li>
+<li>
+<p>Use expressions like <code>match</code>, <code>if</code>, and <code>return</code></p>
+</li>
+<li>
+<p>Use <code>Option</code> variants to represent <code>Some</code> value or <code>None</code></p>
+</li>
+<li>
+<p>Handle errors using the <code>Result</code> variants of <code>Ok</code> and <code>Err</code></p>
+</li>
+<li>
+<p>Understand the difference between stack and heap memory</p>
+</li>
+<li>
+<p>Test for text that is printed to <code>STDOUT</code> and <code>STDERR</code></p>
+</li>
+<li>
+<p>Use <code>Iterator::collect</code> to turn an iterator into a vector</p>
+</li>
+<li>
+<p>Create a struct</p>
+</li>
+</ul>
+
+
+
+
+
+
+<section data-pdf-bookmark="How echo Works" data-type="sect1"><div class="sect1" id="id13">
+<h1>How echo Works</h1>
+
+<p>In each chapter, you will be writing a Rust version of an existing command-line tool, so I will begin each chapter by describing how the tool works so that you understand what you’ll be creating.<a data-primary="echo utility" data-secondary="how it works" data-type="indexterm" id="id311"/>
+The features I describe are also the substance of the test suite I provide.
+For this challenge, you will create a Rust version of the <code>echo</code> program, which is blissfully simple.<a data-primary="STDOUT" data-secondary="echo printing arguments to" data-type="indexterm" id="id312"/>
+To start, <code>echo</code> will print its arguments to <code>STDOUT</code>:</p>
+
+<pre data-type="programlisting">$ echo Hello
+Hello</pre>
+
+<p>I’m using the <code>bash</code> shell, which assumes that any number of spaces delimit the arguments, so arguments that have spaces must be enclosed in quotes.<a data-primary="bash shell" data-secondary="spaces delimiting command-line arguments" data-type="indexterm" id="id313"/><a data-primary="spaces, delimiting bash shell CLI arguments" data-type="indexterm" id="id314"/><a data-primary="&quot; &quot; (quotation marks, double)" data-secondary="enclosing CLI arguments with spaces" data-type="indexterm" id="id315"/>
+In the following command, I’m providing four words as a single argument:</p>
+
+<pre data-type="programlisting">$ echo "Rust has assumed control"
+Rust has assumed control</pre>
+
+<p>Without the quotes, I’m providing four separate arguments.
+Note that I can use a varying number of spaces when I provide the arguments, but <code>echo</code> prints them using a single space between each argument:</p>
+
+<pre data-type="programlisting">$ echo Rust  has assumed   control
+Rust has assumed control</pre>
+
+<p>If I want the spaces to be preserved, I must enclose them in quotes:</p>
+
+<pre data-type="programlisting">$ echo "Rust  has assumed   control"
+Rust  has assumed   control</pre>
+
+<p>It’s extremely common—but not mandatory—for command-line programs to respond to the flags <code>-h</code> or <code>--help</code> to print a helpful usage statement.<a data-primary="--help command-line flag" data-primary-sortas="help" data-type="indexterm" id="id316"/><a data-primary="-h or --help command-line flags" data-primary-sortas="h or help" data-type="indexterm" id="id317"/>
+If I try that with <code>echo</code>, it will simply print the flag:</p>
+
+<pre data-type="programlisting">$ echo --help
+--help</pre>
+
+<p>Instead, I <a data-primary="man echo command" data-type="indexterm" id="id318"/>can read the manual page for <code>echo</code> by executing <strong><code>man echo</code></strong>.
+You’ll see that I’m using the BSD version<a data-primary="BSD version" data-secondary="echo utility" data-type="indexterm" id="id319"/> of the program from 2003:</p>
+
+<pre data-type="programlisting">ECHO(1)                   BSD General Commands Manual                  ECHO(1)
+
+NAME
+     echo -- write arguments to the standard output
+
+SYNOPSIS
+     echo [-n] [string ...]
+
+DESCRIPTION
+     The echo utility writes any specified operands, separated by single blank
+     (' ') characters and followed by a newline ('\n') character, to the stan-
+     dard output.
+
+     The following option is available:
+
+     -n    Do not print the trailing newline character.  This may also be
+           achieved by appending '\c' to the end of the string, as is done by
+           iBCS2 compatible systems.  Note that this option as well as the
+           effect of '\c' are implementation-defined in IEEE Std 1003.1-2001
+           (''POSIX.1'') as amended by Cor. 1-2002.  Applications aiming for
+           maximum portability are strongly encouraged to use printf(1) to
+           suppress the newline character.
+
+     Some shells may provide a builtin echo command which is similar or iden-
+     tical to this utility.  Most notably, the builtin echo in sh(1) does not
+     accept the -n option.  Consult the builtin(1) manual page.
+
+EXIT STATUS
+     The echo utility exits 0 on success, and &gt;0 if an error occurs.
+
+SEE ALSO
+     builtin(1), csh(1), printf(1), sh(1)
+
+STANDARDS
+     The echo utility conforms to IEEE Std 1003.1-2001 (''POSIX.1'') as
+     amended by Cor. 1-2002.
+
+BSD                             April 12, 2003                             BSD</pre>
+
+<p>By default, the text that <code>echo</code> prints on the command line is terminated by a newline character.
+As shown in the preceding manual page, the program has a single <code>-n</code> option to omit the final newline.
+Depending on the version of <code>echo</code> you have, this may not appear to affect the output.
+For instance, the BSD version I’m using shows this:</p>
+
+<pre data-type="programlisting">$ echo -n Hello
+Hello
+$ <a class="co" href="#callout_test_for_echo_CO1-1" id="co_test_for_echo_CO1-1"><img alt="1" src="assets/1.png"/></a></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_test_for_echo_CO1-1" id="callout_test_for_echo_CO1-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The BSD <code>echo</code> shows my command prompt, <code>$</code>, on the next line.</p></dd>
+</dl>
+
+<p>The GNU version<a data-primary="GNU version" data-secondary="echo utility" data-type="indexterm" id="id320"/><a data-primary="Linux" data-secondary="GNU echo on" data-type="indexterm" id="id321"/> on Linux shows this:</p>
+
+<pre data-type="programlisting">$ echo -n Hello
+Hello$ <a class="co" href="#callout_test_for_echo_CO2-1" id="co_test_for_echo_CO2-1"><img alt="1" src="assets/1.png"/></a></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_test_for_echo_CO2-1" id="callout_test_for_echo_CO2-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The GNU <code>echo</code> shows my command prompt immediately after <code>Hello</code>.</p></dd>
+</dl>
+
+<p>Regardless of which version of <code>echo</code> you have, you<a data-primary="&gt; (redirect) operator in bash" data-type="indexterm" id="id322"/><a data-primary="redirect operator (&gt;) in bash" data-type="indexterm" id="id323"/><a data-primary="STDOUT" data-secondary="sending to file with bash redirect (&gt;) operator" data-type="indexterm" id="id324"/> can use the <code>bash</code> redirect operator <code>&gt;</code> to send <code>STDOUT</code> to a file:</p>
+
+<pre data-type="programlisting">$ echo Hello &gt; hello
+$ echo -n Hello &gt; hello-n</pre>
+
+<p>The <code>diff</code> tool will <a data-primary="diff utility" data-type="indexterm" id="id325"/>display the <em>differences</em> between two files.
+This output shows that the second file (<em>hello-n</em>) does not have a newline at the end:</p>
+
+<pre data-type="programlisting">$ diff hello hello-n
+1c1
+&lt; Hello
+---
+&gt; Hello
+\ No newline at end of file</pre>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Getting Started" data-type="sect1"><div class="sect1" id="id14">
+<h1>Getting Started</h1>
+
+<p>This challenge program will be called <code>echor</code>, for <code>echo</code> plus <code>r</code> for Rust.
+(I can’t decide if I pronounce this like <em>eh-core</em> or <em>eh-koh-ar</em>.)
+Change into the directory for your solutions and start a new project using Cargo:</p>
+
+<pre data-type="programlisting">$ cargo new echor
+     Created binary (application) `echor` package</pre>
+
+<p>Change into the new directory to see a familiar structure:</p>
+
+<pre data-type="programlisting">$ cd echor
+$ tree
+.
+├── Cargo.toml
+└── src
+    └── main.rs</pre>
+
+<p>Use Cargo to run the program:</p>
+
+<pre data-type="programlisting">$ cargo run
+Hello, world! <a class="co" href="#callout_test_for_echo_CO3-1" id="co_test_for_echo_CO3-1"><img alt="1" src="assets/1.png"/></a></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_test_for_echo_CO3-1" id="callout_test_for_echo_CO3-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The default program always prints “Hello, world!”</p></dd>
+</dl>
+
+<p>You’ve already seen this source code in <a data-type="xref" href="ch01.html#ch01">Chapter 1</a>, but I’d like to point out a couple more things about the code in <em>src/main.rs</em>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"Hello, world!"</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>As you saw in <a data-type="xref" href="ch01.html#ch01">Chapter 1</a>, Rust will start the program by executing the <code>main</code> function in <em>src/main.rs</em>.
+All functions return a value, and the return type may be indicated with an arrow and the type, such as <code>-&gt; u32</code> to say the function returns an unsigned 32-bit integer.
+The lack of any return type for <code>main</code> implies that the function returns what Rust calls the <em>unit</em> type.<a data-primary="unit type" data-type="indexterm" id="id326"/>
+Also, note that the <a href="https://oreil.ly/Edncj"><code>println!</code> macro</a> will automatically append a newline to the output, which is a feature you’ll need to control when the user requests no terminating newline.<a data-primary="println! macro" data-secondary="automatically appending newline character" data-type="indexterm" id="id327"/></p>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>The <a href="https://oreil.ly/BVKGJ">unit type</a> is like an empty value and is signified with a set of empty parentheses: <code>()</code>. <a data-primary="() (parentheses)" data-secondary="signifying unit type" data-type="indexterm" id="id328"/>The documentation says this “is used when there is no other meaningful value that could be returned.” It’s not quite like a null pointer or undefined value in other languages, a concept first introduced by Tony Hoare (no relation to Rust creator Graydon Hoare), who called the null reference his “billion-dollar mistake.” Since Rust does not (normally) allow you to dereference a null pointer, it must logically be worth at least a billion dollars.</p>
+</div>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Accessing the Command-Line Arguments" data-type="sect2"><div class="sect2" id="id15">
+<h2>Accessing the Command-Line Arguments</h2>
+
+<p>The first order of business is getting the command-line arguments to print.
+In Rust, you can use <a href="https://oreil.ly/4lJGE"><code>std::env::args</code></a> for this.<a data-primary="echo utility" data-secondary="accessing command-line arguments" data-type="indexterm" id="ix_echoaccCLA"/><a data-primary="std::env::args" data-type="indexterm" id="id329"/>
+In <a data-type="xref" href="ch01.html#ch01">Chapter 1</a>, you used the <code>std::process</code> crate to handle external processes.
+Here, you’ll use <code>std::env</code> to interact with the <em>environment</em>, which is where the program will find the arguments.<a data-primary="Args struct" data-type="indexterm" id="id330"/><a data-primary="environment, interacting with" data-type="indexterm" id="id331"/>
+If you look at the documentation for the function, you’ll see it returns something of the type <code>Args</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">pub</code><code class="w"> </code><code class="k">fn</code> <code class="nf">args</code><code class="p">()</code><code class="w"> </code>-&gt; <code class="nc">Args</code><code class="w"/></pre>
+
+<p>If you go to the link for the <a href="https://oreil.ly/Wtkqr"><code>Args</code> documentation</a>, you’ll find it is a <em>struct</em>, which is a kind of data structure in Rust.<a data-primary="structs" data-type="indexterm" id="id332"/>
+If you look along the lefthand side of the page, you’ll see things like trait implementations, other related structs, functions, and more.
+We’ll explore these ideas later, but for now, just poke around the docs and try to absorb what you see.</p>
+
+<p>Edit <em>src/main.rs</em> to print the arguments.
+You can call the function by using the full path followed by an empty set of parentheses:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="n">std</code>::<code class="n">env</code>::<code class="n">args</code><code class="p">());</code><code class="w"> </code><code class="c1">// This will not work</code>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Execute the program using <strong><code>cargo run</code></strong>, and you should see the following error:</p>
+
+<pre data-type="programlisting">error: format argument must be a string literal
+ --&gt; src/main.rs:2:14
+  |
+2 |     println!(std::env::args()); // This will not work
+  |              ^^^^^^^^^^^^^^^^
+  |
+help: you might be missing a string literal to format with
+  |
+2 |     println!("{}", std::env::args()); // This will not work
+  |              +++++
+
+error: could not compile `echor` due to previous error</pre>
+
+<p class="pagebreak-before">Here is your first spat with the compiler.
+It’s saying that you cannot directly print 
+<span class="keep-together">the value</span> that is returned from that function, but it’s also suggesting how to fix the 
+<span class="keep-together">problem.</span>
+It wants you to first provide a literal<a data-primary="{} (curly braces)" data-secondary="placeholder for printed value of literal string" data-type="indexterm" id="id333"/> string that has a set of curly braces (<code>{}</code>) that will serve as a placeholder for the printed value, so change the code accordingly:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{}"</code><code class="p">,</code><code class="w"> </code><code class="n">std</code>::<code class="n">env</code>::<code class="n">args</code><code class="p">());</code><code class="w"> </code><code class="c1">// This will not work either</code>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Run the program again and see that you’re not out of the woods because there is another compiler error.
+Note that I <a data-primary="std::fmt::Display trait" data-type="indexterm" id="id334"/> omit the “compiling” and other lines to focus on the important output:</p>
+
+<pre data-type="programlisting">$ cargo run
+error[E0277]: `Args` doesn't implement `std::fmt::Display`
+ --&gt; src/main.rs:2:20
+  |
+2 |     println!("{}", std::env::args()); // This will not work
+  |                    ^^^^^^^^^^^^^^^^ `Args` cannot be formatted with
+  |                                     the default formatter
+  |
+  = help: the trait `std::fmt::Display` is not implemented for `Args`
+  = note: in format strings you may be able to use `{:?}` (or {:#?} for
+    pretty-print) instead
+  = note: this error originates in the macro `$crate::format_args_nl`
+    (in Nightly builds, run with -Z macro-backtrace for more info)</pre>
+
+<p>There’s a lot of information in that compiler message.
+First off, there’s something about the trait <a href="https://oreil.ly/gaxyv"><code>std::fmt::Display</code></a> not being implemented for <code>Args</code>.
+A <em>trait</em> in Rust is a way to define the behavior of an object in an abstract way.<a data-primary="traits" data-type="indexterm" id="id335"/><a data-primary="Display trait" data-type="indexterm" id="id336"/>
+If an object implements the <code>Display</code> trait, then it can be formatted for user-facing output.
+Look again at the “Trait Implementations” section of the <code>Args</code> documentation and notice that, indeed, <code>Display</code> is not mentioned there.</p>
+
+<p>The compiler suggests you should use <code>{:?}</code> instead of <code>{}</code> for the placeholder.<a data-primary="{} (curly braces)" data-secondary="{:?} placeholder for printed value of literal string" data-type="indexterm" id="id337"/><a data-primary="Debug trait" data-type="indexterm" id="id338"/>
+This is an instruction to print a <a href="https://oreil.ly/zPdzZ"><code>Debug</code> version of the structure</a>, which will format the output in a debugging context.
+Refer again to the <code>Args</code> documentation to see that <code>Debug</code> is listed under “Trait Implementations.”
+Change the code to the 
+<span class="keep-together">following:</span></p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{:?}"</code><code class="p">,</code><code class="w"> </code><code class="n">std</code>::<code class="n">env</code>::<code class="n">args</code><code class="p">());</code><code class="w"> </code><code class="c1">// Success at last!</code>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Now the program compiles and prints something vaguely useful:</p>
+
+<pre data-type="programlisting">$ cargo run
+Args { inner: ["target/debug/echor"] }</pre>
+
+<p class="pagebreak-before">If you are unfamiliar with command-line arguments, it’s common for the first value to be the path of the program itself.
+It’s not an argument per se, but it is useful information.
+Let’s see what happens when I pass some arguments:</p>
+
+<pre data-type="programlisting">$ cargo run Hello world
+Args { inner: ["target/debug/echor", "Hello", "world"] }</pre>
+
+<p>Huzzah!
+It would appear that I’m able to get the arguments to my program.
+I passed two arguments, <code>Hello</code> and <code>world</code>, and they showed up as additional values after the binary name.
+I know I’ll need to pass the <code>-n</code> flag, so I’ll try that next:</p>
+
+<pre data-type="programlisting">$ cargo run Hello world -n
+Args { inner: ["target/debug/echor", "Hello", "world", "-n"] }</pre>
+
+<p>It’s also common to place the flag before the values, so let me try that:</p>
+
+<pre data-type="programlisting">$ cargo run -n Hello world
+error: Found argument '-n' which wasn't expected, or isn't valid in this context
+
+USAGE:
+    cargo run [OPTIONS] [--] [args]...
+
+For more information try --help</pre>
+
+<p>That doesn’t work because Cargo thinks the <code>-n</code> argument is for itself, not the program I’m running.
+To fix this, I need to separate Cargo’s options using two dashes:</p>
+
+<pre data-type="programlisting">$ cargo run -- -n Hello world
+Args { inner: ["target/debug/echor", "-n", "Hello", "world"] }</pre>
+
+<p>In the parlance of command-line program parameters, the <code>-n</code> is an <em>optional</em> argument because you can leave it out.<a data-primary="optional arguments" data-type="indexterm" id="id339"/>
+Typically, program options start with one or two dashes.
+It’s common to have <em>short</em> names with one dash and a single character, like <code>-h</code> for the <em>help</em> flag, and <em>long</em> names with two dashes and a word, like <code>--help</code>.<a data-primary="- (dash or minus sign)" data-secondary="- for short names and ‐‐ for long names of arguments" data-type="indexterm" id="id340"/>
+You will commonly see these concatenated like <code>-h|--help</code> to indicate one or the other.
+The options <code>-n</code> and <code>-h</code> are often called <em>flags</em> because they don’t take a value.<a data-primary="flags" data-type="indexterm" id="id341"/>
+Flags have one meaning when present and the opposite when absent.
+In this case, <code>-n</code> says to omit the trailing newline; otherwise, print as normal.<a data-primary="newlines" data-secondary="using -n flag to omit trailing newline" data-type="indexterm" id="id342"/></p>
+
+<p>All the other arguments to <code>echo</code> are <em>positional</em> because their position relative to the name of the program (the first element in the arguments) determines their meaning.<a data-primary="positional arguments" data-type="indexterm" id="id343"/>
+Consider the command <code>chmod</code> to <em>change</em> the <em>mode</em> of a file or directory.
+It takes two positional arguments, a mode like <code>755</code> first and a file or directory name second.<a data-primary="chmod command" data-type="indexterm" id="id344"/>
+In the case of <code>echo</code>, all the positional arguments are interpreted as the text to print, and they should be printed in the same order they are given.
+This is not a bad start, but the arguments to the programs in this book are going to become much more complex.
+We will need a more robust method for parsing the program’s arguments.<a data-primary="echo utility" data-secondary="accessing command-line arguments" data-startref="ix_echoaccCLA" data-type="indexterm" id="id345"/></p>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Adding clap as a Dependency" data-type="sect2"><div class="sect2" id="id16">
+<h2>Adding clap as a Dependency</h2>
+
+<p>Although there are <a data-primary="clap utility" data-secondary="adding as dependency to Cargo program" data-type="indexterm" id="ix_clapadd"/>various methods and crates for parsing command-line arguments, I will exclusively use the <a href="https://oreil.ly/DHIR3"><code>clap</code> (<em>command-line argument parser</em>) crate</a>.
+To get started, I need to tell Cargo that I want to download this crate and use it in my project.<a data-primary="dependencies" data-secondary="adding clap as dependency" data-type="indexterm" id="id346"/>
+I can do this by adding it as a dependency to <em>Cargo.toml</em>, specifying the version:</p>
+
+<pre data-code-language="toml" data-type="programlisting"><code class="k">[</code><code class="k">package</code><code class="k">]</code><code class="w">
+</code><code class="n">name</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">echor</code><code class="s2">"</code><code class="w">
+</code><code class="n">version</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">0.1.0</code><code class="s2">"</code><code class="w">
+</code><code class="n">edition</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">2021</code><code class="s2">"</code><code class="w">
+
+</code><code class="k">[</code><code class="k">dependencies</code><code class="k">]</code><code class="w">
+</code><strong><code class="n">clap</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">4.5.0</code><code class="s2">"</code></strong></pre>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>The version “4.5.0” means I want to use exactly this version.<a data-primary="version, exact, specifying" data-type="indexterm" id="id347"/> I could use just “4” to indicate that I’m fine using the latest version in 
+<span class="keep-together">the major</span> version “4.x” line. There are many other ways to indicate 
+<span class="keep-together">the version,</span> and I recommend you read about <a href="https://oreil.ly/mvf9F">how to specify dependencies</a>.</p>
+</div>
+
+<p>The next time I try to build the program, Cargo will download the <code>clap</code> source code (if needed) and all of its dependencies.
+For instance, I can run <strong><code>cargo build</code></strong> to just build the new binary and not run it.
+You may be curious about where these packages go.
+Cargo places the downloaded source code into <em>.cargo</em> in your home directory, and the build artifacts go into the <em>target​/⁠debug/deps</em> directory of the project.
+This brings up an interesting part of building Rust projects: each program you build can use different versions of crates, and each program is built in a separate directory.
+If you have ever suffered through using shared modules, as is common with Perl and Python, you’ll appreciate that you don’t have to worry about conflicts where one program requires some old obscure version and another requires the latest bleeding-edge version in GitHub.
+Python, of course, offers <em>virtual environments</em> to combat this problem, and other languages have similar solutions.<a data-primary="virtual environments (Python)" data-type="indexterm" id="id348"/>
+Still, I find Rust’s approach to be quite 
+<span class="keep-together">comforting</span>.</p>
+
+<p>A consequence of Rust placing the dependencies into <em>target</em> is that this directory is now quite large.
+You can use the <em>disk usage</em> command <strong><code>du -shc .</code></strong> to find that the project now weighs in at about 35 MB, and almost all of that lives in <em>target/debug/deps</em>.
+If you run <strong><code>cargo help</code></strong>, you will see that the <code>clean</code> command will remove the <em>target</em> directory.
+You might do this to reclaim disk space if you aren’t going to work on the project for a while, at the expense of having to recompile in the future.<a data-primary="clap utility" data-secondary="adding as dependency to Cargo program" data-startref="ix_clapadd" data-type="indexterm" id="id349"/></p>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Parsing Command-Line Arguments Using clap" data-type="sect2"><div class="sect2" id="id17">
+<h2>Parsing Command-Line Arguments Using clap</h2>
+
+<p>To learn how to <a data-primary="clap utility" data-secondary="using to parse command-line arguments" data-type="indexterm" id="ix_clapprs"/>use <code>clap</code> to parse the arguments, you need to read the documentation, and I like to use <a href="https://oreil.ly/CdbFz"><em>Docs.rs</em></a> for this.
+This crate offers two patterns for creating a parser called <em>derive</em> and <em>builder</em>, and the GitHub branches <em>main</em> and <em>clap_v4_builder</em> show how to write all the programs using both patterns, respectively.
+After consulting the <code>clap</code> docs, I wrote the following version of <em>src/main.rs</em> that creates a new <a href="https://oreil.ly/F7z87"><code>clap::Command</code> struct</a> to parse the command-line arguments using the builder 
+<span class="keep-together">pattern</span>:<a data-primary="clap::Command struct" data-type="indexterm" id="id350"/><a data-primary="Command struct" data-type="indexterm" id="id351"/><a data-primary="builder pattern" data-type="indexterm" id="id352"/></p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">use</code><code class="w"> </code><code class="n">clap</code><code>::</code><code class="n">Command</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO4-1" id="co_test_for_echo_CO4-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+
+</code><code class="k">fn</code><code> </code><code class="nf">main</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">_matches</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">echor</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO4-2" id="co_test_for_echo_CO4-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+        </code><code class="p">.</code><code class="n">version</code><code class="p">(</code><code class="s">"</code><code class="s">0.1.0</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO4-3" id="co_test_for_echo_CO4-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+        </code><code class="p">.</code><code class="n">author</code><code class="p">(</code><code class="s">"</code><code class="s">Ken Youens-Clark &lt;kyclark@gmail.com&gt;</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO4-4" id="co_test_for_echo_CO4-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+        </code><code class="p">.</code><code class="n">about</code><code class="p">(</code><code class="s">"</code><code class="s">Rust version of `echo`</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO4-5" id="co_test_for_echo_CO4-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+        </code><code class="p">.</code><code class="n">get_matches</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO4-6" id="co_test_for_echo_CO4-6"><img alt="6" src="assets/6.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_test_for_echo_CO4-1" id="callout_test_for_echo_CO4-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Import the <code>clap::Command</code> struct.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO4-2" id="callout_test_for_echo_CO4-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Create a new <code>Command</code> with the name <code>echor</code>.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO4-3" id="callout_test_for_echo_CO4-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Use semantic version information.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO4-4" id="callout_test_for_echo_CO4-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Include your name and email address so people know where to send the money.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO4-5" id="callout_test_for_echo_CO4-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>This is a short description of the program.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO4-6" id="callout_test_for_echo_CO4-6"><img alt="6" src="assets/6.png"/></a></dt>
+<dd><p>Tell the <code>Command</code> to parse the arguments.</p></dd>
+</dl>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>In the preceding code, the leading underscore in the variable name <code>_matches</code> is functional. It tells the Rust compiler that I do not intend to use this variable. Without the underscore, the compiler would warn about an unused variable.<a data-primary="_ (underscore)" data-secondary="leading variable names" data-type="indexterm" id="id353"/></p>
+</div>
+
+<p>With this code in place, I can run the <code>echor</code> program with the <code>-h</code> or <code>--help</code> flags to get a usage document.
+Note that I didn’t have to define this flag or write the implementation for printing the usage, as <code>clap</code> does this for me:</p>
+
+<pre data-type="programlisting">$ cargo run -- -h
+Rust version of `echo`
+
+Usage: echor
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version</pre>
+
+<p>In addition to the help flags, I see that <code>clap</code> also <a data-primary="-V and --version flags" data-primary-sortas="V" data-type="indexterm" id="id354"/>automatically handles the flags <code>-V</code> and <code>--version</code> to print the program’s version:</p>
+
+<pre data-type="programlisting">$ cargo run -- --version
+echor 0.1.0</pre>
+
+<p>Next, I need <a data-primary="Arg struct" data-type="indexterm" id="id355"/>to define the parameters using the <a href="https://oreil.ly/350vY"><code>clap::Arg</code></a> struct and <a href="https://oreil.ly/B1W4s"><code>clap::ArgAction</code></a> enum, which is an <em>enumeration</em> of possible values.<a data-primary="clap::Arg struct" data-type="indexterm" id="id356"/><a data-primary="clap::ArgAction enum" data-type="indexterm" id="id357"/>
+To do this, I add the following code:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">use</code><code class="w"> </code><code class="n">clap</code><code>:</code><code>:</code><code class="p">{</code><code class="n">Arg</code><code class="p">,</code><code class="w"> </code><code class="n">ArgAction</code><code class="p">,</code><code class="w"> </code><code class="n">Command</code><code class="p">}</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO5-1" id="co_test_for_echo_CO5-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+
+</code><code class="k">fn</code><code> </code><code class="nf">main</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">matches</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">echor</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">version</code><code class="p">(</code><code class="s">"</code><code class="s">0.1.0</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">author</code><code class="p">(</code><code class="s">"</code><code class="s">Ken Youens-Clark &lt;kyclark@gmail.com&gt;</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">about</code><code class="p">(</code><code class="s">"</code><code class="s">Rust version of `echo`</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w">
+</code><code class="w">            </code><code class="n">Arg</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">text</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO5-2" id="co_test_for_echo_CO5-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+                </code><code class="p">.</code><code class="n">value_name</code><code class="p">(</code><code class="s">"</code><code class="s">TEXT</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"</code><code class="s">Input text</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">required</code><code class="p">(</code><code class="kc">true</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">num_args</code><code class="p">(</code><code class="mi">1</code><code class="o">..</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w">
+</code><code class="w">            </code><code class="n">Arg</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">omit_newline</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO5-3" id="co_test_for_echo_CO5-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+                </code><code class="p">.</code><code class="n">short</code><code class="p">(</code><code class="sc">'n'</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO5-4" id="co_test_for_echo_CO5-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+                </code><code class="p">.</code><code class="n">action</code><code class="p">(</code><code class="n">ArgAction</code><code>::</code><code class="n">SetTrue</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO5-5" id="co_test_for_echo_CO5-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"</code><code class="s">Do not print newline</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">get_matches</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{:#?}</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="n">matches</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO5-6" id="co_test_for_echo_CO5-6"><img alt="6" src="assets/6.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_test_for_echo_CO5-1" id="callout_test_for_echo_CO5-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Import <code>Arg</code>, <code>ArgAction</code>, and <code>Command</code> from the <code>clap</code> crate.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO5-2" id="callout_test_for_echo_CO5-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Create a new <code>Arg</code> with the name <code>text</code>. This is a required positional argument that must appear at least once and can be repeated.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO5-3" id="callout_test_for_echo_CO5-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Create a new <code>Arg</code> with the name <code>omit_newline</code>. This is a flag that has only the short name <code>-n</code>.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO5-4" id="callout_test_for_echo_CO5-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Note that the single-character short value is enclosed in single quotes to denote the <a href="https://oreil.ly/6EPcF"><code>char</code> type</a>.<a data-primary="char type" data-type="indexterm" id="id358"/></p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO5-5" id="callout_test_for_echo_CO5-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>Set the argument to <code>true</code> when the flag is present or <code>false</code> when absent.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO5-6" id="callout_test_for_echo_CO5-6"><img alt="6" src="assets/6.png"/></a></dt>
+<dd><p>Pretty-print the arguments.</p></dd>
+</dl>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Earlier I used <code>{:?}</code> to format the debug view of the arguments. Here I’m using <code>{:#?}</code> to include newlines and indentations to help me read the output. This is called <em>pretty-printing</em> because, well, it’s prettier.<a data-primary="{} (curly braces)" data-secondary="{#:?} placeholder for printed value of literal string" data-type="indexterm" id="id359"/><a data-primary="pretty-printing" data-type="indexterm" id="id360"/></p>
+</div>
+
+<p>If you request the usage again, you will see the new parameters:</p>
+
+<pre data-type="programlisting">$ cargo run -- --help
+Rust version of `echo`
+
+Usage: echor [OPTIONS] &lt;TEXT&gt;...
+
+Arguments:
+  &lt;TEXT&gt;...  Input text <a class="co" href="#callout_test_for_echo_CO6-1" id="co_test_for_echo_CO6-1"><img alt="1" src="assets/1.png"/></a>
+
+Options:
+  -n             Do not print newline <a class="co" href="#callout_test_for_echo_CO6-2" id="co_test_for_echo_CO6-2"><img alt="2" src="assets/2.png"/></a>
+  -h, --help     Print help
+  -V, --version  Print version</pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_test_for_echo_CO6-1" id="callout_test_for_echo_CO6-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The required input text is one or more positional arguments.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO6-2" id="callout_test_for_echo_CO6-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <code>-n</code> flag to omit the newline is optional.</p></dd>
+</dl>
+
+<p>Run the program with some arguments and inspect the structure of the arguments.
+I will elide some of the output here for brevity:</p>
+
+<pre data-type="programlisting">$ cargo run -- -n Hello world
+ArgMatches {
+    valid_args: [
+        "text",
+        "omit_newline",
+        "help",
+        "version",
+    ],
+    ...
+}</pre>
+
+<p>If you run the program with no arguments, you will get an error indicating that you failed to provide the required arguments:</p>
+
+<pre data-type="programlisting">$ cargo run
+error: the following required arguments were not provided:
+  &lt;TEXT&gt;...
+
+Usage: echor &lt;TEXT&gt;...
+
+For more information, try '--help'.</pre>
+
+<p>This was an error, and so you can inspect the exit value to verify that it’s not zero:</p>
+
+<pre data-type="programlisting">$ echo $?
+2</pre>
+
+<p>If you try to provide any argument that isn’t defined, it will trigger an error and a nonzero exit value:</p>
+
+<pre data-type="programlisting">$ cargo run -- -x
+error: unexpected argument '-x' found
+
+  tip: to pass '-x' as a value, use '-- -x'
+
+Usage: echor [OPTIONS] &lt;TEXT&gt;...
+
+For more information, try '--help'.</pre>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>You might wonder how this magical stuff is happening. Why is the program stopping and reporting these errors?<a data-primary="errors" data-secondary="reporting for echor program" data-type="indexterm" id="id361"/><a data-primary="Command::get_matches function" data-type="indexterm" id="id362"/> If you read the documentation for <a href="https://oreil.ly/kLBnZ"><code>Command::get_matches</code></a>, you’ll see that the method will exit the program on failure, print any error messages, and report an appropriate exit value.</p>
+</div>
+
+<p class="nobreakinside">There’s a subtle thing happening with the error messages.<a data-primary="STDERR" data-secondary="redirecting to file" data-type="indexterm" id="id363"/><a data-primary="STDOUT" data-secondary="redirecting to file" data-type="indexterm" id="id364"/>
+When you use <code>println!</code>, the output appears on <code>STDOUT</code>, but the usage and error messages are all appearing on <code>STDERR</code>, which you first saw in <a data-type="xref" href="ch01.html#ch01">Chapter 1</a>.
+To see this in the <code>bash</code> shell, you can run <code>echor</code> and redirect channel <code>1</code> (<code>STDOUT</code>) to a file called <em>out</em> and channel <code>2</code> (<code>STDERR</code>) to a file called <em>err</em>:</p>
+
+<pre data-type="programlisting">$ cargo run 1&gt;out 2&gt;err</pre>
+
+<p>You should see no output because it was all redirected to the <em>out</em> and <em>err</em> files.
+The <em>out</em> file should be empty because there was nothing printed to <code>STDOUT</code>, but the <em>err</em> file should contain the output from Cargo and the error messages from the program:</p>
+
+<pre data-type="programlisting">$ cat err
+    Finished dev [unoptimized + debuginfo] target(s) in 0.08s
+     Running `target/debug/echor`
+error: the following required arguments were not provided:
+  &lt;TEXT&gt;...
+
+Usage: echor &lt;TEXT&gt;...
+
+For more information, try '--help'.</pre>
+
+<p class="pagebreak-before">So you see that another hallmark of well-behaved command-line programs is to print regular output to <code>STDOUT</code> and error messages to <code>STDERR</code>.
+Some errors are severe enough that you should halt the program, but sometimes they should just be noted in the course of running.
+For instance, in <a data-type="xref" href="ch03.html#ch03">Chapter 3</a> you will write a program that 
+<span class="keep-together">processes</span> input files, some of which will intentionally not exist or will be unreadable.
+I will show you how to print warnings to <code>STDERR</code> about these files and skip to the next argument without halting.<a data-primary="clap utility" data-secondary="using to parse command-line arguments" data-startref="ix_clapprs" data-type="indexterm" id="id365"/></p>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Creating the Program Output" data-type="sect2"><div class="sect2" id="id18">
+<h2>Creating the Program Output</h2>
+
+<p>Now that I’m able to parse the program’s arguments, the next step is to use these values to generate the same output as <code>echo</code>.<a data-primary="echo utility" data-secondary="creating program output for echor" data-type="indexterm" id="ix_echocrout"/>
+To start, I want to extract the <code>text</code> argument, which can be one or more strings.<a data-primary="Vec type" data-type="indexterm" id="id366"/><a data-primary="String type" data-type="indexterm" id="id367"/>
+I can place multiple values into a vector using <a href="https://oreil.ly/kmRm-"><code>Vec</code></a>, and the strings are represented with <a href="https://oreil.ly/7HxgU"><code>String</code></a>.
+In the following code, I first call <a href="https://oreil.ly/hsoE5"><code>ArgMatches::get_many</code></a> to retrieve multiple values for an argument.<a data-primary="ArgMatches::get_many function" data-type="indexterm" id="id368"/>
+This call may or may not succeed, so the return value is represented using an <a href="https://oreil.ly/aEft3"><code>Option</code></a>, which has the variants <code>None</code> for no value and <code>Some</code> for an existing value.<a data-primary="Option type" data-secondary="None and Some variants for values" data-type="indexterm" id="id369"/><a data-primary="None type" data-type="indexterm" id="id370"/>
+I know that <code>clap</code> will require the user to supply at least one value, so it is safe to call <a href="https://oreil.ly/bBiXR"><code>Option::unwrap</code></a> to extract the values from the <code>Some</code> variant.<a data-primary="Some type" data-type="indexterm" id="id371"/>
+The result is an <a href="https://oreil.ly/YN4DW"><code>Iterator</code></a> of string values that need to be cloned.<a data-primary="Iterator::collect function" data-type="indexterm" id="id372"/>
+Finally, I use <a href="https://oreil.ly/9ocju"><code>Iterator::collect</code></a> to put the strings into the type <a href="https://oreil.ly/pZU3A"><code>Vec</code></a>, which is a contiguous growable array type:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="kd">let</code><code class="w"> </code><code class="n">text</code><code>:</code><code> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO7-1" id="co_test_for_echo_CO7-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="n">matches</code><code class="p">.</code><code class="n">get_many</code><code class="p">(</code><code class="s">"</code><code class="s">text</code><code class="s">"</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">cloned</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">collect</code><code class="p">(</code><code class="p">)</code><code class="p">;</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_test_for_echo_CO7-1" id="callout_test_for_echo_CO7-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The type annotation follows the colon and is required because 
+<span class="keep-together"><code>Iterator::collect</code></span> can return many different types.</p></dd>
+</dl>
+<div data-type="warning" epub:type="warning"><h6>Warning</h6>
+<p>If you call <code>Option::unwrap</code> on a <code>None</code>, it will cause a <a href="https://oreil.ly/DrERd"><code>panic</code></a> that will crash your program.<a data-primary="None type" data-secondary="calling Option::unwrap on, causing crash" data-type="indexterm" id="id373"/> You should only call <code>unwrap</code> if you are positive the value is the <code>Some</code> variant.</p>
+</div>
+<aside class="pagebreak-before less_space" data-type="sidebar" epub:type="sidebar"><div class="sidebar" id="id374">
+<h1>Copy vs. Clone/Stack vs. Heap</h1>
+<p>I want to take a moment to explain why I cloned the strings.
+If you look at the documentation for <a href="https://oreil.ly/3_P-S"><code>ArgMatches::get_many</code></a>, you’ll see similar code that uses <code>copied</code> because the values are integers rather than strings.
+In both instances, Rust is duplicating the data, but the <em>type</em> of the data determines whether it is copied or cloned—operations that are tied to the kind of memory that Rust uses.<a data-primary="copy versus clone action" data-type="indexterm" id="id375"/><a data-primary="clone versus copy action" data-type="indexterm" id="id376"/></p>
+
+<p>Before programming in Rust, I’d only ever considered one amorphous idea of computer memory.<a data-primary="memory" data-secondary="stack and heap" data-type="indexterm" id="id377"/>
+Having studiously avoided languages that required me to allocate and free memory, I was only vaguely aware of the efforts that dynamic languages make to hide these complexities from me.
+In Rust, I’ve learned that not all memory is accessed in the same way.
+First there is the <em>stack</em>, where items of known sizes are accessed in <em>last-in, first-out</em> (LIFO) order.<a data-primary="stack memory" data-type="indexterm" id="id378"/>
+The classic analogy is to a stack of cafeteria trays where new items go on top and are taken back off the top.
+Because the items on the stack have a fixed size, Rust can set aside a particular chunk of memory and find it quickly.
+Data types like integers that live on the stack can be easily replicated via an action called <em>copy</em>.</p>
+
+<p>The other type of memory is the <em>heap</em>, where the sizes of the values may change over time.<a data-primary="heap memory" data-type="indexterm" id="id379"/>
+The strings of input to our program fit this description because they may be of any length and there may be any number of them.
+The documentation for the <a href="https://oreil.ly/u5T4g"><code>Vec</code> (vector) type</a> describes this structure as a “contiguous growable array type.”
+<em>Growable</em> is the key word here, as the number and sizes of the elements in a vector can change during the lifetime of the program.<a data-primary="vectors" data-secondary="growable nature of" data-type="indexterm" id="id380"/>
+Rust makes an initial estimation of the amount of memory it needs for the vector.
+If the vector grows beyond the original allocation, Rust will find another chunk of memory to hold the data.
+To find the memory where the data lives, Rust stores the memory address on the stack.
+This is called a <em>pointer</em> because it points to the actual data, and so is also said to be a <em>reference</em> to the data.<a data-primary="dereferencing pointers" data-type="indexterm" id="id381"/><a data-primary="pointers" data-type="indexterm" id="id382"/><a data-primary="references" data-type="indexterm" id="id383"/>
+Items that live on the heap may be very large, so copying the data requires you to acknowledge this difference via the action called <em>clone</em>.
+The Rust compiler will always ensure that you are correctly copying or cloning data as needed for a given data type.</p>
+</div></aside>
+
+<p>The <code>omit_newline</code> argument is a bit easier, as it’s either present or not.
+The <a href="https://oreil.ly/xwY9J"><code>ArgMatches::get_flag</code></a> will return a value of the type <a href="https://oreil.ly/4Zh0A"><code>bool</code></a>, or Boolean, which is either <code>true</code> or <code>false</code>.<a data-primary="ArgMatches::get_flag function" data-type="indexterm" id="id384"/><a data-primary="bool type" data-type="indexterm" id="id385"/>
+I omit the type annotation as the compiler infers the type:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="kd">let</code><code class="w"> </code><code class="n">omit_newline</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">matches</code><code class="p">.</code><code class="n">get_flag</code><code class="p">(</code><code class="s">"omit_newline"</code><code class="p">);</code><code class="w"/></pre>
+
+<p>Finally, I want to print the values.
+Because <code>text</code> is a vector of strings, I can use <a href="https://oreil.ly/i8IBx"><code>Vec::join</code></a> to join all the strings on a single space into a new string to print.<a data-primary="Vec::join function" data-type="indexterm" id="id386"/><a data-primary="vectors" data-secondary="creating in Rust" data-type="indexterm" id="id387"/><a data-primary="vec! macro" data-type="indexterm" id="id388"/>
+Inside the <code>echor</code> program, <code>clap</code> will be creating the vector.
+To 
+<span class="keep-together">demonstrate</span> how <code>Vec::join</code> works, I’ll show you how to create a vector using the <a href="https://oreil.ly/SAlnL"><code>vec!</code> macro</a>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="kd">let</code><code class="w"> </code><code class="n">text</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="s">"Hello"</code><code class="p">,</code><code class="w"> </code><code class="s">"world"</code><code class="p">];</code><code class="w"/></pre>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>The values in Rust vectors must all be of the same type.<a data-primary="types" data-secondary="values in vectors" data-type="indexterm" id="id389"/> Dynamic languages often allow lists to mix types like strings and numbers, but Rust will complain about “mismatched types.” Here I want a list of literal strings, which must be enclosed in double quotes.<a data-primary="str type" data-type="indexterm" id="id390"/> The <a href="https://oreil.ly/DREEk"><code>str</code> type</a> in Rust represents a valid UTF-8 string. I’ll have more to say about UTF in <a data-type="xref" href="ch04.html#ch04">Chapter 4</a>.</p>
+</div>
+
+<p><code>Vec::join</code> will insert the given string between all the elements of the vector to create a new string.<a data-primary="println! macro" data-type="indexterm" id="id391"/>
+I can use <code>println!</code> to print the new string to <code>STDOUT</code> followed by a 
+<span class="keep-together">newline:</span></p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="fm">println!</code><code class="p">(</code><code class="s">"{}"</code><code class="p">,</code><code class="w"> </code><code class="n">text</code><code class="p">.</code><code class="n">join</code><code class="p">(</code><code class="s">" "</code><code class="p">));</code><code class="w"/></pre>
+
+<p>It’s common practice in Rust documentation to present facts using <a href="https://oreil.ly/SQHyp"><code>assert!</code></a> to say that something is <code>true</code> or <a href="https://oreil.ly/P6Bfw"><code>assert_eq!</code></a> to demonstrate that one thing is equivalent to another.<a data-primary="assert! macro" data-type="indexterm" id="id392"/><a data-primary="assert_eq! macro" data-type="indexterm" id="id393"/>
+In the following code, I can assert that the result of <code>text.join(" ")</code> is equal to the string <code>"Hello world"</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">text</code><code class="p">.</code><code class="n">join</code><code class="p">(</code><code class="s">" "</code><code class="p">),</code><code class="w"> </code><code class="s">"Hello world"</code><code class="p">);</code><code class="w"/></pre>
+
+<p>When the <code>-n</code> flag is present, the output should omit the newline.
+I will <a data-primary="print! macro" data-type="indexterm" id="id394"/><a data-primary="newlines" data-secondary="omitting using print! macro" data-type="indexterm" id="id395"/>instead use the <a href="https://oreil.ly/nMLGY"><code>print!</code> macro</a>, which does not add a newline, and I will choose to add either a newline or the empty string depending on the value of <code>omit_newline</code>.
+You might expect me to write something like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">main</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">matches</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">..</code><code class="p">.</code><code class="p">;</code><code class="w"> </code><code class="c1">// Same as before
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">text</code><code>:</code><code> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w">
+</code><code class="w">        </code><code class="n">matches</code><code class="p">.</code><code class="n">get_many</code><code class="p">(</code><code class="s">"</code><code class="s">text</code><code class="s">"</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">cloned</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">collect</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">omit_newline</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">matches</code><code class="p">.</code><code class="n">get_flag</code><code class="p">(</code><code class="s">"</code><code class="s">omit_newline</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">ending</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"</code><code class="se">\n</code><code class="s">"</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO8-1" id="co_test_for_echo_CO8-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="k">if</code><code class="w"> </code><code class="n">omit_newline</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="n">ending</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"</code><code class="s">"</code><code class="p">;</code><code class="w"> </code><code class="c1">// This will not work </code><a class="co" href="#callout_test_for_echo_CO8-2" id="co_test_for_echo_CO8-2"><img alt="2" src="assets/2.png"/></a><code class="c1">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="fm">print!</code><code class="p">(</code><code class="s">"</code><code class="s">{}{ending}</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="n">text</code><code class="p">.</code><code class="n">join</code><code class="p">(</code><code class="s">"</code><code class="s"> </code><code class="s">"</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO8-3" id="co_test_for_echo_CO8-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_test_for_echo_CO8-1" id="callout_test_for_echo_CO8-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Assume a default value of the newline.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO8-2" id="callout_test_for_echo_CO8-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Change the value to the empty string if the newline should be omitted.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO8-3" id="callout_test_for_echo_CO8-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Use <code>print!</code>, which will not add a newline to the output.</p></dd>
+</dl>
+
+<p>But if I try to run this code, Rust complains that I cannot reassign the value of 
+<span class="keep-together"><code>ending</code></span>:</p>
+
+<pre data-type="programlisting">$ cargo run -- Hello world
+error[E0384]: cannot assign twice to immutable variable `ending`
+  --&gt; src/main.rs:30:9
+   |
+28 |     let ending = "\n";
+   |         ------
+   |         |
+   |         first assignment to `ending`
+   |         help: consider making this binding mutable: `mut ending`
+29 |     if omit_newline {
+30 |         ending = ""; // This will not work
+   |         ^^^^^^^^^^^ cannot assign twice to immutable variable
+
+For more information about this error, try `rustc --explain E0384`.
+error: could not compile `echor` (bin "echor") due to previous error</pre>
+
+<p><a data-primary="rustc --explain commnd" data-type="indexterm" id="id396"/>As you saw in <a data-type="xref" href="ch01.html#ch01">Chapter 1</a>, Rust variables are immutable by default.
+The compiler<a data-primary="ending variable" data-type="indexterm" id="id397"/><a data-primary="mut (mutable) keyword" data-secondary="making ending variable mutable" data-type="indexterm" id="id398"/> suggests adding <code>mut</code> to make the <code>ending</code> variable mutable to fix this error:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">main</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">matches</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">..</code><code class="p">.</code><code class="p">;</code><code class="w"> </code><code class="c1">// Same as before
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">text</code><code>:</code><code> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w">
+</code><code class="w">        </code><code class="n">matches</code><code class="p">.</code><code class="n">get_many</code><code class="p">(</code><code class="s">"</code><code class="s">text</code><code class="s">"</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">cloned</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">collect</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">omit_newline</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">matches</code><code class="p">.</code><code class="n">get_flag</code><code class="p">(</code><code class="s">"</code><code class="s">omit_newline</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">ending</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"</code><code class="se">\n</code><code class="s">"</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO9-1" id="co_test_for_echo_CO9-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="k">if</code><code class="w"> </code><code class="n">omit_newline</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="n">ending</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"</code><code class="s">"</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="fm">print!</code><code class="p">(</code><code class="s">"</code><code class="s">{}{ending}</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="n">text</code><code class="p">.</code><code class="n">join</code><code class="p">(</code><code class="s">"</code><code class="s"> </code><code class="s">"</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_test_for_echo_CO9-1" id="callout_test_for_echo_CO9-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Add <code>mut</code> to make this a mutable value.</p></dd>
+</dl>
+
+<p>There’s a much better way to write this.<a data-primary="if expressions" data-type="indexterm" id="id399"/>
+In Rust, <code>if</code> is an expression, not a statement as it is in languages like C and Java.<sup><a data-type="noteref" href="ch02.html#id400" id="id400-marker">1</a></sup>
+An <em>expression</em> returns a value, but a<a data-primary="expressions versus statements" data-type="indexterm" id="id401"/><a data-primary="statements versus expressions" data-type="indexterm" id="id402"/> statement does not.
+Here’s a more Rustic way to write this:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="kd">let</code><code class="w"> </code><code class="n">ending</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="k">if</code><code class="w"> </code><code class="n">omit_newline</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="s">""</code><code class="w"> </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="s">"</code><code class="se">\n</code><code class="s">"</code><code class="w"> </code><code class="p">};</code><code class="w"/></pre>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>An <code>if</code> without an <code>else</code> will return the unit type. The same is true for a function without a return type, so the <code>main</code> function in this program returns the unit type.<a data-primary="unit type" data-secondary="return by if expression without else" data-type="indexterm" id="id403"/><a data-primary="if expressions" data-secondary="without an else" data-type="indexterm" id="id404"/><a data-primary="else keyword" data-type="indexterm" id="id405"/></p>
+</div>
+
+<p>Since I use <code>ending</code> in only one place, I don’t need to assign it to a variable.
+Here is the final way I would write the <code>main</code> function:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">matches</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">..</code><code class="p">.;</code><code class="w"> </code><code class="c1">// Same as before</code>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">text</code>: <code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"/>
+<code class="w">        </code><code class="n">matches</code><code class="p">.</code><code class="n">get_many</code><code class="p">(</code><code class="s">"text"</code><code class="p">).</code><code class="n">unwrap</code><code class="p">().</code><code class="n">cloned</code><code class="p">().</code><code class="n">collect</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">omit_newline</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">matches</code><code class="p">.</code><code class="n">get_flag</code><code class="p">(</code><code class="s">"omit_newline"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="fm">print!</code><code class="p">(</code><code class="s">"{}{}"</code><code class="p">,</code><code class="w"> </code><code class="n">text</code><code class="p">.</code><code class="n">join</code><code class="p">(</code><code class="s">" "</code><code class="p">),</code><code class="w"> </code><code class="k">if</code><code class="w"> </code><code class="n">omit_newline</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="s">""</code><code class="w"> </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="s">"</code><code class="se">\n</code><code class="s">"</code><code class="w"> </code><code class="p">});</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>With these changes, the program appears to work correctly; however, I’m not willing to stake my reputation on this.
+I need to, as the Russian saying goes, “Доверяй, но проверяй.”<sup><a data-type="noteref" href="ch02.html#id406" id="id406-marker">2</a></sup>
+This requires that I write some tests to run my program with various inputs and verify that it produces the same output as the original <code>echo</code> program.<a data-primary="echo utility" data-secondary="creating program output for echor" data-startref="ix_echocrout" data-type="indexterm" id="id407"/></p>
+</div></section>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Writing Integration Tests" data-type="sect1"><div class="sect1" id="id19">
+<h1>Writing Integration Tests</h1>
+
+<p>We will use the <code>assert_cmd</code> and <code>pretty_assertions</code> crates<a data-primary="pretty_assertions crate" data-type="indexterm" id="id408"/><a data-primary="assert_cmd crate" data-type="indexterm" id="id409"/> for testing <code>echor</code>.
+We’ll also use the <a href="https://oreil.ly/OMtFW">
+<span class="keep-together"><code>predicates</code></span> crate</a>, as it will make writing some of the tests easier<a data-primary="echo utility" data-secondary="writing integration tests for echor" data-type="indexterm" id="ix_echointtst"/><a data-primary="integration tests" data-secondary="writing for echor" data-type="indexterm" id="ix_inttstwrechor"/><a data-primary="predicates crate" data-type="indexterm" id="id410"/><a data-primary="anyhow crate" data-type="indexterm" id="id411"/> and <a href="https://oreil.ly/ZcUzF"><code>anyhow</code></a> for handling errors.
+Update <em>Cargo.toml</em> with the following:</p>
+
+<pre data-code-language="toml" data-type="programlisting"><code class="k">[</code><code class="k">package</code><code class="k">]</code><code class="w">
+</code><code class="n">name</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">echor</code><code class="s2">"</code><code class="w">
+</code><code class="n">version</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">0.1.0</code><code class="s2">"</code><code class="w">
+</code><code class="n">edition</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">2021</code><code class="s2">"</code><code class="w">
+
+</code><code class="k">[</code><code class="k">dependencies</code><code class="k">]</code><code class="w">
+</code><code class="n">clap</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">4.5.0</code><code class="s2">"</code><code class="w">
+
+</code><strong><code class="k">[</code><code class="k">dev-dependencies</code><code class="k">]</code></strong><code class="w">
+</code><strong><code class="n">anyhow</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">1.0.79</code><code class="s2">"</code></strong><code class="w">
+</code><strong><code class="n">assert_cmd</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">2.0.13</code><code class="s2">"</code></strong><code class="w">
+</code><strong><code class="n">predicates</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">3.0.4</code><code class="s2">"</code></strong><code class="w">
+</code><strong><code class="n">pretty_assertions</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">1.4.0</code><code class="s2">"</code></strong></pre>
+
+<p>I often write tests that ensure my programs fail when run incorrectly.
+For instance, this program ought to fail and print help documentation when provided no arguments.<a data-primary="dies (for failing tests)" data-type="indexterm" id="id412"/>
+Create the <em>tests</em> directory, and then start your <em>tests/cli.rs</em> with the following:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">use</code><code class="w"> </code><code class="n">assert_cmd</code><code>::</code><code class="n">Command</code><code class="p">;</code><code class="w">
+</code><code class="k">use</code><code class="w"> </code><code class="n">predicates</code><code>::</code><code class="n">prelude</code><code>:</code><code>:</code><code class="o">*</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO10-1" id="co_test_for_echo_CO10-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+
+</code><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="k">fn</code><code> </code><code class="nf">dies_no_args</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">cmd</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code>::</code><code class="n">cargo_bin</code><code class="p">(</code><code class="s">"</code><code class="s">echor</code><code class="s">"</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="n">cmd</code><code class="p">.</code><code class="n">assert</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO10-2" id="co_test_for_echo_CO10-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+        </code><code class="p">.</code><code class="n">failure</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">stderr</code><code class="p">(</code><code class="n">predicate</code><code>::</code><code class="kt">str</code><code>::</code><code class="n">contains</code><code class="p">(</code><code class="s">"</code><code class="s">Usage</code><code class="s">"</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_test_for_echo_CO10-1" id="callout_test_for_echo_CO10-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <code>predicates</code> crate helps to check the program’s output.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO10-2" id="callout_test_for_echo_CO10-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Run the program with no arguments and assert that it fails and prints a usage statement to <code>STDERR</code>.<a data-primary="predicates crate" data-type="indexterm" id="id413"/></p></dd>
+</dl>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>I often put the word <em>dies</em> somewhere in the test name to make it clear that the program is expected to fail under the given conditions. If I run <strong><code>cargo test dies</code></strong>, then Cargo will run all the tests with names containing the string <em>dies</em>.</p>
+</div>
+
+<p>Run <strong><code>cargo test</code></strong> to ensure that your program passes.
+Next, let’s also add a test to ensure the program exits successfully when provided an 
+<span class="keep-together">argument:</span></p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="k">fn</code><code> </code><code class="nf">runs</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">cmd</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code>::</code><code class="n">cargo_bin</code><code class="p">(</code><code class="s">"</code><code class="s">echor</code><code class="s">"</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="n">cmd</code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="s">"</code><code class="s">hello</code><code class="s">"</code><code class="p">)</code><code class="p">.</code><code class="n">assert</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">success</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO11-1" id="co_test_for_echo_CO11-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_test_for_echo_CO11-1" id="callout_test_for_echo_CO11-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Run <code>echor</code> with the argument <code>hello</code> and verify it exits successfully.</p></dd>
+</dl>
+
+<p>I can now run <strong><code>cargo test</code></strong> to verify that I have a program that runs, validates user input, and prints usage.<a data-primary="integration tests" data-secondary="writing for echor" data-tertiary="creating test output files" data-type="indexterm" id="id414"/></p>
+
+<pre data-type="programlisting">running 2 tests
+test runs ... ok
+test dies_no_args ... ok</pre>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Creating the Test Output Files" data-type="sect2"><div class="sect2" id="id20">
+<h2>Creating the Test Output Files</h2>
+
+<p class="pagebreak-after">Next, I would like to ensure that the program creates the same output as <code>echo</code>.
+To start, I need to capture the output from the original <code>echo</code> for various inputs so that I can compare these to the output from my program.
+In the <em>02_echor</em> directory of the <a href="https://oreil.ly/pfhMC">GitHub repository</a> for the book, you’ll find a <code>bash</code> script called <em>mk-outs.sh</em> that I used to generate the output from <code>echo</code> for various arguments.
+You can see that, even with such a simple tool, there’s still a decent amount of <em>cyclomatic complexity</em>, which refers to the various ways all the parameters can be combined.<a data-primary="cyclomatic complexity" data-type="indexterm" id="id415"/>
+I need to check one or more text arguments both with and without the newline option:</p>
+
+<pre data-type="programlisting">$ cat mk-outs.sh
+#!/usr/bin/env bash <a class="co" href="#callout_test_for_echo_CO12-1" id="co_test_for_echo_CO12-1"><img alt="1" src="assets/1.png"/></a>
+
+OUTDIR="tests/expected" <a class="co" href="#callout_test_for_echo_CO12-2" id="co_test_for_echo_CO12-2"><img alt="2" src="assets/2.png"/></a>
+[[ ! -d "$OUTDIR" ]] &amp;&amp; mkdir -p "$OUTDIR" <a class="co" href="#callout_test_for_echo_CO12-3" id="co_test_for_echo_CO12-3"><img alt="3" src="assets/3.png"/></a>
+
+echo    "Hello there"    &gt; $OUTDIR/hello1.txt <a class="co" href="#callout_test_for_echo_CO12-4" id="co_test_for_echo_CO12-4"><img alt="4" src="assets/4.png"/></a>
+echo    "Hello"  "there" &gt; $OUTDIR/hello2.txt <a class="co" href="#callout_test_for_echo_CO12-5" id="co_test_for_echo_CO12-5"><img alt="5" src="assets/5.png"/></a>
+echo -n "Hello  there"   &gt; $OUTDIR/hello1.n.txt <a class="co" href="#callout_test_for_echo_CO12-6" id="co_test_for_echo_CO12-6"><img alt="6" src="assets/6.png"/></a>
+echo -n "Hello"  "there" &gt; $OUTDIR/hello2.n.txt <a class="co" href="#callout_test_for_echo_CO12-7" id="co_test_for_echo_CO12-7"><img alt="7" src="assets/7.png"/></a></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_test_for_echo_CO12-1" id="callout_test_for_echo_CO12-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>A special comment (aka a <em>shebang</em>) that tells the operating system to use the environment to execute <code>bash</code> for the following code.<a data-primary="! (exclamation point)" data-secondary="beginning shebang lines in bash" data-type="indexterm" id="id416"/><a data-primary="shebang" data-type="indexterm" id="id417"/></p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO12-2" id="callout_test_for_echo_CO12-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Define a variable for the output directory.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO12-3" id="callout_test_for_echo_CO12-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Test if the output directory does not exist and create it if needed.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO12-4" id="callout_test_for_echo_CO12-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>One argument with two words.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO12-5" id="callout_test_for_echo_CO12-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>Two arguments separated by more than one space.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO12-6" id="callout_test_for_echo_CO12-6"><img alt="6" src="assets/6.png"/></a></dt>
+<dd><p>One argument with two spaces and no newline.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO12-7" id="callout_test_for_echo_CO12-7"><img alt="7" src="assets/7.png"/></a></dt>
+<dd><p>Two arguments with no newline.</p></dd>
+</dl>
+
+<p>If you are working on a Unix platform, you can copy this program to your project directory and run it like so:</p>
+
+<pre data-type="programlisting">$ bash mk-outs.sh</pre>
+
+<p>It’s also possible to execute the program directly, but you may need to execute <strong><code>chmod +x mk-outs.sh</code></strong> if you get a <em>permission denied</em> error:</p>
+
+<pre data-type="programlisting">$ ./mk-outs.sh</pre>
+
+<p>If this worked, you should now have a <em>tests/expected</em> directory with the following 
+<span class="keep-together">contents:</span></p>
+
+<pre data-type="programlisting">$ tree tests
+tests
+├── cli.rs
+└── expected
+    ├── hello1.n.txt
+    ├── hello1.txt
+    ├── hello2.n.txt
+    └── hello2.txt
+
+1 directory, 5 files</pre>
+
+<p>If you are working on a Windows platform, then I recommend you copy the directory and files into your project.</p>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Comparing Program Output" data-type="sect2"><div class="sect2" id="id21">
+<h2>Comparing Program Output</h2>
+
+<p>Now that we have some test files, it’s time to compare the output from <code>echor</code> to the output from the original <code>echo</code>.<a data-primary="integration tests" data-secondary="writing for echor" data-tertiary="comparing program output for echo and echor" data-type="indexterm" id="id418"/>
+The first output file was generated with the input <em>Hello there</em> as a single string, and the output was captured into the file <em>tests/expected​/⁠hello1.txt</em>.
+In the following test, I will run <code>echor</code> with the same argument and compare the output to the contents of that file.
+I must add <code>use std::fs</code> to <em>tests/cli.rs</em> to bring in the standard <em>filesystem</em> module.<a data-primary="std::fs module" data-type="indexterm" id="id419"/><a data-primary="filesystem module (standard)" data-type="indexterm" id="id420"/>
+I replace the <code>runs</code> function with the 
+<span class="keep-together">following:</span></p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="k">fn</code><code> </code><code class="nf">hello1</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">outfile</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"</code><code class="s">tests/expected/hello1.txt</code><code class="s">"</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO13-1" id="co_test_for_echo_CO13-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="n">expected</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">fs</code><code>::</code><code class="n">read_to_string</code><code class="p">(</code><code class="n">outfile</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO13-2" id="co_test_for_echo_CO13-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">cmd</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code>::</code><code class="n">cargo_bin</code><code class="p">(</code><code class="s">"</code><code class="s">echor</code><code class="s">"</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO13-3" id="co_test_for_echo_CO13-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+    </code><code class="n">cmd</code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="s">"</code><code class="s">Hello there</code><code class="s">"</code><code class="p">)</code><code class="p">.</code><code class="n">assert</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">success</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">stdout</code><code class="p">(</code><code class="n">expected</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO13-4" id="co_test_for_echo_CO13-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_test_for_echo_CO13-1" id="callout_test_for_echo_CO13-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>This is the output from <code>echo</code> generated by <em>mk-outs.sh</em>.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO13-2" id="callout_test_for_echo_CO13-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Use <a href="https://oreil.ly/dZGzk"><code>fs::read_to_string</code></a> to read the contents of the file.<a data-primary="Result type" data-type="indexterm" id="id421"/><a data-primary="fs::read_to_string function" data-type="indexterm" id="id422"/> This returns a <code>Result</code> that might contain a string if all goes well. Use the <code>Result::unwrap</code> method with the assumption that this will work.<a data-primary="Result::unwrap function" data-type="indexterm" id="id423"/><a data-primary="Command type" data-secondary="creating to run echor in current crate" data-type="indexterm" id="id424"/></p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO13-3" id="callout_test_for_echo_CO13-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Create a <code>Command</code> to run <code>echor</code> in the current crate.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO13-4" id="callout_test_for_echo_CO13-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Run the program with the given argument and assert it finishes successfully and that <code>STDOUT</code> is the expected value.</p></dd>
+</dl>
+<div data-type="warning" epub:type="warning"><h6>Warning</h6>
+<p>Using <code>fs::read_to_string</code> is a convenient way to read a file into memory, but it’s also an easy way to crash your program—and possibly your computer—if you happen to read a file that exceeds your available memory. You should only use this function with small files<a data-primary="memory" data-secondary="reading file into with fs::read_to_string" data-type="indexterm" id="id425"/>. As Ted Nelson says, “The good news about computers is that they do what you tell them to do. The bad news is that they do what you tell them to do.”</p>
+</div>
+
+<p>If I run <strong><code>cargo test</code></strong> now, I should see output from two tests (in no particular order):</p>
+
+<pre data-type="programlisting">running 2 tests
+test hello1 ... ok
+test dies_no_args ... ok</pre>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Using the Result Type" data-type="sect2"><div class="sect2" id="id22">
+<h2>Using the Result Type</h2>
+
+<p>I’ve been using the <code>Result::unwrap</code> method in a way that assumes each fallible call will succeed.<a data-primary="integration tests" data-secondary="writing for echor" data-tertiary="using the Result type" data-type="indexterm" id="ix_inttstwrechorRes"/><a data-primary="Result type" data-secondary="using in integration testing of echor" data-type="indexterm" id="ix_Restyp"/>
+For example, in the <code>hello1</code> function, I assumed that the output file exists and can be opened and read into a string.
+During my limited testing, this may be the case, but it’s dangerous to make such assumptions.
+I should be more cautious, so I’m going to start checking these possible failures, and I find <a href="https://oreil.ly/NOGKW"><code>anyhow::Result</code></a> is easier to use than the default <code>Result</code> type.<a data-primary="anyhow::Result" data-type="indexterm" id="id426"/></p>
+
+<p>Up to this point, my test functions have returned the unit type.<a data-primary="unit type" data-type="indexterm" id="id427"/>
+Now they will return <code>anyhow::Result</code>, changing my test code in some subtle ways.<a data-primary="Result type" data-secondary="using in integration testing of echor" data-tertiary="anyhow::Result" data-type="indexterm" id="id428"/>
+Previously I used <code>Result::unwrap</code> to unpack <code>Ok</code> values and panic in the event of an <code>Err</code>, causing the test to fail.
+In the following code, I replace <code>unwrap</code> with the <code>?</code> operator to either unpack an <code>Ok</code> value or propagate the <code>Err</code> value to the return type.<a data-primary="? (question mark)" data-secondary="operator, replacing Result::unwrap with" data-type="indexterm" id="id429"/>
+That is, this will cause the function to return the <code>Err</code> variant of <code>Result</code> to the caller, which will in turn cause the test to fail.
+If all the code in a test function runs successfully, I return <code>Ok</code> containing the unit type to indicate the test passes.<a data-primary="Ok variant (Result enum)" data-type="indexterm" id="id430"/>
+Note that while Rust does have the <a href="https://oreil.ly/rtZW1"><code>return</code> keyword</a> to return a value from a function, the idiom is to omit the semicolon from the final expression to implicitly return that result.<a data-primary="return keyword" data-type="indexterm" id="id431"/>
+Update your <em>tests/cli.rs</em> to the following:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">use</code><code class="w"> </code><code class="n">anyhow</code><code>::</code><code class="nb">Result</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO14-1" id="co_test_for_echo_CO14-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+</code><code class="k">use</code><code class="w"> </code><code class="n">assert_cmd</code><code>::</code><code class="n">Command</code><code class="p">;</code><code class="w">
+</code><code class="k">use</code><code class="w"> </code><code class="n">predicates</code><code>::</code><code class="n">prelude</code><code>:</code><code>:</code><code class="o">*</code><code class="p">;</code><code class="w">
+</code><code class="k">use</code><code class="w"> </code><code class="n">std</code><code>::</code><code class="n">fs</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="k">fn</code><code> </code><code class="nf">dies_no_args</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO14-2" id="co_test_for_echo_CO14-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">cmd</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code>::</code><code class="n">cargo_bin</code><code class="p">(</code><code class="s">"</code><code class="s">echor</code><code class="s">"</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO14-3" id="co_test_for_echo_CO14-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+    </code><code class="n">cmd</code><code class="p">.</code><code class="n">assert</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">failure</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">stderr</code><code class="p">(</code><code class="n">predicate</code><code>::</code><code class="kt">str</code><code>::</code><code class="n">contains</code><code class="p">(</code><code class="s">"</code><code class="s">Usage</code><code class="s">"</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO14-4" id="co_test_for_echo_CO14-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+</code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="k">fn</code><code> </code><code class="nf">hello1</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">expected</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">fs</code><code>::</code><code class="n">read_to_string</code><code class="p">(</code><code class="s">"</code><code class="s">tests/expected/hello1.txt</code><code class="s">"</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">cmd</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code>::</code><code class="n">cargo_bin</code><code class="p">(</code><code class="s">"</code><code class="s">echor</code><code class="s">"</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="n">cmd</code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="s">"</code><code class="s">Hello there</code><code class="s">"</code><code class="p">)</code><code class="p">.</code><code class="n">assert</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">success</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">stdout</code><code class="p">(</code><code class="n">expected</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_test_for_echo_CO14-1" id="callout_test_for_echo_CO14-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Use <code>anyhow::Result</code> over the default <code>Result</code> type.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO14-2" id="callout_test_for_echo_CO14-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <code>Ok</code> variant will contain the unit type, and the <code>Err</code> variant will contain an <a href="https://oreil.ly/-W7sE"><code>Error</code></a>.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO14-3" id="callout_test_for_echo_CO14-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Use <code>?</code> instead of <code>Result::unwrap</code> to unpack an <code>Ok</code> value or propagate an <code>Err</code>.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO14-4" id="callout_test_for_echo_CO14-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Omit the final semicolon to return this value.</p></dd>
+</dl>
+
+<p>The next test passes two arguments, <code>"Hello"</code> and <code>"there"</code>, and expects the program to print “Hello there”:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="k">fn</code><code> </code><code class="nf">hello2</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">expected</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">fs</code><code>::</code><code class="n">read_to_string</code><code class="p">(</code><code class="s">"</code><code class="s">tests/expected/hello2.txt</code><code class="s">"</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">cmd</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code>::</code><code class="n">cargo_bin</code><code class="p">(</code><code class="s">"</code><code class="s">echor</code><code class="s">"</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="n">cmd</code><code class="p">.</code><code class="n">args</code><code class="p">(</code><code class="fm">vec!</code><code class="p">[</code><code class="s">"</code><code class="s">Hello</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="s">"</code><code class="s">there</code><code class="s">"</code><code class="p">]</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO15-1" id="co_test_for_echo_CO15-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+        </code><code class="p">.</code><code class="n">assert</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">success</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">stdout</code><code class="p">(</code><code class="n">expected</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_test_for_echo_CO15-1" id="callout_test_for_echo_CO15-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Use the <a href="https://oreil.ly/G5FYd"><code>Command::args</code> method</a> to pass a vector of arguments rather than a single string value.<a data-primary="vectors" data-secondary="passing vector of arguments" data-type="indexterm" id="id432"/><a data-primary="Command::args method" data-type="indexterm" id="id433"/></p></dd>
+</dl>
+
+<p>I have a total of four files to check, so it behooves me to write a helper function.
+I’ll call it <code>run</code> and will pass it the argument strings along with the expected output file.<a data-primary="slices" data-type="indexterm" id="id434"/>
+Rather than use <code>vec!</code> to create a vector for the arguments, I’m going to use a <a href="https://oreil.ly/NHidS"><code>std::slice</code></a>.
+Slices are a bit like vectors in that they represent a list of values, but they cannot be resized after creation.<a data-primary="pretty_assertions::assert_eq macro" data-type="indexterm" id="id435"/>
+Be sure to add <code>use pretty_assertions::assert_eq</code> for the following code to get nice string comparisons:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="p">[</code><code class="o">&amp;</code><code class="kt">str</code><code class="p">]</code><code class="p">,</code><code class="w"> </code><code class="n">expected_file</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO16-1" id="co_test_for_echo_CO16-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="n">expected</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">fs</code><code>::</code><code class="n">read_to_string</code><code class="p">(</code><code class="n">expected_file</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO16-2" id="co_test_for_echo_CO16-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="n">output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code>::</code><code class="n">cargo_bin</code><code class="p">(</code><code class="s">"</code><code class="s">echor</code><code class="s">"</code><code class="p">)</code><code class="o">?</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO16-3" id="co_test_for_echo_CO16-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+        </code><code class="p">.</code><code class="n">args</code><code class="p">(</code><code class="n">args</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">output</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"</code><code class="s">fail</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">stdout</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">String</code><code>::</code><code class="n">from_utf8</code><code class="p">(</code><code class="n">output</code><code class="p">.</code><code class="n">stdout</code><code class="p">)</code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"</code><code class="s">invalid UTF-8</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO16-4" id="co_test_for_echo_CO16-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">stdout</code><code class="p">,</code><code class="w"> </code><code class="n">expected</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO16-5" id="co_test_for_echo_CO16-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO16-6" id="co_test_for_echo_CO16-6"><img alt="6" src="assets/6.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_test_for_echo_CO16-1" id="callout_test_for_echo_CO16-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <code>args</code> will be a slice of <code>&amp;str</code> values, and the <code>expected_file</code> will be a <code>&amp;str</code>. The return value is a <code>Result</code>.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO16-2" id="callout_test_for_echo_CO16-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Try to read the contents of the <code>expected_file</code> into a string.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO16-3" id="callout_test_for_echo_CO16-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Attempt to run <code>echor</code> in the current crate with the given arguments and unpack the output.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO16-4" id="callout_test_for_echo_CO16-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Attempt to convert the program’s <code>STDOUT</code> to a string.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO16-5" id="callout_test_for_echo_CO16-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>Ensure that the output is the same as the expected value.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO16-6" id="callout_test_for_echo_CO16-6"><img alt="6" src="assets/6.png"/></a></dt>
+<dd><p>If all the previous code worked, return <code>Ok</code> containing the unit type.</p></dd>
+</dl>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>You will find that Rust has many types of “string” variables.<a data-primary="types" data-secondary="string variables in Rust" data-type="indexterm" id="id436"/><a data-primary="str type" data-type="indexterm" id="id437"/> The type <code>str</code> is appropriate here for literal strings in the source code. The <code>&amp;</code> shows that I intend only to borrow the string for a little while. I’ll have more to say about strings, borrowing, and ownership later.<a data-primary="&amp; operator" data-secondary="borrowing reference to a variable" data-type="indexterm" id="id438"/></p>
+</div>
+
+<p>Following is the final contents of <em>tests/cli.rs</em> showing how I use the helper function to run all four tests:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">use</code><code class="w"> </code><code class="n">anyhow</code><code>::</code><code class="nb">Result</code><code class="p">;</code><code class="w">
+</code><code class="k">use</code><code class="w"> </code><code class="n">assert_cmd</code><code>::</code><code class="n">Command</code><code class="p">;</code><code class="w">
+</code><code class="k">use</code><code class="w"> </code><code class="n">predicates</code><code>::</code><code class="n">prelude</code><code>:</code><code>:</code><code class="o">*</code><code class="p">;</code><code class="w">
+</code><code class="k">use</code><code class="w"> </code><code class="n">pretty_assertions</code><code>::</code><code class="n">assert_eq</code><code class="p">;</code><code class="w">
+</code><code class="k">use</code><code class="w"> </code><code class="n">std</code><code>::</code><code class="n">fs</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="k">fn</code><code> </code><code class="nf">dies_no_args</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="n">Command</code><code>::</code><code class="n">cargo_bin</code><code class="p">(</code><code class="s">"</code><code class="s">echor</code><code class="s">"</code><code class="p">)</code><code class="o">?</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">assert</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">failure</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">stderr</code><code class="p">(</code><code class="n">predicate</code><code>::</code><code class="kt">str</code><code>::</code><code class="n">contains</code><code class="p">(</code><code class="s">"</code><code class="s">Usage</code><code class="s">"</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="p">[</code><code class="o">&amp;</code><code class="kt">str</code><code class="p">]</code><code class="p">,</code><code class="w"> </code><code class="n">expected_file</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">expected</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">fs</code><code>::</code><code class="n">read_to_string</code><code class="p">(</code><code class="n">expected_file</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code>::</code><code class="n">cargo_bin</code><code class="p">(</code><code class="s">"</code><code class="s">echor</code><code class="s">"</code><code class="p">)</code><code class="o">?</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">args</code><code class="p">(</code><code class="n">args</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">output</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"</code><code class="s">fail</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">stdout</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">String</code><code>::</code><code class="n">from_utf8</code><code class="p">(</code><code class="n">output</code><code class="p">.</code><code class="n">stdout</code><code class="p">)</code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"</code><code class="s">invalid UTF-8</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">stdout</code><code class="p">,</code><code class="w"> </code><code class="n">expected</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="k">fn</code><code> </code><code class="nf">hello1</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="n">run</code><code class="p">(</code><code class="o">&amp;</code><code class="p">[</code><code class="s">"</code><code class="s">Hello there</code><code class="s">"</code><code class="p">]</code><code class="p">,</code><code class="w"> </code><code class="s">"</code><code class="s">tests/expected/hello1.txt</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO17-1" id="co_test_for_echo_CO17-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+</code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="k">fn</code><code> </code><code class="nf">hello2</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="n">run</code><code class="p">(</code><code class="o">&amp;</code><code class="p">[</code><code class="s">"</code><code class="s">Hello</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="s">"</code><code class="s">there</code><code class="s">"</code><code class="p">]</code><code class="p">,</code><code class="w"> </code><code class="s">"</code><code class="s">tests/expected/hello2.txt</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO17-2" id="co_test_for_echo_CO17-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+</code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="k">fn</code><code> </code><code class="nf">hello1_no_newline</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="n">run</code><code class="p">(</code><code class="o">&amp;</code><code class="p">[</code><code class="s">"</code><code class="s">Hello  there</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="s">"</code><code class="s">-n</code><code class="s">"</code><code class="p">]</code><code class="p">,</code><code class="w"> </code><code class="s">"</code><code class="s">tests/expected/hello1.n.txt</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO17-3" id="co_test_for_echo_CO17-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+</code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="k">fn</code><code> </code><code class="nf">hello2_no_newline</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="n">run</code><code class="p">(</code><code class="o">&amp;</code><code class="p">[</code><code class="s">"</code><code class="s">-n</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="s">"</code><code class="s">Hello</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="s">"</code><code class="s">there</code><code class="s">"</code><code class="p">]</code><code class="p">,</code><code class="w"> </code><code class="s">"</code><code class="s">tests/expected/hello2.n.txt</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO17-4" id="co_test_for_echo_CO17-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_test_for_echo_CO17-1" id="callout_test_for_echo_CO17-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Run the program with a single string value as input. Note the lack of a terminating semicolon, as this function will return whatever the <code>run</code> function returns.<a data-primary="; (semicolon), lack of terminating ; in functions" data-type="indexterm" id="id439"/></p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO17-2" id="callout_test_for_echo_CO17-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Run the program with two strings as input.<a data-primary="newlines" data-secondary="using -n flag to omit" data-type="indexterm" id="id440"/></p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO17-3" id="callout_test_for_echo_CO17-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Run the program with a single string value as input and the <code>-n</code> flag to omit the newline. Note that there are two spaces between the words.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO17-4" id="callout_test_for_echo_CO17-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Run the program with two strings as input and the <code>-n</code> flag appearing first.</p></dd>
+</dl>
+
+<p>As you can see, I can write as many functions as I like in <em>tests/cli.rs</em>.
+Only those marked with <code>#[test]</code> are run when testing.
+If you run <strong><code>cargo test</code></strong> now, you should see five passing tests:</p>
+
+<pre data-type="programlisting">running 5 tests
+test dies_no_args ... ok
+test hello1 ... ok
+test hello1_no_newline ... ok
+test hello2_no_newline ... ok
+test hello2 ... ok</pre>
+</div></section>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Using clap Derive" data-type="sect1"><div class="sect1" id="id23">
+<h1>Using clap Derive</h1>
+
+<p>Now I will show you how to write the same <code>clap</code> code using the derive pattern<a data-primary="clap utility" data-secondary="using clap derive" data-type="indexterm" id="ix_clpder"/><a data-primary="derive pattern" data-type="indexterm" id="deriveKB"/> and the preceding test suite to ensure that the program still works as expected.
+First, you will need to update <em>Cargo.toml</em> to include this crate feature:</p>
+
+<pre data-type="programlisting">[dependencies]
+clap = { version = "4.5.0", features = ["derive"] }</pre>
+
+<p>You can also use Cargo to add the dependency for you:</p>
+
+<pre data-type="programlisting">$ cargo add clap --features derive</pre>
+
+<p class="pagebreak-before">Key to the derive pattern is the definition of a <a href="https://oreil.ly/n4Dsk"><code>struct</code></a> to represent the command-line arguments.<a data-primary="structs" data-secondary="definition to represent command-line arguments" data-type="indexterm" id="id441"/>
+A struct is similar to a class definition in object-oriented languages and allows you to mix various Rust types into a single data structure.
+As in the preceding code, I will use <code>Vec&lt;String&gt;</code> to represent the string values and <code>bool</code> for whether or not to include the final newline.<a data-primary="Vec type" data-type="indexterm" id="id442"/><a data-primary="bool type" data-type="indexterm" id="id443"/>
+Additionally, the struct will have <a href="https://oreil.ly/WN4t7">comments</a>, which can start with two or three slashes.<a data-primary="comments" data-type="indexterm" id="id444"/><a data-primary="doc comments" data-type="indexterm" id="id445"/>
+Three slashes denote documentation, aka <em>doc comments</em>.
+In the previous chapter, you saw <code>#[test]</code> was used to annotate a test function.<a data-primary="#[test] attribute" data-type="indexterm" id="id446"/>
+My <code>Args</code> struct will use similar annotations to tell <code>clap</code> how to create the user interface.<a data-primary="Args struct" data-type="indexterm" id="id447"/></p>
+
+<p>Move your <em>src/main.rs</em> to some other filename and start fresh with the following:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">use</code><code class="w"> </code><code class="n">clap</code><code>::</code><code class="n">Parser</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO18-1" id="co_test_for_echo_CO18-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+
+</code><code class="cp">#[</code><code class="cp">derive(Debug, Parser)</code><code class="cp">]</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO18-2" id="co_test_for_echo_CO18-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+</code><code class="cp">#[</code><code class="cp">command(author, version, about)</code><code class="cp">]</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO18-3" id="co_test_for_echo_CO18-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+</code><code class="sd">/// Rust version of `echo` </code><a class="co" href="#callout_test_for_echo_CO18-4" id="co_test_for_echo_CO18-4"><img alt="4" src="assets/4.png"/></a><code class="sd">
+</code><code class="k">struct</code><code> </code><code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO18-5" id="co_test_for_echo_CO18-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+    </code><code class="sd">/// Input text
+</code><code class="w">    </code><code class="cp">#[</code><code class="cp">arg(required(true))</code><code class="cp">]</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO18-6" id="co_test_for_echo_CO18-6"><img alt="6" src="assets/6.png"/></a><code class="w">
+    </code><code class="n">text</code><code>:</code><code> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO18-7" id="co_test_for_echo_CO18-7"><img alt="7" src="assets/7.png"/></a><code class="w">
+
+    </code><code class="sd">/// Do not print newline
+</code><code class="w">    </code><code class="cp">#[</code><code class="cp">arg(short('n'))</code><code class="cp">]</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO18-8" id="co_test_for_echo_CO18-8"><img alt="8" src="assets/8.png"/></a><code class="w">
+    </code><code class="n">omit_newline</code><code>:</code><code> </code><code class="kt">bool</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO18-9" id="co_test_for_echo_CO18-9"><img alt="9" src="assets/9.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_test_for_echo_CO18-1" id="callout_test_for_echo_CO18-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Import the <a href="https://oreil.ly/IrHOL"><code>clap::Parser</code></a> trait.<a data-primary="clap::Parser trait" data-type="indexterm" id="id448"/><a data-primary="Parser trait" data-type="indexterm" id="id449"/></p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO18-2" id="callout_test_for_echo_CO18-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <a href="https://oreil.ly/0zHLo"><code>derive</code></a> attribute expands the capabilities of the struct. Here, I’m using the standard <code>Debug</code> to allow for debug printing of the struct and the imported <code>clap::Parser</code>.<a data-primary="Debug trait" data-type="indexterm" id="id450"/></p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO18-3" id="callout_test_for_echo_CO18-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p><a href="https://oreil.ly/SkUg1"><code>command</code></a> will turn the struct into a <code>clap::Command</code> object. The values for <em>author</em> and <em>version</em> can be derived from <em>Cargo.toml</em>.<a data-primary="clap::Command struct" data-type="indexterm" id="id451"/><a data-primary="Command type" data-type="indexterm" id="id452"/></p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO18-4" id="callout_test_for_echo_CO18-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>This doc comment becomes the program’s <em>about</em> description.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO18-5" id="callout_test_for_echo_CO18-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>Define a struct called <code>Args</code>.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO18-6" id="callout_test_for_echo_CO18-6"><img alt="6" src="assets/6.png"/></a></dt>
+<dd><p>Each member of the struct becomes a <a href="https://oreil.ly/AQZFy"><code>clap::Arg</code></a>. This <code>#[arg]</code> annotation additionally specifies that <code>text</code> is a <a href="https://oreil.ly/a0UyH">required</a>.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO18-7" id="callout_test_for_echo_CO18-7"><img alt="7" src="assets/7.png"/></a></dt>
+<dd><p>Create an argument named <em>text</em>. The type annotation <code>Vec&lt;String&gt;</code> indicates that this argument can hold multiple string values.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO18-8" id="callout_test_for_echo_CO18-8"><img alt="8" src="assets/8.png"/></a></dt>
+<dd><p>Define a short flag <code>-n</code> for the following argument.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO18-9" id="callout_test_for_echo_CO18-9"><img alt="9" src="assets/9.png"/></a></dt>
+<dd><p>The <code>omit_newline</code> is a Boolean value that will default to <code>false</code>.</p></dd>
+</dl>
+
+<p>Change the <code>main</code> function to the following:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">main</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">args</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Args</code><code>::</code><code class="n">parse</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO19-1" id="co_test_for_echo_CO19-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="fm">dbg!</code><code class="p">(</code><code class="n">args</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_test_for_echo_CO19-2" id="co_test_for_echo_CO19-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_test_for_echo_CO19-1" id="callout_test_for_echo_CO19-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Parse the command-line arguments into a <code>Args</code> struct.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO19-2" id="callout_test_for_echo_CO19-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Use the <a href="https://oreil.ly/a7BdC"><code>dbg!</code> (<em>debug</em>) macro</a> to pretty-print the arguments.<a data-primary="dbg! (debug) macro" data-type="indexterm" id="id453"/></p></dd>
+</dl>
+
+<p>The derive code is more terse but creates the same interface.<a data-primary="-h|--help flag" data-primary-sortas="h" data-type="indexterm" id="id454"/>
+Run with <code>-h|--help</code> to view the usage documentation and with no arguments to ensure the input text is still required.
+Finally, run with the correct arguments to view the <code>Args</code> struct:</p>
+
+<pre data-type="programlisting">$ cargo run -- -n Hello world
+[src/main.rs:18] args = Args {
+    text: [ <a class="co" href="#callout_test_for_echo_CO20-1" id="co_test_for_echo_CO20-1"><img alt="1" src="assets/1.png"/></a>
+        "Hello",
+        "world",
+    ],
+    omit_newline: true, <a class="co" href="#callout_test_for_echo_CO20-2" id="co_test_for_echo_CO20-2"><img alt="2" src="assets/2.png"/></a>
+}</pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_test_for_echo_CO20-1" id="callout_test_for_echo_CO20-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The field <code>args.text</code> provides access to a <code>Vec&lt;String&gt;</code>.</p></dd>
+<dt><a class="co" href="#co_test_for_echo_CO20-2" id="callout_test_for_echo_CO20-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The field <code>args.omit_newline</code> is a <code>bool</code> value.</p></dd>
+</dl>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Run <strong><code>cargo test</code></strong> to see the passing and failing tests. Stop reading and see if you can use the <code>Args</code> struct to write a passing version of the program.</p>
+</div>
+
+<p>Following is how I wrote the <code>main</code> function to use the <code>Args</code> struct:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">args</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Args</code>::<code class="n">parse</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="fm">print!</code><code class="p">(</code><code class="w"/>
+<code class="w">        </code><code class="s">"{}{}"</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="n">args</code><code class="p">.</code><code class="n">text</code><code class="p">.</code><code class="n">join</code><code class="p">(</code><code class="s">" "</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">omit_newline</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="s">""</code><code class="w"> </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="s">"</code><code class="se">\n</code><code class="s">"</code><code class="w"> </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>This is a perfect example of refactoring your program.
+First, you must get something that works correctly, which you can verify using tests.
+Then you rely on the strictness of the Rust compiler and your tests to change your program.<a data-primary="clap utility" data-secondary="using clap derive" data-startref="ix_clpder" data-type="indexterm" id="id455"/><a data-startref="deriveKB" data-type="indexterm" id="id456"/></p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Summary" data-type="sect1"><div class="sect1" id="id24">
+<h1>Summary</h1>
+
+<p>Now you have written 20-30 lines of Rust code (depending on whether you use builder or derive) in <em>src/main.rs</em> for the <code>echor</code> program and five tests in <em>tests/cli.rs</em> to verify that your program meets some measure of specification.<a data-primary="integration tests" data-secondary="writing for echor" data-startref="ix_inttstwrechorRes" data-tertiary="using the Result type" data-type="indexterm" id="id457"/><a data-primary="echo utility" data-secondary="writing integration tests for echor" data-startref="ix_echointtst" data-type="indexterm" id="id458"/><a data-primary="Result type" data-secondary="using in integration testing of echor" data-startref="ix_Restyp" data-type="indexterm" id="id459"/><a data-primary="integration tests" data-secondary="writing for echor" data-startref="ix_inttstwrechor" data-type="indexterm" id="id460"/>
+Consider what you’ve achieved:</p>
+
+<ul>
+<li>
+<p>You learned that basic program output is printed to <code>STDOUT</code> and errors should be printed to <code>STDERR</code>.</p>
+</li>
+<li>
+<p>You’ve written a program that takes the options <code>-h</code> or <code>--help</code> to produce help, <code>-V</code> or <code>--version</code> to show the program’s version, and <code>-n</code> to omit a newline along with one or more positional command-line arguments.</p>
+</li>
+<li>
+<p>You wrote a program that will print usage documentation when run with the wrong arguments or with the <code>-h|--help</code> flag.</p>
+</li>
+<li>
+<p>You learned how to print all the positional command-line arguments joined on spaces.</p>
+</li>
+<li>
+<p>You learned to use the <code>print!</code> macro to omit the trailing newline if the <code>-n</code> flag is present.</p>
+</li>
+<li>
+<p>You can run integration tests to confirm that your program replicates the output from <code>echo</code> for at least four test cases covering one or two inputs both with and without the trailing newline.</p>
+</li>
+<li>
+<p>You learned to use several Rust types, including the unit type, strings, vectors, slices, <code>Option</code>, and <code>Result</code>.</p>
+</li>
+<li>
+<p>You learned how to read the entire contents of a file into a string.</p>
+</li>
+<li>
+<p>You learned how to execute an external command from within a Rust program, check the exit status, and verify the contents of both <code>STDOUT</code> and <code>STDERR</code>.</p>
+</li>
+<li>
+<p>You used two <code>clap</code> patterns for parsing command-line arguments, builder and derive, the latter of which required creating and annotating a <code>struct</code>.</p>
+</li>
+</ul>
+
+<p>All this, and you’ve done it while writing in a language that won’t let you make common mistakes that lead to buggy programs or security vulnerabilities.
+Feel free to give yourself a high five or enjoy a slightly evil <em>mwuhaha</em> chuckle as you consider how Rust will help you conquer the world.<a data-primary="echo utility" data-startref="ix_echo" data-type="indexterm" id="id461"/> Now that I’ve shown you how to organize and write tests and data, I’ll use the tests earlier in the next program to start using <em>test-driven development</em>, where I write tests first and then write code to satisfy the tests.</p>
+</div></section>
+<div data-type="footnotes"><p data-type="footnote" id="id400"><sup><a href="ch02.html#id400-marker">1</a></sup> Python has both an <code>if</code> statement and an <code>if</code> expression.</p><p data-type="footnote" id="id406"><sup><a href="ch02.html#id406-marker">2</a></sup> “Trust, but verify.” This rhymes in Russian and so sounds cooler than when Reagan used it in the 1980s during nuclear disarmament talks with the USSR.</p></div></div></section></body></html>

@@ -1,0 +1,1239 @@
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Word to Your Mother</title><link href="epub.css" rel="stylesheet" type="text/css"/>
+<meta content="urn:uuid:e80a1ec8-ed8e-40f7-ba3d-26a647960341" name="Adept.expected.resource"/></head><body data-type="book"><section data-pdf-bookmark="Chapter 5. Word to Your Mother" data-type="chapter" epub:type="chapter"><div class="chapter" id="ch05">
+<h1><span class="label">Chapter 5. </span>Word to Your Mother</h1>
+
+<blockquote>
+<p>
+All hail the dirt bike / Philosopher dirt bike / <br/>Silence as we gathered round / We saw the word and were on our way
+</p>
+<p data-type="attribution">
+They Might Be Giants, “Dirt Bike” (1994)
+</p>
+</blockquote>
+
+<p>For this chapter’s challenge, you will create a version of the venerable <code>wc</code> (<em>word count</em>) program, which dates back to version 1 of AT&amp;T Unix.
+This program will display the number of lines, words, and bytes found in text from <code>STDIN</code> or one or more files.<a data-primary="wc (word count) program" data-type="indexterm" id="ix_wc"/>
+I often use it to count the number of lines returned by some other process.<a data-primary="word count" data-see="wc program" data-type="indexterm" id="id671"/></p>
+
+<p>In this chapter, you will learn how to do the following:</p>
+
+<ul>
+<li>
+<p>Use the <code>Iterator::all</code> function</p>
+</li>
+<li>
+<p>Create a module for unit tests</p>
+</li>
+<li>
+<p>Fake a filehandle for testing</p>
+</li>
+<li>
+<p>Conditionally format and print a value</p>
+</li>
+<li>
+<p>Conditionally compile a module when testing</p>
+</li>
+<li>
+<p>Break a line of text into words, bytes, and characters</p>
+</li>
+</ul>
+
+
+
+
+
+
+<section data-pdf-bookmark="How wc Works" data-type="sect1"><div class="sect1" id="id49">
+<h1>How wc Works</h1>
+
+<p class="pagebreak-after">I’ll start by showing how <code>wc</code> works so you know what is expected by the tests.<a data-primary="wc (word count) program" data-secondary="how it works" data-type="indexterm" id="ix_wchow"/>
+Following is an excerpt <a data-primary="BSD version" data-secondary="wc program" data-type="indexterm" id="id672"/>from the BSD <code>wc</code> manual page that describes the elements that the challenge program will implement:<a data-primary="bytes" data-secondary="number in input file, getting with wc" data-type="indexterm" id="id673"/></p>
+
+<pre data-type="programlisting">WC(1)                     BSD General Commands Manual                    WC(1)
+
+NAME
+     wc -- word, line, character, and byte count
+
+SYNOPSIS
+     wc [-clmw] [file ...]
+
+DESCRIPTION
+     The wc utility displays the number of lines, words, and bytes contained
+     in each input file, or standard input (if no file is specified) to the
+     standard output.  A line is defined as a string of characters delimited
+     by a &lt;newline&gt; character.  Characters beyond the final &lt;newline&gt; charac-
+     ter will not be included in the line count.
+
+     A word is defined as a string of characters delimited by white space
+     characters.  White space characters are the set of characters for which
+     the iswspace(3) function returns true.  If more than one input file is
+     specified, a line of cumulative counts for all the files is displayed on
+     a separate line after the output for the last file.
+
+     The following options are available:
+
+     -c      The number of bytes in each input file is written to the standard
+             output.  This will cancel out any prior usage of the -m option.
+
+     -l      The number of lines in each input file is written to the standard
+             output.
+
+     -m      The number of characters in each input file is written to the
+             standard output.  If the current locale does not support multi-
+             byte characters, this is equivalent to the -c option.  This will
+             cancel out any prior usage of the -c option.
+
+     -w      The number of words in each input file is written to the standard
+             output.
+
+     When an option is specified, wc only reports the information requested by
+     that option.  The order of output always takes the form of line, word,
+     byte, and file name.  The default action is equivalent to specifying the
+     -c, -l and -w options.
+
+     If no files are specified, the standard input is used and no file name is
+     displayed.  The prompt will accept input until receiving EOF, or [^D] in
+     most environments.</pre>
+
+<p><a data-primary="lines" data-secondary="in wc program" data-secondary-sortas="wc" data-type="indexterm" id="id674"/>A picture is worth a kilobyte of words, so I’ll show you some examples using the following test files in the <em>05_wcr/tests/inputs</em> directory:</p>
+
+<ul>
+<li>
+<p><em>empty.txt</em>: an empty file</p>
+</li>
+<li>
+<p><em>fox.txt</em>: a file with one line of text</p>
+</li>
+<li>
+<p><em>atlamal.txt</em>: a file with the first stanza from “Atlamál hin groenlenzku” or “The Greenland Ballad of Atli,” an Old Norse poem</p>
+</li>
+</ul>
+
+<p>When run with an empty file, the program reports zero lines, words, and bytes in three right-justified columns eight characters wide:</p>
+
+<pre data-type="programlisting">$ cd 05_wcr
+$ wc tests/inputs/empty.txt
+       0       0       0 tests/inputs/empty.txt</pre>
+
+<p>Next, consider a file with one line of text with varying spaces between words and a tab character.
+Let’s take a look at it before running <code>wc</code> on it.
+Here I’m using <code>cat</code> with<a data-primary="cat (concatenate) command" data-secondary="-t option" data-type="indexterm" id="id675"/> the flag <code>-t</code> to display the tab character as <code>^I</code> and <code>-e</code> to display <code>$</code> for the end of the line:</p>
+
+<pre data-type="programlisting">$ cat -te tests/inputs/fox.txt
+The  quick brown fox^Ijumps over   the lazy dog.$</pre>
+
+<p>This example is short enough that I can manually count all the lines, words, and bytes as shown in <a data-type="xref" href="#fig_5.1">Figure 5-1</a>, where spaces are noted with raised dots, the tab character with <code>\t</code>, and the end of the line as <code>$</code>.</p>
+
+<figure><div class="figure" id="fig_5.1">
+<img alt="clru 0501" src="assets/clru_0501.png"/>
+<h6><span class="label">Figure 5-1. </span>There is 1 line of text containing 9 words and 48 bytes.</h6>
+</div></figure>
+
+<p>I find that <code>wc</code> is in agreement:</p>
+
+<pre data-type="programlisting">$ wc tests/inputs/fox.txt
+       1       9      48 tests/inputs/fox.txt</pre>
+
+<p>As mentioned in <a data-type="xref" href="ch04.html#ch04">Chapter 4</a>, bytes may equate to characters for ASCII, but Unicode characters may require multiple bytes.<a data-primary="ASCII" data-type="indexterm" id="id676"/><a data-primary="Unicode" data-type="indexterm" id="id677"/><a data-primary="bytes" data-type="indexterm" id="id678"/><a data-primary="characters" data-type="indexterm" id="id679"/>
+The file <em>tests/inputs/atlamal.txt</em> contains many such examples:<sup><a data-type="noteref" href="ch05.html#id680" id="id680-marker">1</a></sup></p>
+
+<pre data-type="programlisting">$ cat tests/inputs/atlamal.txt
+Frétt hefir öld óvu, þá er endr of gerðu
+seggir samkundu, sú var nýt fæstum,
+æxtu einmæli, yggr var þeim síðan
+ok it sama sonum Gjúka, er váru sannráðnir.</pre>
+
+<p>According to <code>wc</code>, this file contains 4 lines, 29 words, and 177 bytes:</p>
+
+<pre data-type="programlisting">$ wc tests/inputs/atlamal.txt
+       4      29     177 tests/inputs/atlamal.txt</pre>
+
+<p>If I want <a data-primary="lines" data-secondary="getting number in a file, using wc" data-type="indexterm" id="id681"/>only the number of <em>lines</em>, I can use the <code>-l</code> flag and only that column will be shown:</p>
+
+<pre data-type="programlisting">$ wc -l tests/inputs/atlamal.txt
+       4 tests/inputs/atlamal.txt</pre>
+
+<p>I can similarly request<a data-primary="words, getting number of" data-type="indexterm" id="id682"/> only the number of <em>bytes</em> with <code>-c</code> and <em>words</em> with <code>-w</code>, and only those two columns will be shown:</p>
+
+<pre data-type="programlisting">$ wc -w -c tests/inputs/atlamal.txt
+      29     177 tests/inputs/atlamal.txt</pre>
+
+<p>I can request<a data-primary="characters" data-secondary="getting number of with wc" data-type="indexterm" id="id683"/> the number of <em>characters</em> using the <code>-m</code> flag:</p>
+
+<pre data-type="programlisting">$ wc -m tests/inputs/atlamal.txt
+     159 tests/inputs/atlamal.txt</pre>
+
+<p>The GNU version of <code>wc</code> will show both character <a data-primary="GNU version" data-secondary="wc program" data-type="indexterm" id="id684"/>and byte counts if you provide both the flags <code>-m</code> and <code>-c</code>, but the BSD version will show only one or the other, with the latter flag taking precedence:</p>
+
+<pre data-type="programlisting">$ wc -cm tests/inputs/atlamal.txt <a class="co" href="#callout_word_to_your_mother_CO1-1" id="co_word_to_your_mother_CO1-1"><img alt="1" src="assets/1.png"/></a>
+     159 tests/inputs/atlamal.txt
+$ wc -mc tests/inputs/atlamal.txt <a class="co" href="#callout_word_to_your_mother_CO1-2" id="co_word_to_your_mother_CO1-2"><img alt="2" src="assets/2.png"/></a>
+     177 tests/inputs/atlamal.txt</pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_word_to_your_mother_CO1-1" id="callout_word_to_your_mother_CO1-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <code>-m</code> flag comes last, so characters are shown.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO1-2" id="callout_word_to_your_mother_CO1-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <code>-c</code> flag comes last, so bytes are shown.</p></dd>
+</dl>
+
+<p>Note that no matter the order of the flags, like <code>-wc</code> or <code>-cw</code>, the output columns are always ordered by lines, words, and bytes/characters:</p>
+
+<pre data-type="programlisting">$ wc -cw tests/inputs/atlamal.txt
+      29     177 tests/inputs/atlamal.txt</pre>
+
+<p>If no positional arguments are provided, <code>wc</code> will read from <code>STDIN</code> and will not print a filename:</p>
+
+<pre data-type="programlisting">$ cat tests/inputs/atlamal.txt | wc -lc
+       4     177</pre>
+
+<p>The GNU version of <code>wc</code> will understand a filename consisting of a dash (<code>-</code>) to mean <code>STDIN</code>, and it also provides long flag names as well as some other options:</p>
+
+<pre data-type="programlisting">$ wc --help
+Usage: wc [OPTION]... [FILE]...
+  or:  wc [OPTION]... --files0-from=F
+Print newline, word, and byte counts for each FILE, and a total line if
+more than one FILE is specified.  With no FILE, or when FILE is -,
+read standard input.  A word is a non-zero-length sequence of characters
+delimited by white space.
+The options below may be used to select which counts are printed, always in
+the following order: newline, word, character, byte, maximum line length.
+  -c, --bytes            print the byte counts
+  -m, --chars            print the character counts
+  -l, --lines            print the newline counts
+      --files0-from=F    read input from the files specified by
+                           NUL-terminated names in file F;
+                           If F is - then read names from standard input
+  -L, --max-line-length  print the length of the longest line
+  -w, --words            print the word counts
+      --help     display this help and exit
+      --version  output version information and exit</pre>
+
+<p>If processing more than one file, both versions will finish with a <em>total</em> line showing the number of lines, words, and bytes for all the inputs:</p>
+
+<pre data-type="programlisting">$ wc tests/inputs/*.txt
+       4      29     177 tests/inputs/atlamal.txt
+       0       0       0 tests/inputs/empty.txt
+       1       9      48 tests/inputs/fox.txt
+       5      38     225 total</pre>
+
+<p>Nonexistent files are noted with a warning to <code>STDERR</code> as the files are being processed.
+In the following example, <em>blargh</em> represents a nonexistent file:</p>
+
+<pre data-type="programlisting">$ wc tests/inputs/fox.txt <strong>blargh</strong> tests/inputs/atlamal.txt
+       1       9      48 tests/inputs/fox.txt
+<strong>wc: blargh: open: No such file or directory</strong>
+       4      29     177 tests/inputs/atlamal.txt
+       5      38     225 total</pre>
+
+<p>As I first showed in <a data-type="xref" href="ch02.html#ch02">Chapter 2</a>, I can<a data-primary="STDERR" data-secondary="redirecting to file with wc" data-type="indexterm" id="id685"/> redirect the <code>STDERR</code> filehandle <code>2</code> in <code>bash</code> to verify that <code>wc</code> prints the warnings to that channel:</p>
+
+<pre data-type="programlisting">$ wc tests/inputs/fox.txt blargh tests/inputs/atlamal.txt 2&gt;err <a class="co" href="#callout_word_to_your_mother_CO2-1" id="co_word_to_your_mother_CO2-1"><img alt="1" src="assets/1.png"/></a>
+       1       9      48 tests/inputs/fox.txt
+       4      29     177 tests/inputs/atlamal.txt
+       5      38     225 total
+$ cat err <a class="co" href="#callout_word_to_your_mother_CO2-2" id="co_word_to_your_mother_CO2-2"><img alt="2" src="assets/2.png"/></a>
+wc: blargh: open: No such file or directory</pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_word_to_your_mother_CO2-1" id="callout_word_to_your_mother_CO2-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Redirect output handle <code>2</code> (<code>STDERR</code>) to the file <em>err</em>.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO2-2" id="callout_word_to_your_mother_CO2-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Verify that the error message is in the file.</p></dd>
+</dl>
+
+<p>There is an extensive test suite to verify that your program implements all these options.<a data-primary="wc (word count) program" data-startref="ix_wchow" data-type="indexterm" id="id686"/></p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Getting Started" data-type="sect1"><div class="sect1" id="id50">
+<h1>Getting Started</h1>
+
+<p>The challenge program should be called <code>wcr</code> (pronounced <em>wick-er</em>) for our Rust version of <code>wc</code>.<a data-primary="wc (word count) program" data-secondary="writing wcr version" data-tertiary="getting started" data-type="indexterm" id="ix_wcwrstrt"/>
+Use <strong><code>cargo new wcr</code></strong> to start, then modify your <em>Cargo.toml</em> to add the following dependencies:</p>
+
+<pre data-code-language="toml" data-type="programlisting"><code class="k">[dependencies]</code><code class="w"/>
+<code class="n">anyhow</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"1.0.79"</code><code class="w"/>
+<code class="n">clap</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">version</code><code class="w"> </code><code class="p">=</code><code class="w"> </code><code class="s2">"4.5.0"</code><code class="p">,</code><code class="w"> </code><code class="n">features</code><code class="w"> </code><code class="p">=</code><code class="w"> </code><code class="p">[</code><code class="s2">"derive"</code><code class="p">]</code><code class="w"> </code><code class="p">}</code><code class="w"/>
+
+<code class="k">[dev-dependencies]</code><code class="w"/>
+<code class="n">assert_cmd</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"2.0.13"</code><code class="w"/>
+<code class="n">predicates</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"3.0.4"</code><code class="w"/>
+<code class="n">pretty_assertions</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"1.4.0"</code><code class="w"/>
+<code class="n">rand</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"0.8.5"</code><code class="w"/></pre>
+
+<p>Copy the <em>05_wcr/tests</em> directory into your new project and run <strong><code>cargo test</code></strong> to perform an initial build and run the tests, all of which should fail.
+Open <em>src/main.rs</em> and add the following <code>Args</code> struct to represent the command-line parameters:<a data-primary="Args struct" data-secondary="defining for command-line parameters for wcr" data-type="indexterm" id="id687"/></p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[</code><code class="cp">derive(Debug)</code><code class="cp">]</code><code class="w">
+</code><code class="k">struct</code><code> </code><code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="n">files</code><code>:</code><code> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO3-1" id="co_word_to_your_mother_CO3-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="n">lines</code><code>:</code><code> </code><code class="kt">bool</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO3-2" id="co_word_to_your_mother_CO3-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="n">words</code><code>:</code><code> </code><code class="kt">bool</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO3-3" id="co_word_to_your_mother_CO3-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+    </code><code class="n">bytes</code><code>:</code><code> </code><code class="kt">bool</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO3-4" id="co_word_to_your_mother_CO3-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+    </code><code class="n">chars</code><code>:</code><code> </code><code class="kt">bool</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO3-5" id="co_word_to_your_mother_CO3-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_word_to_your_mother_CO3-1" id="callout_word_to_your_mother_CO3-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <code>files</code> parameter will be a vector of strings.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO3-2" id="callout_word_to_your_mother_CO3-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <code>lines</code> parameter is a Boolean for whether or not to print the line count.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO3-3" id="callout_word_to_your_mother_CO3-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>The <code>words</code> parameter is a Boolean for whether or not to print the word count.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO3-4" id="callout_word_to_your_mother_CO3-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>The <code>bytes</code> parameter is a Boolean for whether or not to print the byte count.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO3-5" id="callout_word_to_your_mother_CO3-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>The <code>chars</code> parameter is a Boolean for whether or not to print the character count.</p></dd>
+</dl>
+
+<p>Choose your method of parsing the command-line arguments.
+If you prefer the derive pattern from <code>clap</code>, then add <code>use clap::Parser</code> and the necessary annotations to the <code>Args</code> struct.
+If you prefer the builder pattern, I suggest you create a <code>get_args</code> function from the following outline:<a data-primary="Args struct" data-type="indexterm" id="id688"/><a data-primary="get_args function" data-type="indexterm" id="id689"/></p>
+
+<pre class="pagebreak-before" data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">get_args</code><code class="p">()</code><code class="w"> </code>-&gt; <code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">matches</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code>::<code class="n">new</code><code class="p">(</code><code class="s">"wcr"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">version</code><code class="p">(</code><code class="s">"0.1.0"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">author</code><code class="p">(</code><code class="s">"Ken Youens-Clark &lt;kyclark@gmail.com&gt;"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">about</code><code class="p">(</code><code class="s">"Rust version of `wc`"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="c1">// What goes here?</code>
+<code class="w">        </code><code class="p">.</code><code class="n">get_matches</code><code class="p">();</code><code class="w"/>
+
+<code class="w">    </code><code class="n">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">files</code>: <code class="o">..</code><code class="p">.,</code><code class="w"/>
+<code class="w">        </code><code class="n">lines</code>: <code class="o">..</code><code class="p">.,</code><code class="w"/>
+<code class="w">        </code><code class="n">words</code>: <code class="o">..</code><code class="p">.,</code><code class="w"/>
+<code class="w">        </code><code class="n">bytes</code>: <code class="o">..</code><code class="p">.,</code><code class="w"/>
+<code class="w">        </code><code class="n">chars</code>: <code class="o">..</code><code class="p">.,</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>I suggest you use the same <code>main</code> structure from previous programs to pass the arguments to a <code>run</code> function<a data-primary="run function" data-secondary="creating for wcr program" data-type="indexterm" id="id690"/>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">run</code><code class="p">(</code><code class="n">Args</code>::<code class="n">parse</code><code class="p">())</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"{e}"</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="n">std</code>::<code class="n">process</code>::<code class="n">exit</code><code class="p">(</code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Start by printing the <code>Args</code> structure.
+The default behavior should be to print lines, words, and bytes from <code>STDIN</code>, which means those <a data-primary="STDIN" data-secondary="printing lines, words, and bytes from for wcr" data-type="indexterm" id="id691"/>values in the structure should be <code>true</code> when none have been explicitly requested by the user.
+Because the flags are set to <code>false</code> by default, you will need to alter the values after parsing.
+I recommend you pass the <code>Args</code> struct as mutable.
+Be sure to add <code>use anyhow::Result</code> for the following code:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">run</code><code class="p">(</code><code class="k">mut</code><code class="w"> </code><code class="n">args</code>: <code class="nc">Args</code><code class="p">)</code><code class="w"> </code>-&gt; <code class="nb">Result</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="c1">// Alter args as needed</code>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{args:#?}"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(())</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Try to get<a data-primary="--help command-line flag" data-primary-sortas="help" data-secondary="generating help output for wcr" data-type="indexterm" id="id692"/> your program to generate <code>--help</code> output similar to the following:</p>
+
+<pre data-type="programlisting">$ cargo run -- --help
+Rust version of `wc`
+
+Usage: wcr [OPTIONS] [FILE]...
+
+Arguments:
+  [FILE]...  Input file(s) [default: -]
+
+Options:
+  -l, --lines    Show line count
+  -w, --words    Show word count
+  -c, --bytes    Show byte count
+  -m, --chars    Show character count
+  -h, --help     Print help
+  -V, --version  Print version</pre>
+
+<p>The <a data-primary="bytes" data-secondary="disallowing -c (bytes) flag in wcr" data-type="indexterm" id="id693"/><a data-primary="characters" data-secondary="disallowing -m (characters) flag in wcr" data-type="indexterm" id="id694"/>challenge program will mimic the BSD <code>wc</code> in disallowing both the <code>-m</code> (character) and <code>-c</code> (bytes) flags:</p>
+
+<pre data-type="programlisting">$ cargo run -- -cm tests/inputs/fox.txt
+error: the argument '--bytes' cannot be used with '--chars'
+
+Usage: wcr --bytes &lt;FILE&gt;...</pre>
+
+<p>Get your program to print the following output when run with no arguments:</p>
+
+<pre data-type="programlisting">$ cargo run
+Args {
+    files: [
+        "-", <a class="co" href="#callout_word_to_your_mother_CO4-1" id="co_word_to_your_mother_CO4-1"><img alt="1" src="assets/1.png"/></a>
+    ],
+    lines: true, <a class="co" href="#callout_word_to_your_mother_CO4-2" id="co_word_to_your_mother_CO4-2"><img alt="2" src="assets/2.png"/></a>
+    words: true,
+    bytes: true,
+    chars: false,
+}</pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_word_to_your_mother_CO4-1" id="callout_word_to_your_mother_CO4-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The default value for <code>files</code> should be a dash (<code>-</code>) for <code>STDIN</code>.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO4-2" id="callout_word_to_your_mother_CO4-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <code>lines</code>, <code>words</code>, and <code>bytes</code> flags should be <code>true</code> by default.</p></dd>
+</dl>
+
+<p>If any single flag is present, then all the other flags <em>not</em> mentioned should be <code>false</code>:</p>
+
+<pre data-type="programlisting">$ cargo run -- -l tests/inputs/*.txt <a class="co" href="#callout_word_to_your_mother_CO5-1" id="co_word_to_your_mother_CO5-1"><img alt="1" src="assets/1.png"/></a>
+Args {
+    files: [
+        "tests/inputs/atlamal.txt",
+        "tests/inputs/empty.txt",
+        "tests/inputs/fox.txt",
+    ],
+    lines: true, <a class="co" href="#callout_word_to_your_mother_CO5-2" id="co_word_to_your_mother_CO5-2"><img alt="2" src="assets/2.png"/></a>
+    words: false,
+    bytes: false,
+    chars: false,
+}</pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_word_to_your_mother_CO5-1" id="callout_word_to_your_mother_CO5-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <code>-l</code> flag indicates only the line count is wanted, and <code>bash</code> will expand the file glob <code>tests/inputs/*.txt</code> into all the filenames in that directory.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO5-2" id="callout_word_to_your_mother_CO5-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Because the <code>-l</code> flag is present, the <code>lines</code> value is the only Boolean option that is <code>true</code>.</p></dd>
+</dl>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Stop here and get this much working. My dog needs a bath, so I’ll be right back.</p>
+</div>
+
+<p>Following is how I wrote <code>get_args</code> to use the builder pattern.<a data-primary="builder pattern" data-secondary="writing get_args function to use in wcr" data-type="indexterm" id="id695"/>
+There’s nothing<a data-primary="get_args function" data-secondary="defining for wcr program" data-type="indexterm" id="id696"/> new to how I declare the parameters, so I’ll not comment on this.
+Be sure to add <code>use clap::{Arg, ArgAction, Command}</code> for the following code:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">get_args</code><code class="p">()</code><code class="w"> </code>-&gt; <code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">matches</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code>::<code class="n">new</code><code class="p">(</code><code class="s">"wcr"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">version</code><code class="p">(</code><code class="s">"0.1.0"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">author</code><code class="p">(</code><code class="s">"Ken Youens-Clark &lt;kyclark@gmail.com&gt;"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">about</code><code class="p">(</code><code class="s">"Rust version of `wc`"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w"/>
+<code class="w">            </code><code class="n">Arg</code>::<code class="n">new</code><code class="p">(</code><code class="s">"files"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">value_name</code><code class="p">(</code><code class="s">"FILE"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"Input file(s)"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">default_value</code><code class="p">(</code><code class="s">"-"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">num_args</code><code class="p">(</code><code class="mi">0</code><code class="o">..</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w"/>
+<code class="w">            </code><code class="n">Arg</code>::<code class="n">new</code><code class="p">(</code><code class="s">"lines"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">short</code><code class="p">(</code><code class="sc">'l'</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">long</code><code class="p">(</code><code class="s">"lines"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">action</code><code class="p">(</code><code class="n">ArgAction</code>::<code class="n">SetTrue</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"Show line count"</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w"/>
+<code class="w">            </code><code class="n">Arg</code>::<code class="n">new</code><code class="p">(</code><code class="s">"words"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">short</code><code class="p">(</code><code class="sc">'w'</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">long</code><code class="p">(</code><code class="s">"words"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">action</code><code class="p">(</code><code class="n">ArgAction</code>::<code class="n">SetTrue</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"Show word count"</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w"/>
+<code class="w">            </code><code class="n">Arg</code>::<code class="n">new</code><code class="p">(</code><code class="s">"bytes"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">short</code><code class="p">(</code><code class="sc">'c'</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">long</code><code class="p">(</code><code class="s">"bytes"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">action</code><code class="p">(</code><code class="n">ArgAction</code>::<code class="n">SetTrue</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"Show byte count"</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w"/>
+<code class="w">            </code><code class="n">Arg</code>::<code class="n">new</code><code class="p">(</code><code class="s">"chars"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">short</code><code class="p">(</code><code class="sc">'m'</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">long</code><code class="p">(</code><code class="s">"chars"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">action</code><code class="p">(</code><code class="n">ArgAction</code>::<code class="n">SetTrue</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"Show character count"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">conflicts_with</code><code class="p">(</code><code class="s">"bytes"</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">get_matches</code><code class="p">();</code><code class="w"/>
+
+<code class="w">    </code><code class="n">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">files</code>: <code class="nc">matches</code><code class="p">.</code><code class="n">get_many</code><code class="p">(</code><code class="s">"files"</code><code class="p">).</code><code class="n">unwrap</code><code class="p">().</code><code class="n">cloned</code><code class="p">().</code><code class="n">collect</code><code class="p">(),</code><code class="w"/>
+<code class="w">        </code><code class="n">lines</code>: <code class="nc">matches</code><code class="p">.</code><code class="n">get_flag</code><code class="p">(</code><code class="s">"lines"</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="n">words</code>: <code class="nc">matches</code><code class="p">.</code><code class="n">get_flag</code><code class="p">(</code><code class="s">"words"</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="n">bytes</code>: <code class="nc">matches</code><code class="p">.</code><code class="n">get_flag</code><code class="p">(</code><code class="s">"bytes"</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="n">chars</code>: <code class="nc">matches</code><code class="p">.</code><code class="n">get_flag</code><code class="p">(</code><code class="s">"chars"</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>To use the derive pattern, add <code>use clap::Parser</code> and <a data-primary="derive pattern" data-secondary="using in wcr program" data-type="indexterm" id="id697"/><a data-primary="clap::Parser trait" data-type="indexterm" id="id698"/><a data-primary="Parser trait" data-secondary="using in wcr program" data-type="indexterm" id="id699"/><a data-primary="Args struct" data-secondary="writing to use derive pattern in wcr program" data-type="indexterm" id="id700"/>update the <code>Args</code> to the following:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[derive(Debug, Parser)]</code><code class="w"/>
+<code class="cp">#[command(author, version, about)]</code><code class="w"/>
+<code class="sd">/// Rust version of `wc`</code>
+<code class="k">struct</code> <code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="sd">/// Input file(s)</code>
+<code class="w">    </code><code class="cp">#[arg(value_name = </code><code class="s">"FILE"</code><code class="cp">, default_value = </code><code class="s">"-"</code><code class="cp">)]</code><code class="w"/>
+<code class="w">    </code><code class="n">files</code>: <code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Show line count</code>
+<code class="w">    </code><code class="cp">#[arg(short, long)]</code><code class="w"/>
+<code class="w">    </code><code class="n">lines</code>: <code class="kt">bool</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Show word count</code>
+<code class="w">    </code><code class="cp">#[arg(short, long)]</code><code class="w"/>
+<code class="w">    </code><code class="n">words</code>: <code class="kt">bool</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Show byte count</code>
+<code class="w">    </code><code class="cp">#[arg(short('c'), long)]</code><code class="w"/>
+<code class="w">    </code><code class="n">bytes</code>: <code class="kt">bool</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Show character count</code>
+<code class="w">    </code><code class="cp">#[arg(short('m'), long, conflicts_with(</code><code class="s">"bytes"</code><code class="cp">))]</code><code class="w"/>
+<code class="w">    </code><code class="n">chars</code>: <code class="kt">bool</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Inside the <code>run</code> function, I change the flags if needed:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="k">mut</code><code class="w"> </code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="p">[</code><code class="n">args</code><code class="p">.</code><code class="n">words</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">bytes</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">chars</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">lines</code><code class="p">]</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO6-1" id="co_word_to_your_mother_CO6-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+        </code><code class="p">.</code><code class="n">iter</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">all</code><code class="p">(</code><code class="o">|</code><code class="n">v</code><code class="o">|</code><code class="w"> </code><code class="n">v</code><code class="w"> </code><code class="o">=</code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="kc">false</code><code class="p">)</code><code class="w">
+</code><code class="w">    </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="n">args</code><code class="p">.</code><code class="n">lines</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="kc">true</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="n">args</code><code class="p">.</code><code class="n">words</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="kc">true</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="n">args</code><code class="p">.</code><code class="n">bytes</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="kc">true</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{args:#?}</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_word_to_your_mother_CO6-1" id="callout_word_to_your_mother_CO6-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>If all the flags are <code>false</code>, then set <code>lines</code>, <code>words</code>, and <code>bytes</code> to <code>true</code>.<a data-primary="true and false values" data-secondary="flags for wcr program" data-type="indexterm" id="id701"/></p></dd>
+</dl>
+
+<p>I want to highlight how I create a temporary list using a <a href="https://oreil.ly/NHidS"><code>slice</code></a> with all the flags.<a data-primary="slices" data-type="indexterm" id="id702"/>
+I then call the <a href="https://oreil.ly/hcprj"><code>slice::iter</code> method</a> to create an iterator so I can use the <a href="https://oreil.ly/O8CL1"><code>Itera⁠tor​::all</code> function</a> to find if all the values are <code>false</code>.<a data-primary="Iterator::all function" data-type="indexterm" id="id703"/><a data-primary="slice::iter method" data-type="indexterm" id="id704"/>
+This method expects a <a href="https://oreil.ly/onL9M">closure</a>, which is an anonymous function that can be passed as an argument to another function.<a data-primary="closures" data-type="indexterm" id="id705"/>
+Here, the closure is a <em>predicate</em> or a <em>test</em> that determines if an element is <code>false</code>.<a data-primary="predicates" data-type="indexterm" id="id706"/><a data-primary="testing" data-secondary="test determining if element is false" data-type="indexterm" id="id707"/>
+Because these values are references, I compare to <code>&amp;false</code>, which is a reference to a Boolean value.<a data-primary="references" data-secondary="to Boolean values" data-secondary-sortas="Boolean" data-type="indexterm" id="id708"/><a data-primary="Boolean values" data-type="indexterm" id="id709"/>
+If <em>all</em> the evaluations are <code>true</code>, then <code>Iterator::all</code> will return <code>true</code>.<sup><a data-type="noteref" href="ch05.html#id710" id="id710-marker">2</a></sup>
+A slightly shorter but<a data-primary="Boolean values" data-secondary="negating" data-type="indexterm" id="id711"/> possibly less obvious way to write this would be:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">if</code><code class="w"> </code><code class="p">[</code><code class="n">args</code><code class="p">.</code><code class="n">lines</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">words</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">bytes</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">chars</code><code class="p">]</code><code class="p">.</code><code class="n">iter</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">all</code><code class="p">(</code><code class="o">|</code><code class="n">v</code><code class="o">|</code><code class="w"> </code><code class="o">!</code><code class="n">v</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO7-1" id="co_word_to_your_mother_CO7-1"><img alt="1" src="assets/1.png"/></a></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_word_to_your_mother_CO7-1" id="callout_word_to_your_mother_CO7-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Negate each Boolean value <code>v</code> using <a href="https://oreil.ly/ZvixG"><code>std::ops::Not</code></a>, which is written using a prefix exclamation point (<code>!</code>).<a data-primary="std::ops::Not" data-type="indexterm" id="id712"/><a data-primary="! (exclamation point)" data-secondary="not operator" data-type="indexterm" id="id713"/></p></dd>
+</dl>
+<aside data-type="sidebar" epub:type="sidebar"><div class="sidebar" id="id714">
+<h1>Iterator Methods That Take a Closure</h1>
+<p>You should take some time to read the <a href="https://oreil.ly/CEdH5"><code>Iterator</code> documentation</a> to <a data-primary="Iterator type, methods that take a closure" data-type="indexterm" id="id715"/><a data-primary="closures" data-secondary="Iterator methods that take as argument" data-type="indexterm" id="id716"/>note the other methods that take a closure as an argument to select, test, or transform the elements, including the following:</p>
+
+<ul>
+<li>
+<p><a href="https://oreil.ly/HvVrb"><code>Iterator::any</code></a> will return <code>true</code> if even one evaluation of the closure for an item returns <code>true</code>.</p>
+</li>
+<li>
+<p><a href="https://oreil.ly/LDu90"><code>Iterator::filter</code></a> will find all elements for which the predicate is <code>true</code>.</p>
+</li>
+<li>
+<p><a href="https://oreil.ly/cfevE"><code>Iterator::map</code></a> will apply a closure to each element and return a <a href="https://oreil.ly/PITID"><code>std​::iter::Map</code></a> with the transformed elements.</p>
+</li>
+<li>
+<p><a href="https://oreil.ly/7n1u5"><code>Iterator::find</code></a> will return the first element of an iterator that satisfies the predicate as <code>Some(value)</code> or <code>None</code> if all elements evaluate to <code>false</code>.</p>
+</li>
+<li>
+<p><a href="https://oreil.ly/TAlOW"><code>Iterator::position</code></a> will return the index of the first element that satisfies the predicate as <code>Some(value)</code> or <code>None</code> if all elements evaluate to <code>false</code>.</p>
+</li>
+<li>
+<p><a href="https://oreil.ly/7uabU"><code>Iterator::cmp</code></a>, <a href="https://oreil.ly/uEiqO"><code>Iterator::min_by</code></a>, and <a href="https://oreil.ly/mXDle"><code>Iterator::max_by</code></a> have predicates that accept pairs of items for comparison or to find the minimum and maximum.<a data-primary="wc (word count) program" data-secondary="writing wcr version" data-startref="ix_wcwrstrt" data-tertiary="getting started" data-type="indexterm" id="id717"/></p>
+</li>
+</ul>
+</div></aside>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Iterating the Files" data-type="sect2"><div class="sect2" id="id51">
+<h2>Iterating the Files</h2>
+
+<p>Now to work on the counting part of the program.<a data-primary="wc (word count) program" data-secondary="writing wcr version" data-tertiary="iterating the files" data-type="indexterm" id="id718"/><a data-primary="files" data-secondary="iterating in wcr program" data-type="indexterm" id="id719"/>
+This will require iterating over the file arguments and trying to open them, and I suggest<a data-primary="open function" data-type="indexterm" id="id720"/> you use the <code>open</code> function from <a data-type="xref" href="ch02.html#ch02">Chapter 2</a> for this:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">open</code><code class="p">(</code><code class="n">filename</code>: <code class="kp">&amp;</code><code class="kt">str</code><code class="p">)</code><code class="w"> </code>-&gt; <code class="nb">Result</code><code class="o">&lt;</code><code class="nb">Box</code><code class="o">&lt;</code><code class="k">dyn</code><code class="w"> </code><code class="n">BufRead</code><code class="o">&gt;&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">match</code><code class="w"> </code><code class="n">filename</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="s">"-"</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">Ok</code><code class="p">(</code><code class="nb">Box</code>::<code class="n">new</code><code class="p">(</code><code class="n">BufReader</code>::<code class="n">new</code><code class="p">(</code><code class="n">io</code>::<code class="n">stdin</code><code class="p">()))),</code><code class="w"/>
+<code class="w">        </code><code class="n">_</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">Ok</code><code class="p">(</code><code class="nb">Box</code>::<code class="n">new</code><code class="p">(</code><code class="n">BufReader</code>::<code class="n">new</code><code class="p">(</code><code class="n">File</code>::<code class="n">open</code><code class="p">(</code><code class="n">filename</code><code class="p">)</code><code class="o">?</code><code class="p">))),</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Be sure to expand your imports to include the following:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">use</code><code class="w"> </code><code class="n">std</code>::<code class="n">fs</code>::<code class="n">File</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code>::<code class="n">io</code>::<code class="p">{</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">BufRead</code><code class="p">,</code><code class="w"> </code><code class="n">BufReader</code><code class="p">};</code><code class="w"/></pre>
+
+<p>Expand the <code>run</code> function to open the files:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="k">mut</code><code class="w"> </code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="c1">// Same as before
+</code><code class="w">
+</code><code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">filename</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="o">&amp;</code><code class="n">args</code><code class="p">.</code><code class="n">files</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="k">match</code><code class="w"> </code><code class="n">open</code><code class="p">(</code><code class="n">filename</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="nb">Err</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"</code><code class="s">{filename}: {err}</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO8-1" id="co_word_to_your_mother_CO8-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+            </code><code class="nb">Ok</code><code class="p">(</code><code class="n">_</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">Opened {filename}</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO8-2" id="co_word_to_your_mother_CO8-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_word_to_your_mother_CO8-1" id="callout_word_to_your_mother_CO8-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>When a file fails to open, print the filename and error message to <code>STDERR</code>.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO8-2" id="callout_word_to_your_mother_CO8-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>When a file is opened, print a message to <code>STDOUT</code>.</p></dd>
+</dl>
+
+<p>Run your program to verify it properly handles good and bad file inputs:</p>
+
+<pre data-type="programlisting">$ cargo run -- blargh tests/inputs/fox.txt
+blargh: No such file or directory (os error 2)
+Opened tests/inputs/fox.txt</pre>
+
+<p>Next, it’s time to count the elements of the input files.</p>
+</div></section>
+
+
+
+
+
+
+
+
+<section class="pagebreak-before less_space" data-pdf-bookmark="Writing and Testing a Function to Count File Elements" data-type="sect2"><div class="sect2" id="id52">
+<h2>Writing and Testing a Function to Count File Elements</h2>
+
+<p>You are welcome to write your solution however you like, but I decided to create a function <a data-primary="wc (word count) program" data-secondary="writing wcr version" data-tertiary="writing and testing function to count file elements" data-type="indexterm" id="ix_wcwrcount"/><a data-primary="count function" data-type="indexterm" id="ix_count"/>called <code>count</code> that would take a filehandle and possibly return a struct called <code>FileInfo</code> containing the number of lines, words, bytes, and characters, each 
+<span class="keep-together">represented</span> as a <code>usize</code>.<a data-primary="FileInfo struct" data-type="indexterm" id="id721"/><a data-primary="PartialEq trait" data-type="indexterm" id="id722"/><a data-primary="Debug trait" data-type="indexterm" id="id723"/>
+I put the following definition just after the <code>Args</code> struct.
+For reasons I will explain shortly, this must derive the <a href="https://oreil.ly/kOB0D"><code>PartialEq</code> trait</a> in addition to <code>Debug</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[derive(Debug, PartialEq)]</code><code class="w"/>
+<code class="k">struct</code> <code class="nc">FileInfo</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">num_lines</code>: <code class="kt">usize</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">num_words</code>: <code class="kt">usize</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">num_bytes</code>: <code class="kt">usize</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">num_chars</code>: <code class="kt">usize</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>My <code>count</code> function might succeed or fail because it will involve I/O, which could go sideways.
+Therefore, the function will return a <code>Result&lt;FileInfo&gt;</code>, meaning that on success it will have a <code>FileInfo</code> in the <code>Ok</code> variant or else will have an error.
+To start this function, I will initialize some mutable variables to count all the elements and will return a <code>FileInfo</code> struct:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">count</code><code class="p">(</code><code class="k">mut</code><code class="w"> </code><code class="n">file</code><code>:</code><code> </code><code class="nc">impl</code><code class="w"> </code><code class="n">BufRead</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="n">FileInfo</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO9-1" id="co_word_to_your_mother_CO9-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">num_lines</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO9-2" id="co_word_to_your_mother_CO9-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">num_words</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">num_bytes</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">num_chars</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="n">FileInfo</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="n">num_lines</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO9-3" id="co_word_to_your_mother_CO9-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+        </code><code class="n">num_words</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="n">num_bytes</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="n">num_chars</code><code class="p">,</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_word_to_your_mother_CO9-1" id="callout_word_to_your_mother_CO9-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <code>count</code> function will accept a mutable <code>file</code> value, and it might return a 
+<span class="keep-together"><code>FileInfo</code></span> struct.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO9-2" id="callout_word_to_your_mother_CO9-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Initialize mutable variables to count the lines, words, bytes, and characters.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO9-3" id="callout_word_to_your_mother_CO9-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>For now, return a <code>FileInfo</code> with all zeros. Because my variable names match the struct fieldnames, I can use this shorthand syntax.</p></dd>
+</dl>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>I’m introducing the <a href="https://oreil.ly/BYApT"><code>impl</code> keyword</a> to indicate that the <code>file</code> value must <em>implement</em> the <code>BufRead</code> trait.<a data-primary="impl keyword" data-type="indexterm" id="id724"/><a data-primary="BufRead trait" data-secondary="file value implementing" data-type="indexterm" id="id725"/> Recall that <code>open</code> returns a value that meets this criterion. You’ll shortly see how this makes the function flexible.</p>
+</div>
+
+<p>Next, I will show you how to write a unit test for the <code>count</code> function and place it inside a module called <code>tests</code>.<a data-primary="unit tests" data-secondary="creating for count function" data-type="indexterm" id="ix_unitst"/>
+This is a tidy way to group unit tests, and I can use the <code>#[cfg(test)]</code> configuration option to tell Rust to compile the module only during testing.
+This is especially useful because I want to use <a href="https://oreil.ly/jQVVm"><code>std::io​::Cur⁠sor</code></a> in my test to fake a filehandle for the <code>count</code> function.
+According to the documentation, a <code>Cursor</code> is “used with in-memory buffers, anything implementing <code>AsRef&lt;[u8]&gt;</code>, to allow them to <a data-primary="AsRef trait" data-type="indexterm" id="id726"/><a data-primary="Cursor type" data-type="indexterm" id="id727"/>implement <code>Read</code> and/or <code>Write</code>, allowing these buffers to be used anywhere you might use a reader or writer that does actual I/O.”
+Placing this dependency inside the <code>tests</code> module ensures that it will be included only when I test the program.
+Add the following code to your <em>src/main.rs</em> to create the <code>tests</code> module that will import and test the <code>count</code> function:</p>
+
+<pre data-type="programlisting">#[cfg(test)] <a class="co" href="#callout_word_to_your_mother_CO10-1" id="co_word_to_your_mother_CO10-1"><img alt="1" src="assets/1.png"/></a>
+mod tests { <a class="co" href="#callout_word_to_your_mother_CO10-2" id="co_word_to_your_mother_CO10-2"><img alt="2" src="assets/2.png"/></a>
+    use super::{count, FileInfo}; <a class="co" href="#callout_word_to_your_mother_CO10-3" id="co_word_to_your_mother_CO10-3"><img alt="3" src="assets/3.png"/></a>
+    use std::io::Cursor; <a class="co" href="#callout_word_to_your_mother_CO10-4" id="co_word_to_your_mother_CO10-4"><img alt="4" src="assets/4.png"/></a>
+
+    #[test]
+    fn test_count() {
+        let text = "I don't want the world.\nI just want your half.\r\n";
+        let info = count(Cursor::new(text)); <a class="co" href="#callout_word_to_your_mother_CO10-5" id="co_word_to_your_mother_CO10-5"><img alt="5" src="assets/5.png"/></a>
+        assert!(info.is_ok()); <a class="co" href="#callout_word_to_your_mother_CO10-6" id="co_word_to_your_mother_CO10-6"><img alt="6" src="assets/6.png"/></a>
+        let expected = FileInfo {
+            num_lines: 2,
+            num_words: 10,
+            num_chars: 48,
+            num_bytes: 48,
+        };
+        assert_eq!(info.unwrap(), expected); <a class="co" href="#callout_word_to_your_mother_CO10-7" id="co_word_to_your_mother_CO10-7"><img alt="7" src="assets/7.png"/></a>
+    }
+}</pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_word_to_your_mother_CO10-1" id="callout_word_to_your_mother_CO10-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <a href="https://oreil.ly/Fl3pU"><code>cfg</code></a> enables conditional compilation, so this module will be compiled only when testing.<a data-primary="conditional compilation" data-type="indexterm" id="id728"/></p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO10-2" id="callout_word_to_your_mother_CO10-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Define a new module (<code>mod</code>) called <code>tests</code>.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO10-3" id="callout_word_to_your_mother_CO10-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Import the <code>count</code> function and <code>FileInfo</code> struct from the parent module <code>super</code>, meaning <em>next above</em> and referring to the module above <code>tests</code> that contains it.<a data-primary="std::io::Cursor" data-type="indexterm" id="id729"/><a data-primary="FileInfo struct" data-type="indexterm" id="id730"/></p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO10-4" id="callout_word_to_your_mother_CO10-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Import <code>std::io::Cursor</code>.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO10-5" id="callout_word_to_your_mother_CO10-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>Run <code>count</code> with the <code>Cursor</code>.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO10-6" id="callout_word_to_your_mother_CO10-6"><img alt="6" src="assets/6.png"/></a></dt>
+<dd><p>Ensure the result is <code>Ok</code>.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO10-7" id="callout_word_to_your_mother_CO10-7"><img alt="7" src="assets/7.png"/></a></dt>
+<dd><p>Compare the result to the expected value. This comparison requires <code>FileInfo</code> to implement the <code>PartialEq</code> trait, which is why I added <code>derive(PartialEq)</code> earlier.<a data-primary="PartialEq trait" data-type="indexterm" id="id731"/></p></dd>
+</dl>
+
+<p>Run this test using <strong><code>cargo test test_count</code></strong>.
+You will see lots of warnings from the Rust compiler about unused variables or variables that do not need to be mutable.
+The most important result is that the test fails:</p>
+
+<pre data-type="programlisting">running 1 test
+test tests::test_count ... FAILED
+
+failures:
+
+---- tests::test_count stdout ----
+thread 'tests::test_count' panicked at src/main.rs:103:9:
+assertion `left == right` failed
+  left: FileInfo { num_lines: 0, num_words: 0, num_bytes: 0, num_chars: 0 }
+ right: FileInfo { num_lines: 1, num_words: 10, num_bytes: 48, num_chars: 48 }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace</pre>
+
+<p>This is an example of test-driven development, where you write a test to define the expected behavior of your function and then write the function that passes the unit test.<a data-primary="test-driven development (TDD)" data-type="indexterm" id="id732"/>
+Your next task is to make this test pass.
+Then, call the <code>count</code> function in your <code>run</code> function and use the <code>FileInfo</code> to print the expected output.
+Start as simply as possible using the empty file, and make sure your program prints zeros for the three columns of lines, words, and bytes:</p>
+
+<pre data-type="programlisting">$ cargo run -- tests/inputs/empty.txt
+       0       0       0 tests/inputs/empty.txt</pre>
+
+<p>Next, use <em>tests/inputs/fox.txt</em> and make sure you get the following counts.
+I specifically added various kinds and numbers of whitespace to challenge you on how to split the text into words:</p>
+
+<pre data-type="programlisting">$ cargo run -- tests/inputs/fox.txt
+       1       9      48 tests/inputs/fox.txt</pre>
+
+<p>Be sure your program can handle the Unicode in <em>tests/inputs/atlamal.txt</em> correctly:</p>
+
+<pre data-type="programlisting">$ cargo run -- tests/inputs/atlamal.txt
+       4      29     177 tests/inputs/atlamal.txt</pre>
+
+<p>And that you correctly count the characters:</p>
+
+<pre data-type="programlisting">$ cargo run -- tests/inputs/atlamal.txt -wml
+       4      29     159 tests/inputs/atlamal.txt</pre>
+
+<p>Next, use multiple input files to check that your program prints the correct <em>total</em> 
+<span class="keep-together">column:</span></p>
+
+<pre data-type="programlisting">$ cargo run -- tests/inputs/*.txt
+       4      29     177 tests/inputs/atlamal.txt
+       0       0       0 tests/inputs/empty.txt
+       1       9      48 tests/inputs/fox.txt
+       5      38     225 total</pre>
+
+<p>When all that works correctly, try reading from <code>STDIN</code>:</p>
+
+<pre data-type="programlisting">$ cat tests/inputs/atlamal.txt | cargo run
+       4      29     177</pre>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Stop reading here and finish your program. Run <strong><code>cargo test</code></strong> often to see how you’re progressing.<a data-primary="unit tests" data-secondary="writing for count function" data-startref="ix_unitst" data-type="indexterm" id="id733"/><a data-primary="wc (word count) program" data-secondary="writing wcr version" data-startref="ix_wcwrcount" data-tertiary="writing and testing function to count file elements" data-type="indexterm" id="id734"/></p>
+</div>
+</div></section>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Solution" data-type="sect1"><div class="sect1" id="id204">
+<h1>Solution</h1>
+
+<p>Now, I’ll walk you through how I went about writing the <code>wcr</code> program.
+Bear in mind that you could have solved this in many different ways.
+As long as your code passes the tests and produces the same output as the BSD version of <code>wc</code>, then it works well and you should be proud of your accomplishments.</p>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Counting the Elements of a File or STDIN" data-type="sect2"><div class="sect2" id="id53">
+<h2>Counting the Elements of a File or STDIN</h2>
+
+<p>I left you with an unfinished <code>count</code> function, so I’ll start there.<a data-primary="wc (word count) program" data-secondary="writing wcr version" data-tertiary="counting elements of file or STDIN" data-type="indexterm" id="id735"/><a data-primary="count function" data-secondary="counting elements of a file or STDIN" data-type="indexterm" id="id736"/><a data-primary="BufRead::lines function" data-type="indexterm" id="id737"/><a data-primary="lines" data-secondary="preserving line endings while reading a file" data-type="indexterm" id="id738"/><a data-primary="newlines" data-type="indexterm" id="id739"/>
+As we discussed in <a data-type="xref" href="ch03.html#ch03">Chapter 3</a>, <a href="https://oreil.ly/KhmCp"><code>BufRead::lines</code></a> will remove the line endings, and I don’t want that because newlines in Windows files are two bytes (<code>\r\n</code>) but Unix newlines are just one byte (<code>\n</code>).
+I can copy some code from <a data-type="xref" href="ch03.html#ch03">Chapter 3</a> that uses <a href="https://oreil.ly/aJFkc"><code>BufRead::read_line</code></a> to read each line into a buffer.</p>
+
+<p>Conveniently, this <a data-primary="BufRead::read_line function" data-type="indexterm" id="id740"/>function tells me how many bytes have been read from the file:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">count</code><code class="p">(</code><code class="k">mut</code><code class="w"> </code><code class="n">file</code><code>:</code><code> </code><code class="nc">impl</code><code class="w"> </code><code class="n">BufRead</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="n">FileInfo</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">num_lines</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">num_words</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">num_bytes</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">num_chars</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">line</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">String</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO11-1" id="co_word_to_your_mother_CO11-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+
+    </code><code class="k">loop</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO11-2" id="co_word_to_your_mother_CO11-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+        </code><code class="kd">let</code><code class="w"> </code><code class="n">line_bytes</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">file</code><code class="p">.</code><code class="n">read_line</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">line</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO11-3" id="co_word_to_your_mother_CO11-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+        </code><code class="k">if</code><code class="w"> </code><code class="n">line_bytes</code><code class="w"> </code><code class="o">=</code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO11-4" id="co_word_to_your_mother_CO11-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+            </code><code class="k">break</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="n">num_bytes</code><code class="w"> </code><code class="o">+</code><code class="o">=</code><code class="w"> </code><code class="n">line_bytes</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO11-5" id="co_word_to_your_mother_CO11-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+        </code><code class="n">num_lines</code><code class="w"> </code><code class="o">+</code><code class="o">=</code><code class="w"> </code><code class="mi">1</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO11-6" id="co_word_to_your_mother_CO11-6"><img alt="6" src="assets/6.png"/></a><code class="w">
+        </code><code class="n">num_words</code><code class="w"> </code><code class="o">+</code><code class="o">=</code><code class="w"> </code><code class="n">line</code><code class="p">.</code><code class="n">split_whitespace</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">count</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO11-7" id="co_word_to_your_mother_CO11-7"><img alt="7" src="assets/7.png"/></a><code class="w">
+        </code><code class="n">num_chars</code><code class="w"> </code><code class="o">+</code><code class="o">=</code><code class="w"> </code><code class="n">line</code><code class="p">.</code><code class="n">chars</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">count</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO11-8" id="co_word_to_your_mother_CO11-8"><img alt="8" src="assets/8.png"/></a><code class="w">
+        </code><code class="n">line</code><code class="p">.</code><code class="n">clear</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO11-9" id="co_word_to_your_mother_CO11-9"><img alt="9" src="assets/9.png"/></a><code class="w">
+    </code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="n">FileInfo</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="n">num_lines</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="n">num_words</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="n">num_bytes</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="n">num_chars</code><code class="p">,</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_word_to_your_mother_CO11-1" id="callout_word_to_your_mother_CO11-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Create a mutable buffer to hold each <code>line</code> of text.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO11-2" id="callout_word_to_your_mother_CO11-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Create an infinite <code>loop</code> for reading the filehandle.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO11-3" id="callout_word_to_your_mother_CO11-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Try to read a line from the filehandle.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO11-4" id="callout_word_to_your_mother_CO11-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>End of file (EOF) has been reached when zero bytes are read, so <code>break</code> out of the loop.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO11-5" id="callout_word_to_your_mother_CO11-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>Add the number of bytes from this line to the <code>num_bytes</code> variable.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO11-6" id="callout_word_to_your_mother_CO11-6"><img alt="6" src="assets/6.png"/></a></dt>
+<dd><p>Each time through the loop is a line, so increment <code>num_lines</code> by one.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO11-7" id="callout_word_to_your_mother_CO11-7"><img alt="7" src="assets/7.png"/></a></dt>
+<dd><p>Use the <a href="https://oreil.ly/sCxGE"><code>str::split_whitespace</code> method</a> to break the string on whitespace and use <a href="https://oreil.ly/Y7yPl"><code>Iterator::count</code></a> to find the number of words.<a data-primary="str::split_whitespace function" data-type="indexterm" id="id741"/></p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO11-8" id="callout_word_to_your_mother_CO11-8"><img alt="8" src="assets/8.png"/></a></dt>
+<dd><p>Use the <a href="https://oreil.ly/u9LXa"><code>str::chars</code> method</a> to break the string into Unicode characters and use <code>Iterator::count</code> to count the characters.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO11-9" id="callout_word_to_your_mother_CO11-9"><img alt="9" src="assets/9.png"/></a></dt>
+<dd><p>Clear the <code>line</code> buffer for the next line of text.<a data-primary="str::chars method" data-type="indexterm" id="id742"/><a data-primary="Iterator::count method" data-type="indexterm" id="id743"/><a data-primary="characters" data-secondary="breaking string into Unicode and counting characters" data-type="indexterm" id="id744"/></p></dd>
+</dl>
+
+<p>With these changes, the <code>test_count</code> test will pass.
+To integrate this into my code, I will first change <code>run</code> to print the <code>FileInfo</code> struct or print a warning to <code>STDERR</code> when the file can’t be opened:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="k">mut</code><code class="w"> </code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="c1">// Same as before
+</code><code class="w">
+</code><code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">filename</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="o">&amp;</code><code class="n">args</code><code class="p">.</code><code class="n">files</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="k">match</code><code class="w"> </code><code class="n">open</code><code class="p">(</code><code class="n">filename</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="nb">Err</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"</code><code class="s">{filename}: {err}</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="nb">Ok</code><code class="p">(</code><code class="n">file</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="kd">let</code><code class="w"> </code><code class="n">info</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">count</code><code class="p">(</code><code class="n">file</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO12-1" id="co_word_to_your_mother_CO12-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+                </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{:?}</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="n">info</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO12-2" id="co_word_to_your_mother_CO12-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+            </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_word_to_your_mother_CO12-1" id="callout_word_to_your_mother_CO12-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Attempt to get the counts from a file.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO12-2" id="callout_word_to_your_mother_CO12-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Print the counts.</p></dd>
+</dl>
+
+<p>When I run it on one of the test inputs, it appears to work for a valid file:</p>
+
+<pre data-type="programlisting">$ cargo run -- tests/inputs/fox.txt
+FileInfo { num_lines: 1, num_words: 9, num_bytes: 48, num_chars: 48 }</pre>
+
+<p>It even handles reading from <code>STDIN</code>:</p>
+
+<pre data-type="programlisting">$ cat tests/inputs/fox.txt | cargo run
+FileInfo { num_lines: 1, num_words: 9, num_bytes: 48, num_chars: 48 }</pre>
+
+<p>Next, I need to format the output to meet the specifications.</p>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Formatting the Output" data-type="sect2"><div class="sect2" id="id54">
+<h2>Formatting the Output</h2>
+
+<p>To create the <a data-primary="wc (word count) program" data-secondary="writing wcr version" data-tertiary="formatting the output" data-type="indexterm" id="ix_wcwrfmt"/><a data-primary="formatting output of wcr program" data-type="indexterm" id="ix_fmtout"/>expected output, I can start by changing <code>run</code> to always print the lines, words, and bytes followed by the filename:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="k">mut</code><code class="w"> </code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="c1">// Same as before
+</code><code class="w">
+</code><code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">filename</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="o">&amp;</code><code class="n">args</code><code class="p">.</code><code class="n">files</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="k">match</code><code class="w"> </code><code class="n">open</code><code class="p">(</code><code class="n">filename</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="nb">Err</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"</code><code class="s">{filename}: {err}</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="nb">Ok</code><code class="p">(</code><code class="n">file</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="kd">let</code><code class="w"> </code><code class="n">info</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">count</code><code class="p">(</code><code class="n">file</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w">
+</code><code class="w">                </code><code class="fm">println!</code><code class="p">(</code><code class="w">
+</code><code class="w">                    </code><code class="s">"</code><code class="s">{:&gt;8}{:&gt;8}{:&gt;8} {filename}</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO13-1" id="co_word_to_your_mother_CO13-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+                    </code><code class="n">info</code><code class="p">.</code><code class="n">num_lines</code><code class="p">,</code><code class="w"> </code><code class="n">info</code><code class="p">.</code><code class="n">num_words</code><code class="p">,</code><code class="w"> </code><code class="n">info</code><code class="p">.</code><code class="n">num_bytes</code><code class="w">
+</code><code class="w">                </code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_word_to_your_mother_CO13-1" id="callout_word_to_your_mother_CO13-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Format the number of lines, words, and bytes into a right-justified field eight characters wide.</p></dd>
+</dl>
+
+<p class="pagebreak-before">If I run it with one input file, it’s already looking pretty sweet:</p>
+
+<pre data-type="programlisting">$ cargo run -- tests/inputs/fox.txt
+       1       9      48 tests/inputs/fox.txt</pre>
+
+<p>If I run <strong><code>cargo test fox</code></strong> to run all the tests with the word <em>fox</em> in the name, I pass one out of eight tests.
+Huzzah!</p>
+
+<pre data-type="programlisting">running 8 tests
+test fox ... ok
+test fox_bytes ... FAILED
+test fox_chars ... FAILED
+test fox_bytes_lines ... FAILED
+test fox_words_bytes ... FAILED
+test fox_words ... FAILED
+test fox_words_lines ... FAILED
+test fox_lines ... FAILED</pre>
+
+<p>I can inspect <em>tests/cli.rs</em> to see what the passing test looks like.
+Note that the tests reference constant values declared at the top of the module:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">const</code><code class="w"> </code><code class="n">PRG</code>: <code class="kp">&amp;</code><code class="kt">str</code> <code class="o">=</code><code class="w"> </code><code class="s">"wcr"</code><code class="p">;</code><code class="w"/>
+<code class="k">const</code><code class="w"> </code><code class="n">EMPTY</code>: <code class="kp">&amp;</code><code class="kt">str</code> <code class="o">=</code><code class="w"> </code><code class="s">"tests/inputs/empty.txt"</code><code class="p">;</code><code class="w"/>
+<code class="k">const</code><code class="w"> </code><code class="n">FOX</code>: <code class="kp">&amp;</code><code class="kt">str</code> <code class="o">=</code><code class="w"> </code><code class="s">"tests/inputs/fox.txt"</code><code class="p">;</code><code class="w"/>
+<code class="k">const</code><code class="w"> </code><code class="n">ATLAMAL</code>: <code class="kp">&amp;</code><code class="kt">str</code> <code class="o">=</code><code class="w"> </code><code class="s">"tests/inputs/atlamal.txt"</code><code class="p">;</code><code class="w"/></pre>
+
+<p>Again I have a <code>run</code> helper function to run my tests:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="p">[</code><code class="o">&amp;</code><code class="kt">str</code><code class="p">]</code><code class="p">,</code><code class="w"> </code><code class="n">expected_file</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">expected</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">fs</code><code>::</code><code class="n">read_to_string</code><code class="p">(</code><code class="n">expected_file</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO14-1" id="co_word_to_your_mother_CO14-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="n">output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code>::</code><code class="n">cargo_bin</code><code class="p">(</code><code class="n">PRG</code><code class="p">)</code><code class="o">?</code><code class="p">.</code><code class="n">args</code><code class="p">(</code><code class="n">args</code><code class="p">)</code><code class="p">.</code><code class="n">output</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"</code><code class="s">fail</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="fm">assert!</code><code class="p">(</code><code class="n">output</code><code class="p">.</code><code class="n">status</code><code class="p">.</code><code class="n">success</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO14-2" id="co_word_to_your_mother_CO14-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+
+    </code><code class="kd">let</code><code class="w"> </code><code class="n">stdout</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">String</code><code>::</code><code class="n">from_utf8</code><code class="p">(</code><code class="n">output</code><code class="p">.</code><code class="n">stdout</code><code class="p">)</code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"</code><code class="s">invalid UTF-8</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">stdout</code><code class="p">,</code><code class="w"> </code><code class="n">expected</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO14-3" id="co_word_to_your_mother_CO14-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_word_to_your_mother_CO14-1" id="callout_word_to_your_mother_CO14-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Try to read the <code>expected</code> output for this command.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO14-2" id="callout_word_to_your_mother_CO14-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Run the <code>wcr</code> program with the given arguments and assert that the program 
+<span class="keep-together">succeeds</span>.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO14-3" id="callout_word_to_your_mother_CO14-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Check that the program’s output matches the expected value.</p></dd>
+</dl>
+
+<p>The <code>fox</code> test is running <code>wcr</code> with the <code>FOX</code> input file and no options, comparing it to the contents of the expected output file that was generated using <em>05_wcr/mk-outs.sh</em>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[test]</code><code class="w"/>
+<code class="k">fn</code> <code class="nf">fox</code><code class="p">()</code><code class="w"> </code>-&gt; <code class="nb">Result</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">run</code><code class="p">(</code><code class="o">&amp;</code><code class="p">[</code><code class="n">FOX</code><code class="p">],</code><code class="w"> </code><code class="s">"tests/expected/fox.txt.out"</code><code class="p">)</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Look at the next function in the file to see a failing test:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="k">fn</code><code> </code><code class="nf">fox_bytes</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="n">run</code><code class="p">(</code><code class="o">&amp;</code><code class="p">[</code><code class="s">"</code><code class="s">--bytes</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="n">FOX</code><code class="p">]</code><code class="p">,</code><code class="w"> </code><code class="s">"</code><code class="s">tests/expected/fox.txt.c.out</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO15-1" id="co_word_to_your_mother_CO15-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_word_to_your_mother_CO15-1" id="callout_word_to_your_mother_CO15-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Run the <code>wcr</code> program with the same input file and the <code>--bytes</code> option.</p></dd>
+</dl>
+
+<p>When run with <code>--bytes</code>, my program should print only that column, but it always prints lines, words, and bytes.<a data-primary="strings" data-secondary="formatting for output of wcr" data-type="indexterm" id="id745"/><a data-primary="bytes" data-secondary="--bytes option, running wcr with" data-type="indexterm" id="id746"/>
+To correct my program’s output, I decided to write a function called <code>for⁠mat​_field</code> that would conditionally return a formatted string or the empty string depending on a Boolean value:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">format_field</code><code class="p">(</code><code class="n">value</code><code>:</code><code> </code><code class="kt">usize</code><code class="p">,</code><code class="w"> </code><code class="n">show</code><code>:</code><code> </code><code class="kt">bool</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">String</code><code> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO16-1" id="co_word_to_your_mother_CO16-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="k">if</code><code class="w"> </code><code class="n">show</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO16-2" id="co_word_to_your_mother_CO16-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+        </code><code class="fm">format!</code><code class="p">(</code><code class="s">"</code><code class="s">{value:&gt;8}</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO16-3" id="co_word_to_your_mother_CO16-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+    </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="s">"</code><code class="s">"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO16-4" id="co_word_to_your_mother_CO16-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+    </code><code class="p">}</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_word_to_your_mother_CO16-1" id="callout_word_to_your_mother_CO16-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The function accepts a <code>usize</code> value and a Boolean and returns a <code>String</code>.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO16-2" id="callout_word_to_your_mother_CO16-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Check if the <code>show</code> value is <code>true</code>.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO16-3" id="callout_word_to_your_mother_CO16-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Return a new string by formatting the number into a string eight characters wide.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO16-4" id="callout_word_to_your_mother_CO16-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Otherwise, return the empty string.</p></dd>
+</dl>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Why does this function return a <code>String</code> and not a <code>str</code>? They’re both <em>strings</em>, but a <code>str</code> is an immutable, fixed-length string.<a data-primary="String type" data-type="indexterm" id="id747"/><a data-primary="str type" data-type="indexterm" id="id748"/> The value that will be returned from the function is dynamically generated at runtime, so I must use <code>String</code>, which is a growable, heap-allocated structure.</p>
+</div>
+
+<p>I can expand my <code>tests</code> module to add a unit test for this:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[</code><code class="cp">cfg(test)</code><code class="cp">]</code><code class="w">
+</code><code class="k">mod</code><code> </code><code class="nn">tests</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="k">use</code><code class="w"> </code><code class="k">super</code><code>:</code><code>:</code><code class="p">{</code><code class="n">count</code><code class="p">,</code><code class="w"> </code><code class="n">format_field</code><code class="p">,</code><code class="w"> </code><code class="n">FileInfo</code><code class="p">}</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO17-1" id="co_word_to_your_mother_CO17-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="k">use</code><code class="w"> </code><code class="n">std</code><code>::</code><code class="n">io</code><code>::</code><code class="n">Cursor</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="w">    </code><code class="k">fn</code><code> </code><code class="nf">test_count</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="p">}</code><code class="w"> </code><code class="c1">// Same as before
+</code><code class="w">
+</code><code class="w">    </code><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="w">    </code><code class="k">fn</code><code> </code><code class="nf">test_format_field</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">format_field</code><code class="p">(</code><code class="mi">1</code><code class="p">,</code><code class="w"> </code><code class="kc">false</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><code class="s">"</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO17-2" id="co_word_to_your_mother_CO17-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">format_field</code><code class="p">(</code><code class="mi">3</code><code class="p">,</code><code class="w"> </code><code class="kc">true</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><code class="s">"</code><code class="s">       3</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO17-3" id="co_word_to_your_mother_CO17-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">format_field</code><code class="p">(</code><code class="mi">10</code><code class="p">,</code><code class="w"> </code><code class="kc">true</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><code class="s">"</code><code class="s">      10</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO17-4" id="co_word_to_your_mother_CO17-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+    </code><code class="p">}</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_word_to_your_mother_CO17-1" id="callout_word_to_your_mother_CO17-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Add <code>format_field</code> to the imports.<a data-primary="format_field function" data-type="indexterm" id="id749"/></p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO17-2" id="callout_word_to_your_mother_CO17-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The function should return the empty string when <code>show</code> is <code>false</code>.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO17-3" id="callout_word_to_your_mother_CO17-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Check formatting for a single-digit number.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO17-4" id="callout_word_to_your_mother_CO17-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Check formatting for a double-digit number.</p></dd>
+</dl>
+
+<p>Run <strong><code>cargo test format</code></strong> to ensure the function passes the test.
+Here is how I use the <code>format_field</code> function in context, where I also handle printing<a data-primary="strings" data-secondary="printing empty string when reading from STDIN" data-type="indexterm" id="id750"/> the empty string when reading from <code>STDIN</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="k">mut</code><code class="w"> </code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="c1">// Same as before
+</code><code class="w">
+</code><code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">filename</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="o">&amp;</code><code class="n">args</code><code class="p">.</code><code class="n">files</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="k">match</code><code class="w"> </code><code class="n">open</code><code class="p">(</code><code class="n">filename</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="nb">Err</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"</code><code class="s">{filename}: {err}</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="nb">Ok</code><code class="p">(</code><code class="n">file</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="kd">let</code><code class="w"> </code><code class="n">info</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">count</code><code class="p">(</code><code class="n">file</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w">
+</code><code class="w">                </code><code class="fm">println!</code><code class="p">(</code><code class="w">
+</code><code class="w">                    </code><code class="s">"</code><code class="s">{}{}{}{}{}</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO18-1" id="co_word_to_your_mother_CO18-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+                    </code><code class="n">format_field</code><code class="p">(</code><code class="n">info</code><code class="p">.</code><code class="n">num_lines</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">lines</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">                    </code><code class="n">format_field</code><code class="p">(</code><code class="n">info</code><code class="p">.</code><code class="n">num_words</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">words</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">                    </code><code class="n">format_field</code><code class="p">(</code><code class="n">info</code><code class="p">.</code><code class="n">num_bytes</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">bytes</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">                    </code><code class="n">format_field</code><code class="p">(</code><code class="n">info</code><code class="p">.</code><code class="n">num_chars</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">chars</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">                    </code><code class="k">if</code><code class="w"> </code><code class="n">filename</code><code class="w"> </code><code class="o">=</code><code class="o">=</code><code class="w"> </code><code class="s">"</code><code class="s">-</code><code class="s">"</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO18-2" id="co_word_to_your_mother_CO18-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+                        </code><code class="s">"</code><code class="s">"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">                    </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                        </code><code class="fm">format!</code><code class="p">(</code><code class="s">"</code><code class="s"> {filename}</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                    </code><code class="p">}</code><code class="w">
+</code><code class="w">                </code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_word_to_your_mother_CO18-1" id="callout_word_to_your_mother_CO18-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Format the output for each of the columns using the <code>format_field</code> function.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO18-2" id="callout_word_to_your_mother_CO18-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>When the filename is a dash, print the empty string; otherwise, print a space and the filename.</p></dd>
+</dl>
+
+<p>With these changes, all the tests for <strong><code>cargo test fox</code></strong> pass.
+But if I run the entire test suite, I see that my program is still failing the tests with names that include the word <em>all</em>:</p>
+
+<pre data-type="programlisting">failures:
+    test_all
+    test_all_bytes
+    test_all_bytes_lines
+    test_all_lines
+    test_all_words
+    test_all_words_bytes
+    test_all_words_lines</pre>
+
+<p>Looking at the <code>test_all</code> function in <em>tests/cli.rs</em> confirms that the test is using all<a data-primary="test_all function" data-type="indexterm" id="id751"/> the input files as arguments:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="k">fn</code><code> </code><code class="nf">test_all</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="n">run</code><code class="p">(</code><strong><code class="o">&amp;</code><code class="p">[</code><code class="n">EMPTY</code><code class="p">,</code><code class="w"> </code><code class="n">FOX</code><code class="p">,</code><code class="w"> </code><code class="n">ATLAMAL</code><code class="p">]</code></strong><code class="p">,</code><code class="w"> </code><code class="s">"</code><code class="s">tests/expected/all.out</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+
+<p>If I run my current program with all the input files, I can see that I’m missing the <em>total</em> line:</p>
+
+<pre data-type="programlisting">$ cargo run -- tests/inputs/*.txt
+       4      29     177 tests/inputs/atlamal.txt
+       0       0       0 tests/inputs/empty.txt
+       1       9      48 tests/inputs/fox.txt</pre>
+
+<p>Here is my final <code>run</code> function that keeps a running total and prints those values when there is more<a data-primary="run function" data-secondary="final version for wcr program" data-type="indexterm" id="id752"/> than one input:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="k">mut</code><code class="w"> </code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="p">[</code><code class="n">args</code><code class="p">.</code><code class="n">words</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">bytes</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">chars</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">lines</code><code class="p">]</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">iter</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">all</code><code class="p">(</code><code class="o">|</code><code class="n">v</code><code class="o">|</code><code class="w"> </code><code class="n">v</code><code class="w"> </code><code class="o">=</code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="kc">false</code><code class="p">)</code><code class="w">
+</code><code class="w">    </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="n">args</code><code class="p">.</code><code class="n">lines</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="kc">true</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="n">args</code><code class="p">.</code><code class="n">words</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="kc">true</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="n">args</code><code class="p">.</code><code class="n">bytes</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="kc">true</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">total_lines</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO19-1" id="co_word_to_your_mother_CO19-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">total_words</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">total_bytes</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">total_chars</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">filename</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="o">&amp;</code><code class="n">args</code><code class="p">.</code><code class="n">files</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="k">match</code><code class="w"> </code><code class="n">open</code><code class="p">(</code><code class="n">filename</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="nb">Err</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"</code><code class="s">{filename}: {err}</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="nb">Ok</code><code class="p">(</code><code class="n">file</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="kd">let</code><code class="w"> </code><code class="n">info</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">count</code><code class="p">(</code><code class="n">file</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w">
+</code><code class="w">                </code><code class="fm">println!</code><code class="p">(</code><code class="w">
+</code><code class="w">                    </code><code class="s">"</code><code class="s">{}{}{}{}{}</code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">                    </code><code class="n">format_field</code><code class="p">(</code><code class="n">info</code><code class="p">.</code><code class="n">num_lines</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">lines</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">                    </code><code class="n">format_field</code><code class="p">(</code><code class="n">info</code><code class="p">.</code><code class="n">num_words</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">words</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">                    </code><code class="n">format_field</code><code class="p">(</code><code class="n">info</code><code class="p">.</code><code class="n">num_bytes</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">bytes</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">                    </code><code class="n">format_field</code><code class="p">(</code><code class="n">info</code><code class="p">.</code><code class="n">num_chars</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">chars</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">                    </code><code class="k">if</code><code class="w"> </code><code class="n">filename</code><code class="p">.</code><code class="n">as_str</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">=</code><code class="w"> </code><code class="s">"</code><code class="s">-</code><code class="s">"</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                        </code><code class="s">"</code><code class="s">"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">                    </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                        </code><code class="fm">format!</code><code class="p">(</code><code class="s">"</code><code class="s"> {}</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="n">filename</code><code class="p">)</code><code class="w">
+</code><code class="w">                    </code><code class="p">}</code><code class="w">
+</code><code class="w">                </code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">                </code><code class="n">total_lines</code><code class="w"> </code><code class="o">+</code><code class="o">=</code><code class="w"> </code><code class="n">info</code><code class="p">.</code><code class="n">num_lines</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO19-2" id="co_word_to_your_mother_CO19-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+                </code><code class="n">total_words</code><code class="w"> </code><code class="o">+</code><code class="o">=</code><code class="w"> </code><code class="n">info</code><code class="p">.</code><code class="n">num_words</code><code class="p">;</code><code class="w">
+</code><code class="w">                </code><code class="n">total_bytes</code><code class="w"> </code><code class="o">+</code><code class="o">=</code><code class="w"> </code><code class="n">info</code><code class="p">.</code><code class="n">num_bytes</code><code class="p">;</code><code class="w">
+</code><code class="w">                </code><code class="n">total_chars</code><code class="w"> </code><code class="o">+</code><code class="o">=</code><code class="w"> </code><code class="n">info</code><code class="p">.</code><code class="n">num_chars</code><code class="p">;</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">files</code><code class="p">.</code><code class="n">len</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="o">&gt;</code><code class="w"> </code><code class="mi">1</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_word_to_your_mother_CO19-3" id="co_word_to_your_mother_CO19-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+        </code><code class="fm">println!</code><code class="p">(</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s">{}{}{}{} total</code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="n">format_field</code><code class="p">(</code><code class="n">total_lines</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">lines</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="n">format_field</code><code class="p">(</code><code class="n">total_words</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">words</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="n">format_field</code><code class="p">(</code><code class="n">total_bytes</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">bytes</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="n">format_field</code><code class="p">(</code><code class="n">total_chars</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">chars</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_word_to_your_mother_CO19-1" id="callout_word_to_your_mother_CO19-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Create mutable variables to track the total number of lines, words, bytes, and characters.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO19-2" id="callout_word_to_your_mother_CO19-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Update the totals using the values from this file.</p></dd>
+<dt><a class="co" href="#co_word_to_your_mother_CO19-3" id="callout_word_to_your_mother_CO19-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Print the totals if there is more than one input.</p></dd>
+</dl>
+
+<p>This appears to work well:</p>
+
+<pre data-type="programlisting">$ cargo run -- tests/inputs/*.txt
+       4      29     177 tests/inputs/atlamal.txt
+       0       0       0 tests/inputs/empty.txt
+       1       9      48 tests/inputs/fox.txt
+       5      38     225 total</pre>
+
+<p>I can count characters instead of bytes:</p>
+
+<pre data-type="programlisting">$ cargo run -- -m tests/inputs/atlamal.txt
+     159 tests/inputs/atlamal.txt</pre>
+
+<p>And I can show and hide any columns I want:</p>
+
+<pre data-type="programlisting">$ cargo run -- -wc tests/inputs/atlamal.txt
+      29     177 tests/inputs/atlamal.txt</pre>
+
+<p>Most importantly, <strong><code>cargo test</code></strong> shows all passing tests.<a data-primary="formatting output of wcr program" data-startref="ix_fmtout" data-type="indexterm" id="id753"/><a data-primary="wc (word count) program" data-secondary="writing wcr version" data-startref="ix_wcwrfmt" data-tertiary="formatting the output" data-type="indexterm" id="id754"/></p>
+</div></section>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Going Further" data-type="sect1"><div class="sect1" id="id55">
+<h1>Going Further</h1>
+
+<p>Write a version that mimics the output from the GNU <code>wc</code> instead of the BSD version.<a data-primary="GNU version" data-secondary="wc program" data-type="indexterm" id="id755"/><a data-primary="wc (word count) program" data-secondary="writing wcr version" data-tertiary="going further" data-type="indexterm" id="id756"/>
+If your system already has the GNU version, run the <em>mk-outs.sh</em> program to gene­rate the expected outputs for the given input files.
+Modify the program to create the 
+<span class="keep-together">correct output</span> according to the tests.
+Then expand the program to handle the addi­tional options like <code>--files0-from</code> for reading the input filenames from a file and 
+<span class="keep-together"><code>--max-line-length</code></span> to print the length of the longest line.
+Add tests for the new 
+<span class="keep-together">functionality.</span></p>
+
+<p>Next, ponder the mysteries of the <code>iswspace</code> function mentioned in the BSD manual page noted at the beginning of the chapter.<a data-primary="iswspace function" data-type="indexterm" id="id757"/>
+What if you ran the program on the <em>spiders.txt</em> file of the Issa haiku from <a data-type="xref" href="ch02.html#ch02">Chapter 2</a>, but it used Japanese characters?<sup><a data-type="noteref" href="ch05.html#id758" id="id758-marker">3</a></sup></p>
+<blockquote>
+<p>隅の蜘案じな煤はとらぬぞよ</p></blockquote>
+
+<p>What would the output be? If I place this into a file called <em>spiders.txt</em>, BSD <code>wc</code> thinks there are three words:</p>
+
+<pre data-type="programlisting">$ wc spiders.txt
+       1       3      40 spiders.txt</pre>
+
+<p>The GNU version says there is only one word:</p>
+
+<pre data-type="programlisting">$ wc spiders.txt
+ 1  1 40 spiders.txt</pre>
+
+<p>I didn’t want to open that can of worms (or spiders?), but if you were creating a version of this program to release to the public, how could you replicate the BSD and GNU versions?</p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Summary" data-type="sect1"><div class="sect1" id="id56">
+<h1>Summary</h1>
+
+<p>Well, that was certainly fun.
+In under 200 lines of Rust, we wrote a pretty passable replacement for one of my favorite Unix programs.
+Compare your version to the 1,000 lines of C in the <a href="https://oreil.ly/Lzy0u">GNU source code</a> and ponder which codebase you would prefer to extend and maintain.
+Reflect upon your progress in this chapter:</p>
+
+<ul>
+<li>
+<p>You learned that the <code>Iterator::all</code> function will return <code>true</code> if all the elements evaluate to <code>true</code> for the given predicate, which is a closure accepting an element. Many similar <code>Iterator</code> methods accept a closure as an argument for testing, selecting, and transforming the elements.</p>
+</li>
+<li>
+<p>You used the <code>str::split_whitespace</code> and <code>str::chars</code> methods to break text into words and characters.</p>
+</li>
+<li>
+<p>You used the <code>Iterator::count</code> method to count the number of items.</p>
+</li>
+<li>
+<p>You wrote a function to conditionally format a value or the empty string to support the printing or omission of information according to the flag arguments.</p>
+</li>
+<li>
+<p>You organized your unit tests into a <code>tests</code> module and imported functions from the parent module, called <code>super</code>.</p>
+</li>
+<li>
+<p>You used the <code>#[cfg(test)]</code> configuration option to tell Rust to compile the <code>tests</code> module only when testing.</p>
+</li>
+<li>
+<p>You saw how to use <code>std::io::Cursor</code> to create a fake filehandle for testing a function that expects something that implements <code>BufRead</code>.</p>
+</li>
+</ul>
+
+<p>You’ve learned quite a bit about reading files with Rust, and in the next chapter, you’ll learn how to write files.<a data-primary="wc (word count) program" data-startref="ix_wc" data-type="indexterm" id="id759"/></p>
+</div></section>
+<div data-type="footnotes"><p data-type="footnote" id="id680"><sup><a href="ch05.html#id680-marker">1</a></sup> The text shown in this example translates to: “There are many who know how of old did men, in counsel gather / little good did they get / in secret they plotted, it was sore for them later / and for Gjuki’s sons, whose trust they deceived.”</p><p data-type="footnote" id="id710"><sup><a href="ch05.html#id710-marker">2</a></sup> When my youngest first started brushing his own teeth before bed, I would ask if he’d brushed and flossed. The problem was that he was prone to fibbing, so it was hard to trust him. In an actual exchange one night, I asked, “Did you brush and floss your teeth?” <em>Yes</em>, he replied. “Did you brush your teeth?” <em>Yes</em>, he replied. “Did you floss your teeth?” <em>No</em>, he replied. So clearly he failed to properly combine Boolean values because a <code>true</code> statement <em>and</em> a <code>false</code> statement should result in a <code>false</code> outcome.</p><p data-type="footnote" id="id758"><sup><a href="ch05.html#id758-marker">3</a></sup> A more literal translation might be “Corner spider, rest easy, my soot-broom is idle.”</p></div></div></section></body></html>

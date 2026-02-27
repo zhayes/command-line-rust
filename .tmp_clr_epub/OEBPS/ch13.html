@@ -1,0 +1,1081 @@
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Rascalry</title><link href="epub.css" rel="stylesheet" type="text/css"/>
+<meta content="urn:uuid:e80a1ec8-ed8e-40f7-ba3d-26a647960341" name="Adept.expected.resource"/></head><body data-type="book"><section data-pdf-bookmark="Chapter 13. Rascalry" data-type="chapter" epub:type="chapter"><div class="chapter" id="ch13">
+<h1><span class="label">Chapter 13. </span>Rascalry</h1>
+
+<blockquote>
+<p>
+Time is flying like an arrow<br/>
+And the clock hands go so fast, they make the wind blow<br/>
+And it makes the pages of the calendar go flying out the window, one by one
+</p>
+<p data-type="attribution">
+They Might Be Giants, “Hovering Sombrero” (2001)
+</p>
+</blockquote>
+
+<p>In this chapter, you will create a clone of <code>cal</code>, which will show you a text calendar in the terminal.<a data-primary="cal program" data-type="indexterm" id="ix_cal"/>
+I often don’t know what the date is (or even the day of the week), so I use this (along with <code>date</code>) to see vaguely where I am in the space-time continuum.<a data-primary="date command" data-type="indexterm" id="id1570"/><a data-primary="calendar" data-see="cal program" data-type="indexterm" id="id1571"/>
+As is commonly the case, what appears to be a simple app becomes much more complicated as you get into the specifics of implementation.</p>
+
+<p>You will learn how to do the following:</p>
+
+<ul>
+<li>
+<p>Find today’s date and do basic date manipulations</p>
+</li>
+<li>
+<p>Use <code>Vec::chunks</code> to create groupings of items</p>
+</li>
+<li>
+<p>Combine elements from multiple iterators</p>
+</li>
+<li>
+<p>Produce highlighted text in the terminal</p>
+</li>
+</ul>
+
+
+
+
+
+
+<section data-pdf-bookmark="How cal Works" data-type="sect1"><div class="sect1" id="id131">
+<h1>How cal Works</h1>
+
+<p>I’ll start by showing you the manual page for BSD <code>cal</code> to consider what’s required.<a data-primary="cal program" data-secondary="how it works" data-type="indexterm" id="ix_calhow"/><a data-primary="BSD version" data-secondary="cal program" data-type="indexterm" id="id1572"/>
+It’s rather long, so I’ll just include some parts relevant to the challenge program:</p>
+<pre class="widows_24" data-type="programlisting">CAL(1)                    BSD General Commands Manual                   CAL(1)
+
+NAME
+     cal, ncal — displays a calendar and the date of Easter
+
+SYNOPSIS
+     cal [-31jy] [-A number] [-B number] [-d yyyy-mm] [[month] year]
+     cal [-31j] [-A number] [-B number] [-d yyyy-mm] -m month [year]
+     ncal [-C] [-31jy] [-A number] [-B number] [-d yyyy-mm] [[month] year]
+     ncal [-C] [-31j] [-A number] [-B number] [-d yyyy-mm] -m month [year]
+     ncal [-31bhjJpwySM] [-A number] [-B number] [-H yyyy-mm-dd] [-d yyyy-mm]
+         [-s country_code] [[month] year]
+     ncal [-31bhJeoSM] [-A number] [-B number] [-d yyyy-mm] [year]
+
+DESCRIPTION
+     The cal utility displays a simple calendar in traditional format and ncal
+     offers an alternative layout, more options and the date of Easter.  The
+     new format is a little cramped but it makes a year fit on a 25x80 termi‐
+     nal.  If arguments are not specified, the current month is displayed.
+
+     ...
+
+     A single parameter specifies the year (1-9999) to be displayed; note the
+     year must be fully specified: ``cal 89'' will not display a calendar for
+     1989.  Two parameters denote the month and year; the month is either a
+     number between 1 and 12, or a full or abbreviated name as specified by
+     the current locale.  Month and year default to those of the current sys-
+     tem clock and time zone (so ``cal -m 8'' will display a calendar for the
+     month of August in the current year).</pre>
+
+<p><a data-primary="months" data-secondary="in cal utility" data-secondary-sortas="cal" data-type="indexterm" id="id1573"/>GNU <code>cal</code> responds to <code>--help</code> and has<a data-primary="GNU version" data-secondary="cal program" data-type="indexterm" id="id1574"/> both short and long option names.
+Note that this version also allows the week to start on either Sunday or Monday, but the challenge program will start it on Sunday:</p>
+
+<pre data-type="programlisting">$ cal --help
+
+Usage:
+ cal [options] [[[day] month] year]
+
+Options:
+ -1, --one        show only current month (default)
+ -3, --three      show previous, current and next month
+ -s, --sunday     Sunday as first day of week
+ -m, --monday     Monday as first day of week
+ -j, --julian     output Julian dates
+ -y, --year       show whole current year
+ -V, --version    display version information and exit
+ -h, --help       display this help text and exit</pre>
+
+<p>Given no arguments, <code>cal</code> will print the current month and will highlight the current day by reversing foreground and background colors in your terminal.
+I can’t show this in print, so I’ll show today’s date (March 3) in bold, and you can pretend this is what you see when you run the command in your terminal:</p>
+
+<pre class="nobreakinside" data-type="programlisting">$ cal
+     March 2024
+Su Mo Tu We Th Fr Sa
+                1  2
+ <strong>3</strong>  4  5  6  7  8  9
+10 11 12 13 14 15 16
+17 18 19 20 21 22 23
+24 25 26 27 28 29 30
+31</pre>
+
+<p>A single positional argument will be interpreted as the year.<a data-primary="years" data-secondary="in cal utility" data-secondary-sortas="cal" data-type="indexterm" id="id1575"/>
+If this value is a valid integer in the range of 1–9999, <code>cal</code> will show the calendar for that year.
+For example, the following is a calendar for the year 1066.
+Note that the year is shown centered on the first line in the following output:</p>
+
+<pre data-type="programlisting">$ cal 1066
+                            1066
+      January               February               March
+Su Mo Tu We Th Fr Sa  Su Mo Tu We Th Fr Sa  Su Mo Tu We Th Fr Sa
+ 1  2  3  4  5  6  7            1  2  3  4            1  2  3  4
+ 8  9 10 11 12 13 14   5  6  7  8  9 10 11   5  6  7  8  9 10 11
+15 16 17 18 19 20 21  12 13 14 15 16 17 18  12 13 14 15 16 17 18
+22 23 24 25 26 27 28  19 20 21 22 23 24 25  19 20 21 22 23 24 25
+29 30 31              26 27 28              26 27 28 29 30 31
+
+
+       April                  May                   June
+Su Mo Tu We Th Fr Sa  Su Mo Tu We Th Fr Sa  Su Mo Tu We Th Fr Sa
+                   1      1  2  3  4  5  6               1  2  3
+ 2  3  4  5  6  7  8   7  8  9 10 11 12 13   4  5  6  7  8  9 10
+ 9 10 11 12 13 14 15  14 15 16 17 18 19 20  11 12 13 14 15 16 17
+16 17 18 19 20 21 22  21 22 23 24 25 26 27  18 19 20 21 22 23 24
+23 24 25 26 27 28 29  28 29 30 31           25 26 27 28 29 30
+30
+
+        July                 August              September
+Su Mo Tu We Th Fr Sa  Su Mo Tu We Th Fr Sa  Su Mo Tu We Th Fr Sa
+                   1         1  2  3  4  5                  1  2
+ 2  3  4  5  6  7  8   6  7  8  9 10 11 12   3  4  5  6  7  8  9
+ 9 10 11 12 13 14 15  13 14 15 16 17 18 19  10 11 12 13 14 15 16
+16 17 18 19 20 21 22  20 21 22 23 24 25 26  17 18 19 20 21 22 23
+23 24 25 26 27 28 29  27 28 29 30 31        24 25 26 27 28 29 30
+30 31
+
+      October               November              December
+Su Mo Tu We Th Fr Sa  Su Mo Tu We Th Fr Sa  Su Mo Tu We Th Fr Sa
+ 1  2  3  4  5  6  7            1  2  3  4                  1  2
+ 8  9 10 11 12 13 14   5  6  7  8  9 10 11   3  4  5  6  7  8  9
+15 16 17 18 19 20 21  12 13 14 15 16 17 18  10 11 12 13 14 15 16
+22 23 24 25 26 27 28  19 20 21 22 23 24 25  17 18 19 20 21 22 23
+29 30 31              26 27 28 29 30        24 25 26 27 28 29 30
+                                            31</pre>
+
+<p>Both the BSD and GNU versions show similar error messages if the year is not in the acceptable range:</p>
+
+<pre data-type="programlisting">$ cal 0
+cal: year `0' not in range 1..9999
+$ cal 10000
+cal: year `10000' not in range 1..9999</pre>
+
+<p>Both versions will interpret two integer values as the ordinal value of the month and year, respectively.<a data-primary="months" data-secondary="month and year in cal utilities" data-type="indexterm" id="id1576"/><a data-primary="years" data-secondary="month and year in cal utilities" data-type="indexterm" id="id1577"/>
+For example, in the incantation <strong><code>cal 3 1066</code></strong>, the <code>3</code> will be interpreted as the third month, which is March.
+Note that when showing a single month, the year is included with the month name:</p>
+
+<pre data-type="programlisting">$ cal 3 1066
+     March 1066
+Su Mo Tu We Th Fr Sa
+          1  2  3  4
+ 5  6  7  8  9 10 11
+12 13 14 15 16 17 18
+19 20 21 22 23 24 25
+26 27 28 29 30 31</pre>
+
+<p>Use the <code>-y|--year</code> flag to show the whole current year, which I find useful because I often forget what year it is too.<a data-primary="-y|--year flag (cal)" data-primary-sortas="y|" data-type="indexterm" id="id1578"/>
+If both <code>-y|--year</code> and the positional year are present, <code>cal</code> will use the positional year argument, but the challenge program should consider this an error.
+Oddly, GNU <code>cal</code> will not complain if you combine <code>-y</code> with both a month and a year, but BSD <code>cal</code> will error out.
+This is as much as the challenge program will implement.<a data-primary="cal program" data-secondary="how it works" data-startref="ix_calhow" data-type="indexterm" id="id1579"/></p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Getting Started" data-type="sect1"><div class="sect1" id="id132">
+<h1>Getting Started</h1>
+
+<p>The program in this chapter <a data-primary="cal program" data-secondary="writing calr version" data-tertiary="getting started" data-type="indexterm" id="id1580"/>should be called <code>calr</code> (pronounced <em>cal-ar</em>) for a Rust calendar.
+Use <strong><code>cargo new calr</code></strong> to get started, then add the following dependencies to <em>Cargo.toml</em>:</p>
+
+<pre data-code-language="toml" data-type="programlisting"><code class="k">[</code><code class="k">dependencies</code><code class="k">]</code><code class="w">
+</code><code class="n">ansi_term</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">0.12.1</code><code class="s2">"</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO1-1" id="co_rascalry_CO1-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+</code><code class="n">anyhow</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">1.0.79</code><code class="s2">"</code><code class="w">
+</code><code class="n">chrono</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">0.4.34</code><code class="s2">"</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO1-2" id="co_rascalry_CO1-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+</code><code class="n">clap</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">version</code><code class="w"> </code><code class="p">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">4.5.0</code><code class="s2">"</code><code class="p">,</code><code class="w"> </code><code class="n">features</code><code class="w"> </code><code class="p">=</code><code class="w"> </code><code class="p">[</code><code class="s2">"</code><code class="s2">derive</code><code class="s2">"</code><code class="p">]</code><code class="w"> </code><code class="p">}</code><code class="w">
+</code><code class="n">itertools</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">0.12.1</code><code class="s2">"</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO1-3" id="co_rascalry_CO1-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+
+</code><code class="k">[</code><code class="k">dev-dependencies</code><code class="k">]</code><code class="w">
+</code><code class="n">assert_cmd</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">2.0.13</code><code class="s2">"</code><code class="w">
+</code><code class="n">predicates</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">3.0.4</code><code class="s2">"</code><code class="w">
+</code><code class="n">pretty_assertions</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">1.4.0</code><code class="s2">"</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_rascalry_CO1-1" id="callout_rascalry_CO1-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <code>ansi_term</code> crate<a data-primary="ansi_term crate" data-type="indexterm" id="id1581"/> will be used to highlight today’s date.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO1-2" id="callout_rascalry_CO1-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <a href="https://oreil.ly/_JDTq"><code>chrono</code> crate</a> will <a data-primary="chrono crate" data-type="indexterm" id="id1582"/>provide access to date and time functions.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO1-3" id="callout_rascalry_CO1-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>The <a href="https://oreil.ly/wcg_8"><code>itertools</code></a> crate will be used to join lines of text.<a data-primary="itertools crate" data-type="indexterm" id="id1583"/></p></dd>
+</dl>
+
+<p>Copy the book’s <em>13_calr/tests</em> directory into your project, and run <strong><code>cargo test</code></strong> to build and test your program, which<a data-primary="testing" data-secondary="calr tests" data-type="indexterm" id="id1584"/> should fail most ignominiously.</p>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Defining and Validating the Arguments" data-type="sect2"><div class="sect2" id="id133">
+<h2>Defining and Validating the Arguments</h2>
+
+<p>I suggest you update <em>src/main.rs</em> to the <a data-primary="cal program" data-secondary="writing calr version" data-tertiary="defining and validating the arguments" data-type="indexterm" id="ix_calwrdefvalarg"/> to add the following struct for the program’s arguments:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[</code><code class="cp">derive(Debug)</code><code class="cp">]</code><code class="w">
+</code><code class="k">struct</code><code> </code><code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="n">year</code><code>:</code><code> </code><code class="nb">Option</code><code class="o">&lt;</code><code class="kt">i32</code><code class="o">&gt;</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO2-1" id="co_rascalry_CO2-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="n">month</code><code>:</code><code> </code><code class="nb">Option</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO2-2" id="co_rascalry_CO2-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="n">show_current_year</code><code>:</code><code> </code><code class="kt">bool</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO2-3" id="co_rascalry_CO2-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_rascalry_CO2-1" id="callout_rascalry_CO2-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <code>year</code> is an optional <code>i32</code> value.<a data-primary="years" data-secondary="in calr program" data-secondary-sortas="calr" data-type="indexterm" id="id1585"/><a data-primary="months" data-secondary="in calr program" data-secondary-sortas="calr" data-type="indexterm" id="id1586"/></p></dd>
+<dt><a class="co" href="#co_rascalry_CO2-2" id="callout_rascalry_CO2-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <code>month</code> is an optional string as the user may provide a month name or 
+<span class="keep-together">number</span>.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO2-3" id="callout_rascalry_CO2-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p><code>show_current_year</code> is a Boolean for whether or not to show the entire year.</p></dd>
+</dl>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Because our program will only allow positive year values like the original <code>cal</code>, you might expect the <code>year</code> field to be a <code>u32</code>; however, the <code>chrono</code> crate I’ll use for handling dates uses <code>i32</code> to allow both positive (CE or <em>common era</em>) and negative (BCE or <em>before common era</em>) values.<a data-primary="BCE (before common era) values" data-type="indexterm" id="id1587"/><a data-primary="CE (common era) values" data-type="indexterm" id="id1588"/><a data-primary="common era (CE) values" data-type="indexterm" id="id1589"/><a data-primary="years" data-secondary="positive and negative values for" data-type="indexterm" id="id1590"/></p>
+</div>
+
+<p>Either annotate <code>Args</code> for the <code>clap</code> derive pattern<a data-primary="derive pattern" data-secondary="using in calr program" data-type="indexterm" id="id1591"/> or use the following skeleton <a data-primary="get_args function" data-secondary="calr program" data-type="indexterm" id="id1592"/>for your <code>get_args</code> function:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">get_args</code><code class="p">()</code><code class="w"> </code>-&gt; <code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">matches</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code>::<code class="n">new</code><code class="p">(</code><code class="s">"calr"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">version</code><code class="p">(</code><code class="s">"0.1.0"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">author</code><code class="p">(</code><code class="s">"Ken Youens-Clark &lt;kyclark@gmail.com&gt;"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">about</code><code class="p">(</code><code class="s">"Rust version of `cal`"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="c1">// What goes here?</code>
+<code class="w">        </code><code class="p">.</code><code class="n">get_matches</code><code class="p">();</code><code class="w"/>
+
+<code class="w">    </code><code class="n">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">year</code>: <code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">        </code><code class="n">month</code>: <code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">        </code><code class="n">show_current_year</code>: <code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Start in <code>main</code> by printing the arguments:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">args</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">get_args</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{args:?}"</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Your program should <a data-primary="usage statement" data-secondary="calr program" data-type="indexterm" id="id1593"/>be able to produce the following usage:</p>
+
+<pre data-type="programlisting">$ cargo run -- -h
+Rust version of `cal`
+
+Usage: calr [OPTIONS] [YEAR]
+
+Arguments:
+  [YEAR]  Year (1-9999)
+
+Options:
+  -m &lt;MONTH&gt;      Month name or number (1-12)
+  -y, --year      Show whole current year
+  -h, --help      Print help
+  -V, --version   Print version</pre>
+
+<p>All the arguments are optional, so the program should show the following defaults:</p>
+
+<pre data-type="programlisting">$ cargo run
+Args { year: None, month: None, show_current_year: false }</pre>
+
+<p>A single integer positional argument should be interpreted as the year:</p>
+
+<pre data-type="programlisting">$ cargo run -- 1000
+Args { year: Some(1000), month: None, show_current_year: false }</pre>
+
+<p>Any year outside the range 1–9999 should be rejected:</p>
+
+<pre data-type="programlisting">$ cargo run -- 0
+error: invalid value '0' for '[YEAR]': 0 is not in 1..=9999
+$ cargo run -- 10000
+error: invalid value '10000' for '[YEAR]': 10000 is not in 1..=9999</pre>
+
+<p>The <code>-y|--year</code> flag should cause <code>show_current_year</code> to be <code>true</code>:</p>
+
+<pre data-type="programlisting">$ cargo run -- -y
+Args { year: None, month: None, show_current_year: true }</pre>
+
+<p>The <code>-y|--year</code> flag cannot be <a data-primary="-y|--year flag (cal)" data-primary-sortas="y|" data-secondary="no use without the month" data-type="indexterm" id="id1594"/><a data-primary="-m  month option (calr)" data-primary-sortas="m" data-type="indexterm" id="id1595"/>used with the month:</p>
+
+<pre data-type="programlisting">$ cargo run -- -m 1 -y
+error: the argument '-m &lt;MONTH&gt;' cannot be used with '--year'
+
+Usage: calr -m &lt;MONTH&gt; [YEAR]</pre>
+
+<p class="pagebreak-before">Nor can <code>-y|--year</code> flag be combined with the <code>year</code> positional argument:</p>
+
+<pre data-type="programlisting">$ cargo run -- -y 1972
+error: the argument '--year' cannot be used with '[YEAR]'
+
+Usage: calr --year [YEAR]</pre>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Pause here to get your program working to this point. Your program should also pass several tests under <strong><code>cargo test dies</code></strong>.</p>
+</div>
+
+<p>Following is how I wrote <a data-primary="get_args function" data-secondary="calr program" data-tertiary="parsing and validating arguments" data-type="indexterm" id="id1596"/>my <code>get_args</code> to parse and validate the command-line arguments and choose the defaults.
+Be sure add <code>use clap::{Arg, ArgAction, Command}</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">get_args</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">matches</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">calr</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">version</code><code class="p">(</code><code class="s">"</code><code class="s">0.1.0</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">author</code><code class="p">(</code><code class="s">"</code><code class="s">Ken Youens-Clark &lt;kyclark@gmail.com&gt;</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">about</code><code class="p">(</code><code class="s">"</code><code class="s">Rust version of `cal`</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w">
+</code><code class="w">            </code><code class="n">Arg</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">year</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">value_name</code><code class="p">(</code><code class="s">"</code><code class="s">YEAR</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">value_parser</code><code class="p">(</code><code class="n">clap</code><code>::</code><code class="n">value_parser</code><code class="o">!</code><code class="p">(</code><code class="kt">i32</code><code class="p">)</code><code class="p">.</code><code class="n">range</code><code class="p">(</code><code class="mi">1</code><code class="o">..=</code><code class="mi">9999</code><code class="p">)</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO3-1" id="co_rascalry_CO3-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"</code><code class="s">Year (1-9999)</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w">
+</code><code class="w">            </code><code class="n">Arg</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">month</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">value_name</code><code class="p">(</code><code class="s">"</code><code class="s">MONTH</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">short</code><code class="p">(</code><code class="sc">'m'</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"</code><code class="s">Month name or number (1-12)</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO3-2" id="co_rascalry_CO3-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+        </code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w">
+</code><code class="w">            </code><code class="n">Arg</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">show_current_year</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">value_name</code><code class="p">(</code><code class="s">"</code><code class="s">SHOW_YEAR</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">short</code><code class="p">(</code><code class="sc">'y'</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">long</code><code class="p">(</code><code class="s">"</code><code class="s">year</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"</code><code class="s">Show whole current year</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">conflicts_with_all</code><code class="p">(</code><code class="p">[</code><code class="s">"</code><code class="s">month</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="s">"</code><code class="s">year</code><code class="s">"</code><code class="p">]</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO3-3" id="co_rascalry_CO3-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+                </code><code class="p">.</code><code class="n">action</code><code class="p">(</code><code class="n">ArgAction</code><code>::</code><code class="n">SetTrue</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">get_matches</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="n">Args</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="n">year</code><code>:</code><code> </code><code class="nc">matches</code><code class="p">.</code><code class="n">get_one</code><code class="p">(</code><code class="s">"</code><code class="s">year</code><code class="s">"</code><code class="p">)</code><code class="p">.</code><code class="n">cloned</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="n">month</code><code>:</code><code> </code><code class="nc">matches</code><code class="p">.</code><code class="n">get_one</code><code class="p">(</code><code class="s">"</code><code class="s">month</code><code class="s">"</code><code class="p">)</code><code class="p">.</code><code class="n">cloned</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="n">show_current_year</code><code>:</code><code> </code><code class="nc">matches</code><code class="p">.</code><code class="n">get_flag</code><code class="p">(</code><code class="s">"</code><code class="s">show_current_year</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_rascalry_CO3-1" id="callout_rascalry_CO3-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <code>year</code> must parsed to an <code>i32</code> in the range 1-9999.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO3-2" id="callout_rascalry_CO3-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The month can be a string or a number, which I will validate later.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO3-3" id="callout_rascalry_CO3-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Ensure this flag is not used with the other arguments.</p></dd>
+</dl>
+
+<p>For the <a data-primary="derive pattern" data-secondary="using in calr program" data-type="indexterm" id="id1597"/>derive pattern, I add <code>use clap::Parser</code> and the following code:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[derive(Debug, Parser)]</code><code class="w"/>
+<code class="cp">#[command(author, version, about)]</code><code class="w"/>
+<code class="sd">/// Rust version of `cal`</code>
+<code class="k">struct</code> <code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="sd">/// Year (1-9999)</code>
+<code class="w">    </code><code class="cp">#[arg(value_parser(clap::value_parser!(i32).range(1..=9999)))]</code><code class="w"/>
+<code class="w">    </code><code class="n">year</code>: <code class="nb">Option</code><code class="o">&lt;</code><code class="kt">i32</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Month name or number (1-12)</code>
+<code class="w">    </code><code class="cp">#[arg(short)]</code><code class="w"/>
+<code class="w">    </code><code class="n">month</code>: <code class="nb">Option</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Show the whole current year</code>
+<code class="w">    </code><code class="cp">#[arg(short('y'), long(</code><code class="s">"year"</code><code class="cp">), conflicts_with_all([</code><code class="s">"month"</code><code class="cp">, </code><code class="s">"year"</code><code class="cp">]))]</code><code class="w"/>
+<code class="w">    </code><code class="n">show_current_year</code>: <code class="kt">bool</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>I’ll restructure my <code>main</code> to call a <code>run</code> function as in previous chapters:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">run</code><code class="p">(</code><code class="n">Args</code>::<code class="n">parse</code><code class="p">())</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"{e}"</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="n">std</code>::<code class="n">process</code>::<code class="n">exit</code><code class="p">(</code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>I have some more work to validate the arguments, which I’ll tackle in a <code>run</code> function.
+Be sure to add <code>use anyhow::Result</code> for the following:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">run</code><code class="p">(</code><code class="n">_args</code>: <code class="nc">Args</code><code class="p">)</code><code class="w"> </code>-&gt; <code class="nb">Result</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(())</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>First, I want to validate the month argument, so I’ll create a<a data-primary="parse_month function" data-type="indexterm" id="id1598"/><a data-primary="months" data-secondary="parse_month function in calr" data-type="indexterm" id="id1599"/> <code>parse_month</code> function that possibly returns an integer if the given string can be parsed as an integer in the range 1-12 or matched to a known month name:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">parse_month</code><code class="p">(</code><code class="n">month</code>: <code class="nb">String</code><code class="p">)</code><code class="w"> </code>-&gt; <code class="nb">Result</code><code class="o">&lt;</code><code class="kt">u32</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">unimplemented!</code><code class="p">();</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+<div data-type="tip"><h6>Tip</h6>
+<p>Since the month will only be in the range 1–12, a <code>u32</code> may seem excessively large, but this is the type that <code>chrono</code> crate uses for months.</p>
+</div>
+
+<p>Add the following unit test to check the function using the bounds 1 and 12 and a sample case-insensitive month like <em>jan</em> (for <em>January</em>) and an unknown month name.<a data-primary="unit tests" data-secondary="test_parse_month in calr" data-type="indexterm" id="id1600"/></p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[cfg(test)]</code><code class="w"/>
+<code class="k">mod</code> <code class="nn">tests</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">use</code><code class="w"> </code><code class="k">super</code>::<code class="n">parse_month</code><code class="p">;</code><code class="w"/>
+
+<code class="w">    </code><code class="cp">#[test]</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code> <code class="nf">test_parse_month</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">res</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">parse_month</code><code class="p">(</code><code class="s">"1"</code><code class="p">.</code><code class="n">to_string</code><code class="p">());</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert!</code><code class="p">(</code><code class="n">res</code><code class="p">.</code><code class="n">is_ok</code><code class="p">());</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">res</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(),</code><code class="w"> </code><code class="mi">1</code><code class="k">u32</code><code class="p">);</code><code class="w"/>
+
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">res</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">parse_month</code><code class="p">(</code><code class="s">"12"</code><code class="p">.</code><code class="n">to_string</code><code class="p">());</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert!</code><code class="p">(</code><code class="n">res</code><code class="p">.</code><code class="n">is_ok</code><code class="p">());</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">res</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(),</code><code class="w"> </code><code class="mi">12</code><code class="k">u32</code><code class="p">);</code><code class="w"/>
+
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">res</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">parse_month</code><code class="p">(</code><code class="s">"jan"</code><code class="p">.</code><code class="n">to_string</code><code class="p">());</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert!</code><code class="p">(</code><code class="n">res</code><code class="p">.</code><code class="n">is_ok</code><code class="p">());</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">res</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(),</code><code class="w"> </code><code class="mi">1</code><code class="k">u32</code><code class="p">);</code><code class="w"/>
+
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">res</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">parse_month</code><code class="p">(</code><code class="s">"0"</code><code class="p">.</code><code class="n">to_string</code><code class="p">());</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert!</code><code class="p">(</code><code class="n">res</code><code class="p">.</code><code class="n">is_err</code><code class="p">());</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="w"/>
+<code class="w">            </code><code class="n">res</code><code class="p">.</code><code class="n">unwrap_err</code><code class="p">().</code><code class="n">to_string</code><code class="p">(),</code><code class="w"/>
+<code class="w">            </code><code class="s">r#"month "0" not in the range 1 through 12"#</code><code class="w"/>
+<code class="w">        </code><code class="p">);</code><code class="w"/>
+
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">res</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">parse_month</code><code class="p">(</code><code class="s">"13"</code><code class="p">.</code><code class="n">to_string</code><code class="p">());</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert!</code><code class="p">(</code><code class="n">res</code><code class="p">.</code><code class="n">is_err</code><code class="p">());</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="w"/>
+<code class="w">            </code><code class="n">res</code><code class="p">.</code><code class="n">unwrap_err</code><code class="p">().</code><code class="n">to_string</code><code class="p">(),</code><code class="w"/>
+<code class="w">            </code><code class="s">r#"month "13" not in the range 1 through 12"#</code><code class="w"/>
+<code class="w">        </code><code class="p">);</code><code class="w"/>
+
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">res</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">parse_month</code><code class="p">(</code><code class="s">"foo"</code><code class="p">.</code><code class="n">to_string</code><code class="p">());</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert!</code><code class="p">(</code><code class="n">res</code><code class="p">.</code><code class="n">is_err</code><code class="p">());</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">res</code><code class="p">.</code><code class="n">unwrap_err</code><code class="p">().</code><code class="n">to_string</code><code class="p">(),</code><code class="w"> </code><code class="s">r#"Invalid month "foo""#</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Stop reading here and write the function that passes <strong><code>cargo test test_parse_month</code></strong>.</p>
+</div>
+
+<p>My <code>parse_month</code> function needs a list of valid <a data-primary="parse_month function" data-type="indexterm" id="id1601"/><a data-primary="months" data-secondary="valid month names for parse_month" data-type="indexterm" id="id1602"/>month names, so I declare a constant value at the top of my <em>src/main.rs</em>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">const</code><code class="w"> </code><code class="n">MONTH_NAMES</code>: <code class="p">[</code><code class="o">&amp;</code><code class="kt">str</code><code class="p">;</code><code class="w"> </code><code class="mi">12</code><code class="p">]</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">[</code><code class="w"/>
+<code class="w">    </code><code class="s">"January"</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="s">"February"</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="s">"March"</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="s">"April"</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="s">"May"</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="s">"June"</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="s">"July"</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="s">"August"</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="s">"September"</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="s">"October"</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="s">"November"</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="s">"December"</code><code class="p">,</code><code class="w"/>
+<code class="p">];</code><code class="w"/></pre>
+
+<p>Following is how I use the month names <a data-primary="months" data-secondary="using month names to figure out the given month" data-type="indexterm" id="id1603"/>to help figure out the given month.
+Be sure to <a data-primary="anyhow::bail macro" data-type="indexterm" id="id1604"/><a data-primary="bail! macro" data-type="indexterm" id="id1605"/>add <code>use anyhow::bail</code> to your imports:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">parse_month</code><code class="p">(</code><code class="n">month</code><code>:</code><code> </code><code class="nb">String</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="kt">u32</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="k">match</code><code class="w"> </code><code class="n">month</code><code class="p">.</code><code class="n">parse</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO4-1" id="co_rascalry_CO4-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+        </code><code class="nb">Ok</code><code class="p">(</code><code class="n">num</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="k">if</code><code class="w"> </code><code class="p">(</code><code class="mi">1</code><code class="o">..=</code><code class="mi">12</code><code class="p">)</code><code class="p">.</code><code class="n">contains</code><code class="p">(</code><code class="o">&amp;</code><code class="n">num</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO4-2" id="co_rascalry_CO4-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+                </code><code class="nb">Ok</code><code class="p">(</code><code class="n">num</code><code class="p">)</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="n">bail</code><code class="o">!</code><code class="p">(</code><code class="s">r#"month "{month}" not in the range 1 through 12"#</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO4-3" id="co_rascalry_CO4-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+            </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="n">_</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="kd">let</code><code class="w"> </code><code class="n">lower</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="n">month</code><code class="p">.</code><code class="n">to_lowercase</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO4-4" id="co_rascalry_CO4-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+            </code><code class="kd">let</code><code class="w"> </code><code class="n">matches</code><code>:</code><code> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">_</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">MONTH_NAMES</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">iter</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">enumerate</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO4-5" id="co_rascalry_CO4-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+                </code><code class="p">.</code><code class="n">filter_map</code><code class="p">(</code><code class="o">|</code><code class="p">(</code><code class="n">i</code><code class="p">,</code><code class="w"> </code><code class="n">name</code><code class="p">)</code><code class="o">|</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                    </code><code class="k">if</code><code class="w"> </code><code class="n">name</code><code class="p">.</code><code class="n">to_lowercase</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">starts_with</code><code class="p">(</code><code class="n">lower</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO4-6" id="co_rascalry_CO4-6"><img alt="6" src="assets/6.png"/></a><code class="w">
+                        </code><code class="nb">Some</code><code class="p">(</code><code class="n">i</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="mi">1</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO4-7" id="co_rascalry_CO4-7"><img alt="7" src="assets/7.png"/></a><code class="w">
+                    </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                        </code><code class="nb">None</code><code class="w">
+</code><code class="w">                    </code><code class="p">}</code><code class="w">
+</code><code class="w">                </code><code class="p">}</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">collect</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO4-8" id="co_rascalry_CO4-8"><img alt="8" src="assets/8.png"/></a><code class="w">
+
+            </code><code class="k">if</code><code class="w"> </code><code class="n">matches</code><code class="p">.</code><code class="n">len</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">=</code><code class="w"> </code><code class="mi">1</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO4-9" id="co_rascalry_CO4-9"><img alt="9" src="assets/9.png"/></a><code class="w">
+                </code><code class="nb">Ok</code><code class="p">(</code><code class="n">matches</code><code class="p">[</code><code class="mi">0</code><code class="p">]</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">u32</code><code class="p">)</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                </code><code class="n">bail</code><code class="o">!</code><code class="p">(</code><code class="s">r#"Invalid month "{month}""#</code><code class="p">)</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_rascalry_CO4-1" id="callout_rascalry_CO4-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Attempt to parse a numeric argument.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO4-2" id="callout_rascalry_CO4-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>If the parsed number is in the range 1–12, return the value.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO4-3" id="callout_rascalry_CO4-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Otherwise, create an informative error message.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO4-4" id="callout_rascalry_CO4-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>If the month didn’t parse as an integer, compare the lowercased value to the month names.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO4-5" id="callout_rascalry_CO4-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>Enumerate the month names to get the index and value.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO4-6" id="callout_rascalry_CO4-6"><img alt="6" src="assets/6.png"/></a></dt>
+<dd><p>See if the given value is the start of a month name.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO4-7" id="callout_rascalry_CO4-7"><img alt="7" src="assets/7.png"/></a></dt>
+<dd><p>If so, return the zero-based index position corrected to one-based counting.<a data-primary="indexes" data-secondary="zero-based index position corrected to one-based" data-type="indexterm" id="id1606"/></p></dd>
+<dt><a class="co" href="#co_rascalry_CO4-8" id="callout_rascalry_CO4-8"><img alt="8" src="assets/8.png"/></a></dt>
+<dd><p>Collect all the possible month values.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO4-9" id="callout_rascalry_CO4-9"><img alt="9" src="assets/9.png"/></a></dt>
+<dd><p>If there was exactly one possible month, return it as a <code>u32</code> value; otherwise, return an informative error message.</p></dd>
+</dl>
+
+<p>I can use this to validate the month in my <code>run</code> function:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">run</code><code class="p">(</code><code class="n">args</code>: <code class="nc">Args</code><code class="p">)</code><code class="w"> </code>-&gt; <code class="nb">Result</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">month</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">month</code><code class="p">.</code><code class="n">map</code><code class="p">(</code><code class="n">parse_month</code><code class="p">).</code><code class="n">transpose</code><code class="p">()</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"month = {month:?}"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"year  = {:?}"</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">year</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(())</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Your program should accept <a data-primary="integers" data-secondary="valid integer values for month and year" data-type="indexterm" id="id1607"/><a data-primary="months" data-secondary="valid integer values for" data-type="indexterm" id="id1608"/><a data-primary="years" data-secondary="valid integer values for" data-type="indexterm" id="id1609"/>valid integer values for the month and year:</p>
+
+<pre data-type="programlisting">$ cargo run -- -m 7 1776
+month = Some(7)
+year  = Some(1776)</pre>
+
+<p>Any month number outside the range 1–12 should be rejected:</p>
+
+<pre data-type="programlisting">$ cargo run -- -m 0
+month "0" not in the range 1 through 12
+$ cargo run -- -m 13
+month "13" not in the range 1 through 12</pre>
+
+<p class="pagebreak-before">Any unknown month name should be rejected:</p>
+
+<pre data-type="programlisting">$ cargo run -- -m Fortinbras
+Invalid month "Fortinbras"</pre>
+
+<p>Months may be provided as any <a data-primary="months" data-secondary="provided as distinguishing starting substring" data-type="indexterm" id="id1610"/><a data-primary="strings" data-secondary="distinguishing starting substring for months" data-type="indexterm" id="id1611"/>distinguishing starting substring, so <em>Jul</em> or <em>July</em> should work:</p>
+
+<pre data-type="programlisting">$ cargo run -- -m Jul
+month = Some(7)
+year  = None</pre>
+
+<p>The string <em>Ju</em> is not enough to disambiguate <em>June</em> and <em>July</em>:</p>
+
+<pre data-type="programlisting">$ cargo run -- -m Ju
+Invalid month "Ju"</pre>
+
+<p>Month names should also<a data-primary="months" data-secondary="case-insensitive names for" data-type="indexterm" id="id1612"/> be case-insensitive, so <em>s</em> is enough to distinguish <em>September</em>:</p>
+
+<pre data-type="programlisting">$ cargo run -- -m s 1999
+month = Some(9)
+year  = Some(1999)</pre>
+
+<p>When no arguments are given, the program should default to the current month and year, which was March 2024 when I was writing this.
+To figure out the default values for year and month, I recommend that you use the <code>chrono</code> crate.<a data-primary="chrono crate" data-type="indexterm" id="id1613"/><a data-primary="chrono::Local" data-type="indexterm" id="id1614"/><a data-primary="chrono::Local::now" data-type="indexterm" id="id1615"/>
+The <a href="https://oreil.ly/V2xTo"><code>chrono::Local::now</code></a> function returns a <a href="https://oreil.ly/yEGzP"><code>DateTime</code> struct</a> set to your local time zone.<a data-primary="DateTime struct" data-type="indexterm" id="id1616"/><a data-primary="local time zone" data-type="indexterm" id="id1617"/><a data-primary="chrono::DateTime struct" data-type="indexterm" id="id1618"/><a data-primary="Date struct" data-type="indexterm" id="id1619"/>
+You can then use methods like <a href="https://oreil.ly/jw2t-"><code>Datelike::month</code></a> and <a href="https://oreil.ly/o4-d4"><code>Datelike::year</code></a> to get integer values representing the current month and year.<a data-primary="Datelike::year method" data-type="indexterm" id="id1620"/><a data-primary="Datelike::month method" data-type="indexterm" id="id1621"/><a data-primary="month method" data-type="indexterm" id="id1622"/><a data-primary="year method" data-type="indexterm" id="id1623"/>
+If the <code>-y|--year</code> flag is present, <a data-primary="-y|--year flag (calr)" data-primary-sortas="y|" data-type="indexterm" id="id1624"/><a data-primary="months" data-secondary="month set to none with -y|--year flag" data-type="indexterm" id="id1625"/><a data-primary="years" data-secondary="year set to current year with -y|--year flag" data-type="indexterm" id="id1626"/>then show the entire current year and set the month to <code>None</code>.
+For the following code, add <code>use chrono::{Datelike, Local}</code> to your imports:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">today</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Local</code><code>::</code><code class="n">now</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">date_naive</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO5-1" id="co_rascalry_CO5-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">month</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">month</code><code class="p">.</code><code class="n">map</code><code class="p">(</code><code class="n">parse_month</code><code class="p">)</code><code class="p">.</code><code class="n">transpose</code><code class="p">(</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO5-2" id="co_rascalry_CO5-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">year</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">year</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">show_current_year</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO5-3" id="co_rascalry_CO5-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+        </code><code class="n">month</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">None</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="n">year</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">today</code><code class="p">.</code><code class="n">year</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="k">if</code><code class="w"> </code><code class="n">month</code><code class="p">.</code><code class="n">is_none</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="o">&amp;</code><code class="o">&amp;</code><code class="w"> </code><code class="n">year</code><code class="p">.</code><code class="n">is_none</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO5-4" id="co_rascalry_CO5-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+        </code><code class="n">month</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">today</code><code class="p">.</code><code class="n">month</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="n">year</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">today</code><code class="p">.</code><code class="n">year</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">year</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">year</code><code class="p">.</code><code class="n">unwrap_or</code><code class="p">(</code><code class="n">today</code><code class="p">.</code><code class="n">year</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO5-5" id="co_rascalry_CO5-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+
+    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">month = {month:?}</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">year  = {year:?}</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_rascalry_CO5-1" id="callout_rascalry_CO5-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Get the current date as a <a href="https://oreil.ly/ktLQU"><code>NaiveDate</code></a>, which is an ISO 8601 calendar date without a time zone that can represent dates from January 1, 262145 BCE to December 31, 262143 CE.<a data-primary="naive dates" data-type="indexterm" id="id1627"/><a data-primary="chrono::naive::NaiveDate" data-type="indexterm" id="id1628"/> Naive dates are fine for this application as it does not require time zones.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO5-2" id="callout_rascalry_CO5-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Make the <code>month</code> and <code>year</code> variables mutable.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO5-3" id="callout_rascalry_CO5-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>If <code>args.show_current_year</code> is <code>true</code>, set the year to the current year and the month to <code>None</code>.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO5-4" id="callout_rascalry_CO5-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>If there are no values for <code>month</code> or <code>year</code>, use the values from <code>today</code>.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO5-5" id="callout_rascalry_CO5-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>The <code>year</code> variable must have <code>Some</code> value, it’s safe to call <code>Option::unwrap</code>.</p></dd>
+</dl>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>The <code>chrono</code> crate also has <a href="https://oreil.ly/dT_t0"><code>chrono::Utc</code></a> to get the current time based on Coordinated Universal Time (UTC), which is the successor to Greenwich Mean Time (GMT) and is the time standard used for regulating the world’s clocks.<a data-primary="time (UTC)" data-type="indexterm" id="id1629"/><a data-primary="chrono::Utc struct" data-type="indexterm" id="id1630"/><a data-primary="chrono::offset::Utc" data-type="indexterm" id="id1631"/><a data-primary="Coordinated Universal Time (UTC)" data-type="indexterm" id="id1632"/><a data-primary="UTC (Coordinated Universal Time)" data-type="indexterm" id="id1633"/> You may be asking, “Why isn’t it abbreviated as CUT?” Apparently, it’s because the International Tel⁠e­communication Union and the International Astronomical Union wanted to have one universal acronym. The English speakers proposed CUT (for <em>coordinated universal time</em>), while the French speakers wanted TUC (for <em>temps universel coordonné</em>). Using the wisdom of Solomon, they compromised with UTC, which doesn’t mean anything in particular but conforms to the abbreviation convention for universal time.</p>
+</div>
+
+<p>Ensure that the program <a data-primary="months" data-secondary="current month used with calr program with no arguments" data-type="indexterm" id="id1634"/><a data-primary="years" data-secondary="current year used with calr program with no arguments" data-type="indexterm" id="id1635"/>will use the current month and year when given no 
+<span class="keep-together">arguments:</span></p>
+
+<pre data-type="programlisting">$ cargo run
+month = Some(3)
+year  = 2024</pre>
+
+<p>With just the <code>-y|--year</code> flag, the current year is selected:</p>
+
+<pre data-type="programlisting">$ cargo run -- -y
+month = None
+year  = 2024</pre>
+
+<p>When only the month is indicated, select the current year:</p>
+
+<pre data-type="programlisting">$ cargo run -- -m July
+month = Some(7)
+year  = 2024</pre>
+
+<p class="pagebreak-before">At this point, your program should pass <strong><code>cargo test dies</code></strong>:</p>
+
+<pre data-type="programlisting">running 8 tests
+test dies_year_10000 ... ok
+test dies_y_and_month ... ok
+test dies_y_and_year ... ok
+test dies_year_0 ... ok
+test dies_month_0 ... ok
+test dies_invalid_month ... ok
+test dies_month_13 ... ok
+test dies_invalid_year ... ok</pre>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Writing the Program" data-type="sect2"><div class="sect2" id="id134">
+<h2>Writing the Program</h2>
+
+<p>Now that you have good input, it’s time to write the rest of the program.<a data-primary="cal program" data-secondary="writing calr version" data-startref="ix_calwrdefvalarg" data-tertiary="defining and validating the arguments" data-type="indexterm" id="id1636"/><a data-primary="cal program" data-secondary="writing calr version" data-tertiary="writing the program" data-type="indexterm" id="ix_calwrwrprg"/>
+First, consider how to print just one month, like April 2016, which I will place beside the same month from 2017.
+I’ll pipe the output from <code>cal</code> into <code>cat -e</code>, which will show the dollar sign (<code>$</code>) for the ends of the lines.<a data-primary="cat (concatenate) command" data-secondary="-e option" data-type="indexterm" id="id1637"/><a data-primary="$ (dollar sign)" data-secondary="ends of lines in cat -e" data-type="indexterm" id="id1638"/>
+The following shows that each month has eight lines: one for the name of the month, one for the day headers, and six for the weeks of the month.
+Additionally, each line must be 22 columns wide:</p>
+
+<pre data-type="programlisting">$ cal -m 4 2016 | cat -e           $ cal -m 4 2017 | cat -e
+     April 2016       $                 April 2017       $
+Su Mo Tu We Th Fr Sa  $            Su Mo Tu We Th Fr Sa  $
+                1  2  $                               1  $
+ 3  4  5  6  7  8  9  $             2  3  4  5  6  7  8  $
+10 11 12 13 14 15 16  $             9 10 11 12 13 14 15  $
+17 18 19 20 21 22 23  $            16 17 18 19 20 21 22  $
+24 25 26 27 28 29 30  $            23 24 25 26 27 28 29  $
+                      $            30                    $</pre>
+
+<p>I decided to create <a data-primary="format_month function" data-type="indexterm" id="id1639"/>a function called <code>format_month</code> to create the output for one month.
+Be sure to add <code>chrono::NaiveDate</code> to your imports for the following code:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">format_month</code><code class="p">(</code><code class="w">
+</code><code class="w">    </code><code class="n">year</code><code>:</code><code> </code><code class="kt">i32</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO6-1" id="co_rascalry_CO6-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="n">month</code><code>:</code><code> </code><code class="kt">u32</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO6-2" id="co_rascalry_CO6-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="n">print_year</code><code>:</code><code> </code><code class="kt">bool</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO6-3" id="co_rascalry_CO6-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+    </code><code class="n">today</code><code>:</code><code> </code><code class="nc">NaiveDate</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO6-4" id="co_rascalry_CO6-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO6-5" id="co_rascalry_CO6-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+    </code><code class="fm">unimplemented!</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_rascalry_CO6-1" id="callout_rascalry_CO6-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <code>year</code> of the month.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO6-2" id="callout_rascalry_CO6-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <code>month</code> number to format.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO6-3" id="callout_rascalry_CO6-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Whether or not to include the year in the month’s header.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO6-4" id="callout_rascalry_CO6-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Today’s date, used to highlight today.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO6-5" id="callout_rascalry_CO6-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>The function returns a <code>Vec&lt;String&gt;</code>, which is the eight lines of text.</p></dd>
+</dl>
+
+<p>You can expand your <code>tests</code> module to <a data-primary="unit tests" data-secondary="test_format_month in calr" data-type="indexterm" id="id1640"/>include the following unit test:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[</code><code class="cp">cfg(test)</code><code class="cp">]</code><code class="w">
+</code><code class="k">mod</code><code> </code><code class="nn">tests</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="k">use</code><code class="w"> </code><code class="k">super</code><code>:</code><code>:</code><code class="p">{</code><code class="n">format_month</code><code class="p">,</code><code class="w"> </code><code class="n">parse_month</code><code class="p">}</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO7-1" id="co_rascalry_CO7-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="k">use</code><code class="w"> </code><code class="n">chrono</code><code>::</code><code class="n">NaiveDate</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="w">    </code><code class="k">fn</code><code> </code><code class="nf">test_parse_month</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="p">}</code><code class="w"> </code><code class="c1">// Same as before
+</code><code class="w">
+</code><code class="w">    </code><code class="cp">#[</code><code class="cp">test</code><code class="cp">]</code><code class="w">
+</code><code class="w">    </code><code class="k">fn</code><code> </code><code class="nf">test_format_month</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">today</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">NaiveDate</code><code>::</code><code class="n">from_ymd_opt</code><code class="p">(</code><code class="mi">0</code><code class="p">,</code><code class="w"> </code><code class="mi">1</code><code class="p">,</code><code class="w"> </code><code class="mi">1</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">leap_february</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s">   February 2020      </code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s">Su Mo Tu We Th Fr Sa  </code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s">                   1  </code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s"> 2  3  4  5  6  7  8  </code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s"> 9 10 11 12 13 14 15  </code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s">16 17 18 19 20 21 22  </code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s">23 24 25 26 27 28 29  </code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s">                      </code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">]</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">format_month</code><code class="p">(</code><code class="mi">2020</code><code class="p">,</code><code class="w"> </code><code class="mi">2</code><code class="p">,</code><code class="w"> </code><code class="kc">true</code><code class="p">,</code><code class="w"> </code><code class="n">today</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><code class="n">leap_february</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO7-2" id="co_rascalry_CO7-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+
+        </code><code class="kd">let</code><code class="w"> </code><code class="n">may</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s">        May           </code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s">Su Mo Tu We Th Fr Sa  </code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s">                1  2  </code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s"> 3  4  5  6  7  8  9  </code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s">10 11 12 13 14 15 16  </code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s">17 18 19 20 21 22 23  </code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s">24 25 26 27 28 29 30  </code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s">31                    </code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">]</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">format_month</code><code class="p">(</code><code class="mi">2020</code><code class="p">,</code><code class="w"> </code><code class="mi">5</code><code class="p">,</code><code class="w"> </code><code class="kc">false</code><code class="p">,</code><code class="w"> </code><code class="n">today</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><code class="n">may</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO7-3" id="co_rascalry_CO7-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+
+        </code><code class="kd">let</code><code class="w"> </code><code class="n">april_hl</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s">     April 2021       </code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s">Su Mo Tu We Th Fr Sa  </code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s">             1  2  3  </code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s"> 4  5  6 </code><code class="se">\u{1b}</code><code class="s">[7m 7</code><code class="se">\u{1b}</code><code class="s">[0m  8  9 10  </code><code class="s">"</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO7-4" id="co_rascalry_CO7-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+            </code><code class="s">"</code><code class="s">11 12 13 14 15 16 17  </code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s">18 19 20 21 22 23 24  </code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s">25 26 27 28 29 30     </code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s">                      </code><code class="s">"</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">]</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">today</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">NaiveDate</code><code>::</code><code class="n">from_ymd_opt</code><code class="p">(</code><code class="mi">2021</code><code class="p">,</code><code class="w"> </code><code class="mi">4</code><code class="p">,</code><code class="w"> </code><code class="mi">7</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">format_month</code><code class="p">(</code><code class="mi">2021</code><code class="p">,</code><code class="w"> </code><code class="mi">4</code><code class="p">,</code><code class="w"> </code><code class="kc">true</code><code class="p">,</code><code class="w"> </code><code class="n">today</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><code class="n">april_hl</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO7-5" id="co_rascalry_CO7-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+    </code><code class="p">}</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist nobreakinside">
+<dt><a class="co" href="#co_rascalry_CO7-1" id="callout_rascalry_CO7-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Import the <code>format_month</code> function and the <code>chrono::NaiveDate</code> struct.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO7-2" id="callout_rascalry_CO7-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>This February month should include a blank line at the end and have 29 days because this is a leap year.<a data-primary="chrono::NaiveDate struct" data-type="indexterm" id="id1641"/><a data-primary="NaiveDate struct" data-type="indexterm" id="id1642"/></p></dd>
+<dt><a class="co" href="#co_rascalry_CO7-3" id="callout_rascalry_CO7-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>This May month should span the same number of lines as April.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO7-4" id="callout_rascalry_CO7-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p><a data-primary="ansi_term::Style::reverse" data-type="indexterm" id="id1643"/><a href="https://oreil.ly/F3TpC"><code>ansi_term::Style::reverse</code></a> is used to create the highlighting of April 7 in this output.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO7-5" id="callout_rascalry_CO7-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>Create a <code>today</code> that falls in the given month and verify the output highlights the date.<a data-primary="Style::reverse" data-type="indexterm" id="id1644"/></p></dd>
+</dl>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>The escape sequences that <code>Style::reverse</code> creates are not exactly the same as BSD <code>cal</code>, but the effect is equivalent.<a data-primary="escape sequences created by Style::reverse" data-type="indexterm" id="id1645"/> You can choose any method of highlighting the current date you like, but be sure to update the test accordingly.</p>
+</div>
+
+<p>You might start your <code>format_month</code> function by numbering all the days in a month from one to the last day of the month.<a data-primary="format_month function" data-type="indexterm" id="id1646"/>
+It’s not as trivial as the “thirty days hath September” mnemonic because February can have a different number of days depending on whether it’s a leap year.<a data-primary="leap years" data-type="indexterm" id="id1647"/><a data-primary="last_day_in_month function" data-type="indexterm" id="id1648"/><a data-primary="NaiveDate struct" data-secondary="representing last day of month" data-type="indexterm" id="id1649"/>
+I wrote a function called <code>last_day_in_month</code> that will return a <code>NaiveDate</code> representing the last day of any month:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">last_day_in_month</code><code class="p">(</code><code class="n">year</code>: <code class="kt">i32</code><code class="p">,</code><code class="w"> </code><code class="n">month</code>: <code class="kt">u32</code><code class="p">)</code><code class="w"> </code>-&gt; <code class="nc">NaiveDate</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">unimplemented!</code><code class="p">();</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Following is a unit test you can add, which you might notice includes a leap year check.<a data-primary="unit tests" data-secondary="test_last_day_in_month in calr" data-type="indexterm" id="id1650"/>
+Be sure to add <code>last_day_in_month</code> to the imports at the top of the <code>tests</code> 
+<span class="keep-together">module:</span></p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[test]</code><code class="w"/>
+<code class="k">fn</code> <code class="nf">test_last_day_in_month</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="w"/>
+<code class="w">        </code><code class="n">last_day_in_month</code><code class="p">(</code><code class="mi">2020</code><code class="p">,</code><code class="w"> </code><code class="mi">1</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="n">NaiveDate</code>::<code class="n">from_ymd</code><code class="p">(</code><code class="mi">2020</code><code class="p">,</code><code class="w"> </code><code class="mi">1</code><code class="p">,</code><code class="w"> </code><code class="mi">31</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="w"/>
+<code class="w">        </code><code class="n">last_day_in_month</code><code class="p">(</code><code class="mi">2020</code><code class="p">,</code><code class="w"> </code><code class="mi">2</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="n">NaiveDate</code>::<code class="n">from_ymd</code><code class="p">(</code><code class="mi">2020</code><code class="p">,</code><code class="w"> </code><code class="mi">2</code><code class="p">,</code><code class="w"> </code><code class="mi">29</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="w"/>
+<code class="w">        </code><code class="n">last_day_in_month</code><code class="p">(</code><code class="mi">2020</code><code class="p">,</code><code class="w"> </code><code class="mi">4</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="n">NaiveDate</code>::<code class="n">from_ymd</code><code class="p">(</code><code class="mi">2020</code><code class="p">,</code><code class="w"> </code><code class="mi">4</code><code class="p">,</code><code class="w"> </code><code class="mi">30</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Stop reading and write the code to pass <strong><code>cargo test test_for⁠mat​_month</code></strong>.</p>
+</div>
+
+<p>At this point, you should have all the pieces to finish the program.
+The challenge program will only ever print a single month or all 12 months, so start by getting your program to print the current month with the current day highlighted.
+Next, have it print all the months for a year, one month after the other.
+Then consider how you could create four rows that group three months side by side to mimic the output of <code>cal</code>.
+Because each month is a vector of lines, you need to combine all the first lines of each row, and then all the second lines, and so forth.<a data-primary="zip method" data-type="indexterm" id="id1651"/><a data-primary="iterators" data-secondary="zip method" data-type="indexterm" id="id1652"/>
+This operation is often called a <em>zip</em>, and Rust iterators have a <a href="https://oreil.ly/2zGKh"><code>zip</code> method</a> you might find useful.
+Keep going until you pass all of <strong><code>cargo test</code></strong>. When you’re done, check out my solution.<a data-primary="cal program" data-secondary="writing calr version" data-startref="ix_calwrwrprg" data-tertiary="writing the program" data-type="indexterm" id="id1653"/></p>
+</div></section>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Solution" data-type="sect1"><div class="sect1" id="id135">
+<h1>Solution</h1>
+
+<p>I’ll walk you through how I built up my version of the program.
+Following are <a data-primary="cal program" data-secondary="writing calr version" data-tertiary="solution" data-type="indexterm" id="ix_calwrsol"/>all the imports you’ll need besides <code>clap</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">use</code><code class="w"> </code><code class="n">ansi_term</code>::<code class="n">Style</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">anyhow</code>::<code class="p">{</code><code class="n">bail</code><code class="p">,</code><code class="w"> </code><code class="nb">Result</code><code class="p">};</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">chrono</code>::<code class="p">{</code><code class="n">Datelike</code><code class="p">,</code><code class="w"> </code><code class="n">Local</code><code class="p">,</code><code class="w"> </code><code class="n">NaiveDate</code><code class="p">};</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">itertools</code>::<code class="n">izip</code><code class="p">;</code><code class="w"/></pre>
+
+<p>I also added another constant for the width of the lines:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">const</code><code class="w"> </code><code class="n">LINE_WIDTH</code>: <code class="kt">usize</code> <code class="o">=</code><code class="w"> </code><code class="mi">22</code><code class="p">;</code><code class="w"/></pre>
+
+<p>I’ll start with my <code>last_day_in_month</code> function, which<a data-primary="last_day_in_month function" data-type="indexterm" id="id1654"/> figures out the first day of the <em>next</em> month and then finds its predecessor:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">last_day_in_month</code><code class="p">(</code><code class="n">year</code><code>:</code><code> </code><code class="kt">i32</code><code class="p">,</code><code class="w"> </code><code class="n">month</code><code>:</code><code> </code><code class="kt">u32</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nc">NaiveDate</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="c1">// The first day of the next month...
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="p">(</code><code class="n">y</code><code class="p">,</code><code class="w"> </code><code class="n">m</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="k">if</code><code class="w"> </code><code class="n">month</code><code class="w"> </code><code class="o">=</code><code class="o">=</code><code class="w"> </code><code class="mi">12</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO8-1" id="co_rascalry_CO8-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+        </code><code class="p">(</code><code class="n">year</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="mi">1</code><code class="p">,</code><code class="w"> </code><code class="mi">1</code><code class="p">)</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="p">(</code><code class="n">year</code><code class="p">,</code><code class="w"> </code><code class="n">month</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="mi">1</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO8-2" id="co_rascalry_CO8-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="p">}</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="c1">// ...is preceded by the last day of the original month
+</code><code class="w">    </code><code class="n">NaiveDate</code><code>::</code><code class="n">from_ymd_opt</code><code class="p">(</code><code class="n">y</code><code class="p">,</code><code class="w"> </code><code class="n">m</code><code class="p">,</code><code class="w"> </code><code class="mi">1</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO8-3" id="co_rascalry_CO8-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+        </code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">pred_opt</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist nobreakinside">
+<dt><a class="co" href="#co_rascalry_CO8-1" id="callout_rascalry_CO8-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>If this is December, then advance the year by one and set the month to January.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO8-2" id="callout_rascalry_CO8-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Otherwise, increment the month by one.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO8-3" id="callout_rascalry_CO8-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Use <a href="https://oreil.ly/RS5jG"><code>NaiveDate::from_ymd_opt</code></a> to create a <code>NaiveDate</code>, and then call <a href="https://oreil.ly/l_1dS"><code>NaiveDate::pred_opt</code></a> to get the previous calendar date.<a data-primary="NaiveDate::pred_opt" data-type="indexterm" id="id1655"/><a data-primary="NaiveDate::from_ymd_opt" data-type="indexterm" id="id1656"/></p></dd>
+</dl>
+<div data-type="tip"><h6>Tip</h6>
+<p>You might be tempted to roll your own solution rather than using the <code>chrono</code> crate, but the calculation of leap years could prove onerous.<a data-primary="leap years" data-type="indexterm" id="id1657"/> For instance, a leap year must be evenly divisible by 4—except for end-of-century years, which must be divisible by 400. This means that the year 2000 was a leap year but 1900 was not, and 2100 won’t be, either. It’s more advisable to stick with a library that has a good reputation and is well-tested.</p>
+</div>
+
+<p>Next, I’ll break down my <code>format_month</code> function<a data-primary="months" data-secondary="format_month function" data-type="indexterm" id="id1658"/><a data-primary="format_month function" data-type="indexterm" id="id1659"/> to format a given month:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">format_month</code><code class="p">(</code><code class="w">
+</code><code class="w">    </code><code class="n">year</code><code>:</code><code> </code><code class="kt">i32</code><code class="p">,</code><code class="w">
+</code><code class="w">    </code><code class="n">month</code><code>:</code><code> </code><code class="kt">u32</code><code class="p">,</code><code class="w">
+</code><code class="w">    </code><code class="n">print_year</code><code>:</code><code> </code><code class="kt">bool</code><code class="p">,</code><code class="w">
+</code><code class="w">    </code><code class="n">today</code><code>:</code><code> </code><code class="nc">NaiveDate</code><code class="p">,</code><code class="w">
+</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">first</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">NaiveDate</code><code>::</code><code class="n">from_ymd_opt</code><code class="p">(</code><code class="n">year</code><code class="p">,</code><code class="w"> </code><code class="n">month</code><code class="p">,</code><code class="w"> </code><code class="mi">1</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO9-1" id="co_rascalry_CO9-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">days</code><code>:</code><code> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">(</code><code class="mi">1</code><code class="o">..</code><code class="n">first</code><code class="p">.</code><code class="n">weekday</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">number_from_sunday</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO9-2" id="co_rascalry_CO9-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+        </code><code class="p">.</code><code class="n">map</code><code class="p">(</code><code class="o">|</code><code class="n">_</code><code class="o">|</code><code class="w"> </code><code class="s">"</code><code class="s">  </code><code class="s">"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w"> </code><code class="c1">// two spaces
+</code><code class="w">        </code><code class="p">.</code><code class="n">collect</code><code class="p">(</code><code class="p">)</code><code class="p">;</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_rascalry_CO9-1" id="callout_rascalry_CO9-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Construct a <code>NaiveDate</code> for the start of the given month.<a data-primary="NaiveDate struct" data-secondary="constructing for start of given month" data-type="indexterm" id="id1660"/></p></dd>
+<dt><a class="co" href="#co_rascalry_CO9-2" id="callout_rascalry_CO9-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Initialize a mutable <code>Vec&lt;String&gt;</code> with a buffer of the days from Sunday until the start of the month.<a data-primary="Vec&lt;String&gt;" data-type="indexterm" id="id1661"/><a data-primary="days" data-type="indexterm" id="id1662"/></p></dd>
+</dl>
+
+<p>The initialization of <code>days</code> handles, for instance, the fact that April 2020 starts on a Wednesday.
+In this case, I want to fill up the days of the first week with two spaces for each day from Sunday through Tuesday.
+Continuing from there:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">is_today</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">|</code><code class="n">day</code><code>:</code><code> </code><code class="kt">u32</code><code class="o">|</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO10-1" id="co_rascalry_CO10-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+        </code><code class="n">year</code><code class="w"> </code><code class="o">=</code><code class="o">=</code><code class="w"> </code><code class="n">today</code><code class="p">.</code><code class="n">year</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="o">&amp;</code><code class="o">&amp;</code><code class="w"> </code><code class="n">month</code><code class="w"> </code><code class="o">=</code><code class="o">=</code><code class="w"> </code><code class="n">today</code><code class="p">.</code><code class="n">month</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="o">&amp;</code><code class="o">&amp;</code><code class="w"> </code><code class="n">day</code><code class="w"> </code><code class="o">=</code><code class="o">=</code><code class="w"> </code><code class="n">today</code><code class="p">.</code><code class="n">day</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">last</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">last_day_in_month</code><code class="p">(</code><code class="n">year</code><code class="p">,</code><code class="w"> </code><code class="n">month</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO10-2" id="co_rascalry_CO10-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="n">days</code><code class="p">.</code><code class="n">extend</code><code class="p">(</code><code class="p">(</code><code class="n">first</code><code class="p">.</code><code class="n">day</code><code class="p">(</code><code class="p">)</code><code class="o">..=</code><code class="n">last</code><code class="p">.</code><code class="n">day</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">.</code><code class="n">map</code><code class="p">(</code><code class="o">|</code><code class="n">num</code><code class="o">|</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO10-3" id="co_rascalry_CO10-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+        </code><code class="kd">let</code><code class="w"> </code><code class="n">fmt</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">format!</code><code class="p">(</code><code class="s">"</code><code class="s">{num:&gt;2}</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO10-4" id="co_rascalry_CO10-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+        </code><code class="k">if</code><code class="w"> </code><code class="n">is_today</code><code class="p">(</code><code class="n">num</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO10-5" id="co_rascalry_CO10-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+            </code><code class="n">Style</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">reverse</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">paint</code><code class="p">(</code><code class="n">fmt</code><code class="p">)</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="n">fmt</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="p">)</code><code class="p">)</code><code class="p">;</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_rascalry_CO10-1" id="callout_rascalry_CO10-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Create a closure to determine if a given day of the month is today.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO10-2" id="callout_rascalry_CO10-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Find the last day of this month.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO10-3" id="callout_rascalry_CO10-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Extend <code>days</code> by iterating through each <a href="https://oreil.ly/7pMJ1"><code>chrono::Datelike::day</code></a> from the first to the last of the month.<a data-primary="chrono::Datelike::day" data-type="indexterm" id="id1663"/><a data-primary="days" data-secondary="iterating through chrono::Datelike::day" data-type="indexterm" id="id1664"/></p></dd>
+<dt><a class="co" href="#co_rascalry_CO10-4" id="callout_rascalry_CO10-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Format the day right-justified in two columns.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO10-5" id="callout_rascalry_CO10-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>If the given day is today, use <a href="https://oreil.ly/F3TpC"><code>Style::reverse</code></a> to highlight the text; otherwise, use the text as is.<a data-primary="Style::reverse" data-type="indexterm" id="id1665"/></p></dd>
+</dl>
+
+<p>Here is the last part of this function:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">month_name</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">MONTH_NAMES</code><code class="p">[</code><code class="n">month</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">usize</code><code class="w"> </code><code class="o">-</code><code class="w"> </code><code class="mi">1</code><code class="p">]</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO11-1" id="co_rascalry_CO11-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">lines</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Vec</code><code>::</code><code class="n">with_capacity</code><code class="p">(</code><code class="mi">8</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO11-2" id="co_rascalry_CO11-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="n">lines</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="fm">format!</code><code class="p">(</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO11-3" id="co_rascalry_CO11-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+        </code><code class="s">"</code><code class="s">{:^20}  </code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="c1">// two trailing spaces
+</code><code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="n">print_year</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="fm">format!</code><code class="p">(</code><code class="s">"</code><code class="s">{month_name} {year}</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="n">month_name</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="n">lines</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="s">"</code><code class="s">Su Mo Tu We Th Fr Sa  </code><code class="s">"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><code class="c1">// two trailing spaces </code><a class="co" href="#callout_rascalry_CO11-4" id="co_rascalry_CO11-4"><img alt="4" src="assets/4.png"/></a><code class="c1">
+</code><code class="w">
+</code><code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">week</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">days</code><code class="p">.</code><code class="n">chunks</code><code class="p">(</code><code class="mi">7</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO11-5" id="co_rascalry_CO11-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+        </code><code class="n">lines</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="fm">format!</code><code class="p">(</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO11-6" id="co_rascalry_CO11-6"><img alt="6" src="assets/6.png"/></a><code class="w">
+            </code><code class="s">"</code><code class="s">{:width$}  </code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="c1">// two trailing spaces
+</code><code class="w">            </code><code class="n">week</code><code class="p">.</code><code class="n">join</code><code class="p">(</code><code class="s">"</code><code class="s"> </code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="n">width</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">LINE_WIDTH</code><code class="w"> </code><code class="o">-</code><code class="w"> </code><code class="mi">2</code><code class="w">
+</code><code class="w">        </code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="k">while</code><code class="w"> </code><code class="n">lines</code><code class="p">.</code><code class="n">len</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="o">&lt;</code><code class="w"> </code><code class="mi">8</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO11-7" id="co_rascalry_CO11-7"><img alt="7" src="assets/7.png"/></a><code class="w">
+        </code><code class="n">lines</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="s">"</code><code class="s"> </code><code class="s">"</code><code class="p">.</code><code class="n">repeat</code><code class="p">(</code><code class="n">LINE_WIDTH</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO11-8" id="co_rascalry_CO11-8"><img alt="8" src="assets/8.png"/></a><code class="w">
+    </code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="n">lines</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO11-9" id="co_rascalry_CO11-9"><img alt="9" src="assets/9.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist nobreakinside">
+<dt><a class="co" href="#co_rascalry_CO11-1" id="callout_rascalry_CO11-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Get the current month’s display name, which requires casting <code>month</code> as a <code>usize</code> and correcting for zero-offset counting.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO11-2" id="callout_rascalry_CO11-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Initialize an empty, mutable vector that can hold eight lines of text.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO11-3" id="callout_rascalry_CO11-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>The month header may or may not have the year. Format the header centered in a space 20 characters wide followed by 2 spaces.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO11-4" id="callout_rascalry_CO11-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Add the days of the week.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO11-5" id="callout_rascalry_CO11-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>Use <a href="https://oreil.ly/wBfGb"><code>Vec::chunks</code></a> to get seven weekdays at a time. This will start on Sunday because of the earlier buffer.<a data-primary="Vec::chunks" data-type="indexterm" id="id1666"/></p></dd>
+<dt><a class="co" href="#co_rascalry_CO11-6" id="callout_rascalry_CO11-6"><img alt="6" src="assets/6.png"/></a></dt>
+<dd><p>Join the days on a space and format the result into the correct width.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO11-7" id="callout_rascalry_CO11-7"><img alt="7" src="assets/7.png"/></a></dt>
+<dd><p>Pad with as many lines as needed to bring the total to eight.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO11-8" id="callout_rascalry_CO11-8"><img alt="8" src="assets/8.png"/></a></dt>
+<dd><p>Use <a href="https://oreil.ly/cXKMU"><code>str::repeat</code></a> to create a new <code>String</code> by repeating a single space to the width of the line.<a data-primary="str::repeat function" data-type="indexterm" id="id1667"/></p></dd>
+<dt><a class="co" href="#co_rascalry_CO11-9" id="callout_rascalry_CO11-9"><img alt="9" src="assets/9.png"/></a></dt>
+<dd><p>Return the lines.</p></dd>
+</dl>
+
+<p>Finally, here is how I bring<a data-primary="run function" data-secondary="final version in calr program" data-type="indexterm" id="id1668"/> everything together in my <code>run</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">config</code><code>:</code><code> </code><code class="nc">Config</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nc">MyResult</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">today</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Local</code><code>::</code><code class="n">now</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">date_naive</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">month</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">month</code><code class="p">.</code><code class="n">map</code><code class="p">(</code><code class="n">parse_month</code><code class="p">)</code><code class="p">.</code><code class="n">transpose</code><code class="p">(</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">year</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">year</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">show_current_year</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="n">month</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">None</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="n">year</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">today</code><code class="p">.</code><code class="n">year</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="k">if</code><code class="w"> </code><code class="n">month</code><code class="p">.</code><code class="n">is_none</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="o">&amp;</code><code class="o">&amp;</code><code class="w"> </code><code class="n">year</code><code class="p">.</code><code class="n">is_none</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="n">month</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">today</code><code class="p">.</code><code class="n">month</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="n">year</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">today</code><code class="p">.</code><code class="n">year</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">year</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">year</code><code class="p">.</code><code class="n">unwrap_or</code><code class="p">(</code><code class="n">today</code><code class="p">.</code><code class="n">year</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="k">match</code><code class="w"> </code><code class="n">month</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="nb">Some</code><code class="p">(</code><code class="n">month</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO12-1" id="co_rascalry_CO12-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+            </code><code class="kd">let</code><code class="w"> </code><code class="n">lines</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">format_month</code><code class="p">(</code><code class="n">year</code><code class="p">,</code><code class="w"> </code><code class="n">month</code><code class="p">,</code><code class="w"> </code><code class="kc">true</code><code class="p">,</code><code class="w"> </code><code class="n">today</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO12-2" id="co_rascalry_CO12-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+            </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{}</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="n">lines</code><code class="p">.</code><code class="n">join</code><code class="p">(</code><code class="s">"</code><code class="se">\n</code><code class="s">"</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO12-3" id="co_rascalry_CO12-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+        </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="nb">None</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO12-4" id="co_rascalry_CO12-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+            </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{year:&gt;32}</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO12-5" id="co_rascalry_CO12-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+            </code><code class="kd">let</code><code class="w"> </code><code class="n">months</code><code>:</code><code> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">_</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">(</code><code class="mi">1</code><code class="o">..=</code><code class="mi">12</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO12-6" id="co_rascalry_CO12-6"><img alt="6" src="assets/6.png"/></a><code class="w">
+                </code><code class="p">.</code><code class="n">map</code><code class="p">(</code><code class="o">|</code><code class="n">month</code><code class="o">|</code><code class="w"> </code><code class="n">format_month</code><code class="p">(</code><code class="n">year</code><code class="p">,</code><code class="w"> </code><code class="n">month</code><code class="p">,</code><code class="w"> </code><code class="kc">false</code><code class="p">,</code><code class="w"> </code><code class="n">today</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">collect</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">            </code><code class="k">for</code><code class="w"> </code><code class="p">(</code><code class="n">i</code><code class="p">,</code><code class="w"> </code><code class="n">chunk</code><code class="p">)</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">months</code><code class="p">.</code><code class="n">chunks</code><code class="p">(</code><code class="mi">3</code><code class="p">)</code><code class="p">.</code><code class="n">enumerate</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO12-7" id="co_rascalry_CO12-7"><img alt="7" src="assets/7.png"/></a><code class="w">
+                </code><code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="p">[</code><code class="n">m1</code><code class="p">,</code><code class="w"> </code><code class="n">m2</code><code class="p">,</code><code class="w"> </code><code class="n">m3</code><code class="p">]</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">chunk</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO12-8" id="co_rascalry_CO12-8"><img alt="8" src="assets/8.png"/></a><code class="w">
+                    </code><code class="k">for</code><code class="w"> </code><code class="n">lines</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">izip</code><code class="o">!</code><code class="p">(</code><code class="n">m1</code><code class="p">,</code><code class="w"> </code><code class="n">m2</code><code class="p">,</code><code class="w"> </code><code class="n">m3</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO12-9" id="co_rascalry_CO12-9"><img alt="9" src="assets/9.png"/></a><code class="w">
+                        </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">{}{}{}</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="n">lines</code><code class="p">.</code><code class="mi">0</code><code class="p">,</code><code class="w"> </code><code class="n">lines</code><code class="p">.</code><code class="mi">1</code><code class="p">,</code><code class="w"> </code><code class="n">lines</code><code class="p">.</code><code class="mi">2</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO12-10" id="co_rascalry_CO12-10"><img alt="10" src="assets/10.png"/></a><code class="w">
+                    </code><code class="p">}</code><code class="w">
+</code><code class="w">                    </code><code class="k">if</code><code class="w"> </code><code class="n">i</code><code class="w"> </code><code class="o">&lt;</code><code class="w"> </code><code class="mi">3</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_rascalry_CO12-11" id="co_rascalry_CO12-11"><img alt="11" src="assets/11.png"/></a><code class="w">
+                        </code><code class="fm">println!</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                    </code><code class="p">}</code><code class="w">
+</code><code class="w">                </code><code class="p">}</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_rascalry_CO12-1" id="callout_rascalry_CO12-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Handle the case of a single month.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO12-2" id="callout_rascalry_CO12-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Format the one month with the year in the header.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO12-3" id="callout_rascalry_CO12-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Print the lines joined on newlines.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO12-4" id="callout_rascalry_CO12-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>When there is no month, then print the whole year.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO12-5" id="callout_rascalry_CO12-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>When printing all the months, first print the year as the first header.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO12-6" id="callout_rascalry_CO12-6"><img alt="6" src="assets/6.png"/></a></dt>
+<dd><p>Format all the months, leaving out the year from the headers.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO12-7" id="callout_rascalry_CO12-7"><img alt="7" src="assets/7.png"/></a></dt>
+<dd><p>Use <code>Vec::chunks</code> to group into slices of three, and use <code>Iterator::enumerate</code> to track the grouping numbers.<a data-primary="Iterator::enumerate function" data-type="indexterm" id="id1669"/><a data-primary="Vec::chunks" data-type="indexterm" id="id1670"/></p></dd>
+<dt><a class="co" href="#co_rascalry_CO12-8" id="callout_rascalry_CO12-8"><img alt="8" src="assets/8.png"/></a></dt>
+<dd><p>Use the pattern match <code>[m1, m2, m3]</code> to destructure the slice into the three months.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO12-9" id="callout_rascalry_CO12-9"><img alt="9" src="assets/9.png"/></a></dt>
+<dd><p>Use <a href="https://oreil.ly/t00b3"><code>itertools::izip</code></a> to create an iterator that combines the lines from the three months.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO12-10" id="callout_rascalry_CO12-10"><img alt="10" src="assets/10.png"/></a></dt>
+<dd><p>Print the lines from each of the three months.</p></dd>
+<dt><a class="co" href="#co_rascalry_CO12-11" id="callout_rascalry_CO12-11"><img alt="11" src="assets/11.png"/></a></dt>
+<dd><p>If not on the last set of months, print a newline to separate the groupings.</p></dd>
+</dl>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Rust iterators have a <a href="https://oreil.ly/2zGKh"><code>zip</code> function</a> that, according to <a data-primary="iterators" data-secondary="zip method" data-type="indexterm" id="id1671"/><a data-primary="zip method" data-type="indexterm" id="id1672"/>the documentation, “returns a new iterator that will iterate over two other iterators, returning a tuple where the first element comes from the first iterator, and the second ele­ment comes from the second iterator.” Unfortunately, it only works 
+<span class="keep-together">with two</span> iterators. <a data-primary="izip! macro" data-type="indexterm" id="id1673"/>If you look closely, you’ll notice that the call to 
+<span class="keep-together"><code>izip!</code> is</span> a macro. The documentation says, “The result 
+<span class="keep-together">of this macro</span> is in the general case an iterator composed of repeated <code>.zip()</code> and a <code>.map()</code>.”</p>
+</div>
+
+<p>With that, all the tests pass, and you can now visualize a calendar in the terminal.<a data-primary="cal program" data-secondary="writing calr version" data-startref="ix_calwrsol" data-tertiary="solution" data-type="indexterm" id="id1674"/></p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Going Further" data-type="sect1"><div class="sect1" id="id136">
+<h1>Going Further</h1>
+
+<p>You could further customize this program.<a data-primary="cal program" data-secondary="writing calr version" data-tertiary="going further" data-type="indexterm" id="id1675"/>
+For instance, you could check for the existence of a <em>$HOME/.calr</em> configuration file that lists special dates such as holidays, birthdays, and anniversaries.
+Use your new terminal colorizing skills to highlight these dates using bold, reversed, or colored text.</p>
+
+<p>The manual page mentions the program <code>ncal</code>, which will format the months vertically rather than horizontally.
+When displaying a full year, <code>ncal</code> prints three rows of four months as opposed to four rows of three months like <code>cal</code>.
+Create an option to change the output of <code>calr</code> to match the output from <code>ncal</code>, being sure that you add tests for all the possibilities.</p>
+
+<p>Consider how you could internationalize the output.
+It’s common to have a <code>LANG</code> or <code>LANGUAGE</code> environment variable that you could use to select month names in the user’s preferred language.
+Alternatively, you might allow the user to customize the months using the aforementioned configuration file.
+How could you handle languages that use different scripts, such as Chinese, Japanese, or Cyrillic?
+Try making a Hebrew calendar that reads right to left or a Mongolian one that reads top to bottom.</p>
+
+<p>The original <code>cal</code> shows only one month or the entire year.
+Allow the user to select multiple months, perhaps using the ranges from <code>cutr</code>.
+This would allow something like <code>-m 4,1,7-9</code> to show April, January, and July through September.<a data-primary="date command" data-type="indexterm" id="id1676"/></p>
+
+<p>Finally, I mentioned the <code>date</code> command at the beginning of the chapter.
+This is a program that shows just the current date and time, among many other things.
+Use 
+<span class="keep-together"><strong><code>man date</code></strong></span> to read the manual page, and then write a Rust version that implements whichever options you find tantalizing.</p>
+</div></section>
+
+
+
+
+
+
+<section class="pagebreak-before less_space" data-pdf-bookmark="Summary" data-type="sect1"><div class="sect1" id="id137">
+<h1>Summary</h1>
+
+<p>Here’s a recap of some of the things you learned in this chapter:</p>
+<ul>
+<li>
+<p>The <code>chrono</code> crate provides a way to find today’s date and perform basic date manipulations, such as finding the previous day of a given date (in <code>last_day_in_month</code>).</p>
+</li>
+<li>
+<p>The <code>Vec::chunks</code> method will return groupings of elements as a slice. The challenge program used this to gather weekdays into groups of seven and the months of the year into groups of three.</p>
+</li>
+<li>
+<p>The <code>Iterator::zip</code> method will combine the elements from two iterators into a new iterator containing a tuple of values from the sources. The <code>itertools::izip</code> macro allows you to expand this to any number of iterators.</p>
+</li>
+<li>
+<p><code>ansi_term::Style</code> can create terminal text in various colors and styles, such as reversing the colors used for the text and background to highlight the current date.<a data-primary="ansi_term::Style" data-type="indexterm" id="id-ajClcYheSesVfw"/><a data-primary="cal program" data-startref="ix_cal" data-type="indexterm" id="id-YdCosnhwSjsEfm"/></p>
+</li>
+</ul>
+
+<p>In the next chapter, you will learn more about Unix file metadata and how to format text tables of output.</p>
+</div></section>
+</div></section></body></html>

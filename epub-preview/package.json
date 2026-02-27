@@ -1,0 +1,9 @@
+{
+  "name": "epub-preview",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Preview .tmp_clr_epub content in browser",
+  "scripts": {
+    "dev": "node server.js"
+  }
+}

@@ -1,0 +1,1183 @@
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Jack the Grepper</title><link href="epub.css" rel="stylesheet" type="text/css"/>
+<meta content="urn:uuid:e80a1ec8-ed8e-40f7-ba3d-26a647960341" name="Adept.expected.resource"/></head><body data-type="book"><section data-pdf-bookmark="Chapter 9. Jack the Grepper" data-type="chapter" epub:type="chapter"><div class="chapter" id="ch09">
+<h1><span class="label">Chapter 9. </span>Jack the Grepper</h1>
+
+<blockquote>
+<p>
+Please explain the expression on your face
+</p>
+<p data-type="attribution">
+They Might Be Giants, “Unrelated Thing” (1994)
+</p>
+</blockquote>
+
+<p>In this chapter, you <a data-primary="grep utility" data-type="indexterm" id="ix_grep"/>will write a Rust version of <code>grep</code>, which will find lines of input that match a given regular expression.<sup><a data-type="noteref" href="ch09.html#id1123" id="id1123-marker">1</a></sup>
+By default the input comes from <code>STDIN</code>, but you can provide the names of one or more files or directories if you use a recursive option to find all the files in those directories.
+The normal output will be the lines that match the given pattern, but you can invert the match to find the lines that don’t match.
+You can also instruct <code>grep</code> to print the number of matching lines instead of the lines of text.
+Pattern matching is normally case-sensitive, but you can use an option to perform case-insensitive matching.<a data-primary="pattern matching" data-secondary="in grep" data-secondary-sortas="grep" data-type="indexterm" id="id1124"/>
+While the original program can do more, the challenge program will go only this far.</p>
+
+<p>In writing this program, you’ll learn about:</p>
+
+<ul>
+<li>
+<p>Using a case-sensitive regular expression</p>
+</li>
+<li>
+<p>Variations of regular expression syntax</p>
+</li>
+<li>
+<p>Another syntax to indicate a trait bound</p>
+</li>
+<li>
+<p>Using Rust’s bitwise exclusive-OR operator</p>
+</li>
+</ul>
+
+
+
+
+
+
+<section data-pdf-bookmark="How grep Works" data-type="sect1"><div class="sect1" id="id90">
+<h1>How grep Works</h1>
+
+<p>I’ll start by showing the manual<a data-primary="grep utility" data-secondary="how it works" data-type="indexterm" id="ix_grephow"/> page for the BSD <code>grep</code> to<a data-primary="BSD version" data-secondary="grep utility" data-type="indexterm" id="id1125"/> give you a sense of the many options the command will accept:</p>
+
+<pre data-type="programlisting">GREP(1)                   BSD General Commands Manual                  GREP(1)
+
+NAME
+     grep, egrep, fgrep, zgrep, zegrep, zfgrep -- file pattern searcher
+
+SYNOPSIS
+     grep [-abcdDEFGHhIiJLlmnOopqRSsUVvwxZ] [-A num] [-B num] [-C[num]]
+          [-e pattern] [-f file] [--binary-files=value] [--color[=when]]
+          [--colour[=when]] [--context[=num]] [--label] [--line-buffered]
+          [--null] [pattern] [file ...]
+
+DESCRIPTION
+     The grep utility searches any given input files, selecting lines that
+     match one or more patterns.  By default, a pattern matches an input line
+     if the regular expression (RE) in the pattern matches the input line
+     without its trailing newline.  An empty expression matches every line.
+     Each input line that matches at least one of the patterns is written to
+     the standard output.
+
+     grep is used for simple patterns and basic regular expressions (BREs);
+     egrep can handle extended regular expressions (EREs).  See re_format(7)
+     for more information on regular expressions.  fgrep is quicker than both
+     grep and egrep, but can only handle fixed patterns (i.e. it does not
+     interpret regular expressions).  Patterns may consist of one or more
+     lines, allowing any of the pattern lines to match a portion of the input.</pre>
+
+<p>The GNU version is<a data-primary="GNU version" data-secondary="grep utility" data-type="indexterm" id="id1126"/> very similar:</p>
+
+<pre data-type="programlisting">GREP(1)                     General Commands Manual                    GREP(1)
+
+NAME
+       grep, egrep, fgrep - print lines matching a pattern
+
+SYNOPSIS
+       grep [OPTIONS] PATTERN [FILE...]
+       grep [OPTIONS] [-e PATTERN | -f FILE] [FILE...]
+
+DESCRIPTION
+       grep  searches the named input FILEs (or standard input if no files are
+       named, or if a single hyphen-minus (-) is given as file name) for lines
+       containing  a  match to the given PATTERN.  By default, grep prints the
+       matching lines.</pre>
+
+<p>To demonstrate the features of <code>grep</code> that the challenge program is expected to implement, I’ll use some files from the book’s GitHub repository.
+If you want to follow along, change into the <em>09_grepr/tests/inputs</em> directory:</p>
+
+<pre data-type="programlisting">$ cd 09_grepr/tests/inputs</pre>
+
+<p>Here are the files that I’ve included:</p>
+
+<ul>
+<li>
+<p><em>empty.txt</em>: an empty file</p>
+</li>
+<li>
+<p><em>fox.txt</em>: a file with a single line of text</p>
+</li>
+<li>
+<p><em>bustle.txt</em>: a poem by Emily Dickinson with eight lines of text and one blank line</p>
+</li>
+<li>
+<p><em>nobody.txt</em>: another poem by the Belle of Amherst with eight lines of text and one blank line</p>
+</li>
+</ul>
+
+<p>To start, verify for yourself that <strong><code>grep fox empty.txt</code></strong> will print nothing when using an empty file.<a data-primary="regular expressions" data-secondary="in grep" data-secondary-sortas="grep" data-type="indexterm" id="id1127"/>
+As shown by the usage, <code>grep</code> accepts a regular expression as the first positional argument and optionally some input files for the rest.<a data-primary="positional arguments" data-secondary="grep utility" data-type="indexterm" id="id1128"/>
+Note that an empty regular expression will match all lines of input, and here I’ll use the input file <em>fox.txt</em>, which contains one line of text:</p>
+
+<pre data-type="programlisting">$ grep "" fox.txt
+The quick brown fox jumps over the lazy dog.</pre>
+
+<p>In the following Emily Dickinson poem, notice that <em>Nobody</em> is always capitalized:</p>
+
+<pre data-type="programlisting">$ cat nobody.txt
+I'm Nobody! Who are you?
+Are you—Nobody—too?
+Then there's a pair of us!
+Don't tell! they'd advertise—you know!
+
+How dreary—to be—Somebody!
+How public—like a Frog—
+To tell one's name—the livelong June—
+To an admiring Bog!</pre>
+
+<p>If I search for <em>Nobody</em>, the two lines containing the string are printed:</p>
+
+<pre data-type="programlisting">$ grep Nobody nobody.txt
+I'm Nobody! Who are you?
+Are you—Nobody—too?</pre>
+
+<p>If I search for lowercase <em>nobody</em> with <strong><code>grep nobody nobody.txt</code></strong>, nothing is printed.<a data-primary="case-insensitive matching" data-secondary="in grepr" data-type="indexterm" id="id1129"/>
+I can, however, use <code>-i|--ignore-case</code> to find these lines:</p>
+
+<pre data-type="programlisting">$ grep -i nobody nobody.txt
+I'm Nobody! Who are you?
+Are you—Nobody—too?</pre>
+
+<p>I can use the <code>-v|--invert-match</code> option<a data-primary="pattern matching" data-secondary="inverting the match pattern in grep" data-type="indexterm" id="id1130"/> to find the lines that don’t match the pattern:</p>
+
+<pre data-type="programlisting">$ grep -v Nobody nobody.txt
+Then there's a pair of us!
+Don't tell! they'd advertise—you know!
+
+How dreary—to be—Somebody!
+How public—like a Frog—
+To tell one's name—the livelong June—
+To an admiring Bog!</pre>
+
+<p>The <code>-c|--count</code> option will cause<a data-primary="counts" data-secondary="number of times match occurs in grep" data-type="indexterm" id="id1131"/> the output to be a summary of the number of times a match occurs:</p>
+
+<pre data-type="programlisting">$ grep -c Nobody nobody.txt
+2</pre>
+
+<p>I can combine <code>-v</code> and <code>-c</code> to count the <a data-primary="counts" data-secondary="lines not matching in grep" data-type="indexterm" id="id1132"/>lines not matching:</p>
+
+<pre data-type="programlisting">$ grep -vc Nobody nobody.txt
+7</pre>
+
+<p>When searching multiple<a data-primary="input files" data-secondary="searching multiple in grep" data-type="indexterm" id="id1133"/> input files, each line of output includes the source filename:</p>
+
+<pre data-type="programlisting">$ grep The *.txt
+bustle.txt:The bustle in a house
+bustle.txt:The morning after death
+bustle.txt:The sweeping up the heart,
+fox.txt:The quick brown fox jumps over the lazy dog.
+nobody.txt:Then there's a pair of us!</pre>
+
+<p>The filename is also included for the <a data-primary="counts" data-secondary="filenames included in grep" data-type="indexterm" id="id1134"/>counts:</p>
+
+<pre data-type="programlisting">$ grep -c The *.txt
+bustle.txt:3
+empty.txt:0
+fox.txt:1
+nobody.txt:1</pre>
+
+<p>Normally, the positional arguments<a data-primary="positional arguments" data-secondary="files and directories in grep" data-type="indexterm" id="id1135"/> are files, and the inclusion of a directory such as my <em>$HOME</em> directory will cause <code>grep</code> to print a warning:</p>
+
+<pre data-type="programlisting">$ grep The bustle.txt <strong>$HOME</strong> fox.txt
+bustle.txt:The bustle in a house
+bustle.txt:The morning after death
+bustle.txt:The sweeping up the heart,
+<strong>grep: /Users/kyclark: Is a directory</strong>
+fox.txt:The quick brown fox jumps over the lazy dog.</pre>
+
+<p>Directory names<a data-primary="directories" data-secondary="directory names in grep" data-type="indexterm" id="id1136"/> are acceptable only when using the <code>-r|--recursive</code> option to find all the files in a directory that contain matching text.
+In this command, I’ll use <code>.</code> to indicate the<a data-primary=". (dot)" data-secondary="indicating current directory" data-type="indexterm" id="id1137"/> current working directory:</p>
+
+<pre data-type="programlisting">$ grep -r The .
+./nobody.txt:Then there's a pair of us!
+./bustle.txt:The bustle in a house
+./bustle.txt:The morning after death
+./bustle.txt:The sweeping up the heart,
+./fox.txt:The quick brown fox jumps over the lazy dog.</pre>
+
+<p>The <code>-r</code> and <code>-i</code> short flags can be combined to perform a recursive, case-insensitive search of <a data-primary="recursive, case-insensitive search in grep" data-type="indexterm" id="id1138"/>one or more directories:</p>
+
+<pre data-type="programlisting">$ grep -ri the .
+./nobody.txt:Then there's a pair of us!
+./nobody.txt:Don't tell! they'd advertise—you know!
+./nobody.txt:To tell one's name—the livelong June—
+./bustle.txt:The bustle in a house
+./bustle.txt:The morning after death
+./bustle.txt:The sweeping up the heart,
+./fox.txt:The quick brown fox jumps over the lazy dog.</pre>
+
+<p>Without any positional <a data-primary="STDIN" data-secondary="grep reading from" data-type="indexterm" id="id1139"/>arguments for inputs, <code>grep</code> will read <code>STDIN</code>:</p>
+
+<pre data-type="programlisting">$ cat * | grep -i the
+The bustle in a house
+The morning after death
+The sweeping up the heart,
+The quick brown fox jumps over the lazy dog.
+Then there's a pair of us!
+Don't tell! they'd advertise—you know!
+To tell one's name—the livelong June—</pre>
+
+<p>This is as far as the challenge program is expected to go.<a data-primary="grep utility" data-secondary="how it works" data-startref="ix_grephow" data-type="indexterm" id="id1140"/></p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Getting Started" data-type="sect1"><div class="sect1" id="id152">
+<h1>Getting Started</h1>
+
+<p>The name of the challenge program should be <code>grepr</code> (pronounced <em>grep-er</em>) for a Rust version of <code>grep</code>.<a data-primary="grep utility" data-secondary="writing grepr version" data-tertiary="getting started" data-type="indexterm" id="id1141"/>
+Start with <strong><code>cargo new grepr</code></strong>, then copy the book’s <em>09_grepr/tests</em> directory into your new project.
+Modify your <em>Cargo.toml</em> to include the following dependencies:</p>
+
+<pre data-code-language="toml" data-type="programlisting"><code class="k">[</code><code class="k">dependencies</code><code class="k">]</code><code class="w">
+</code><code class="n">anyhow</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">1.0.79</code><code class="s2">"</code><code class="w">
+</code><code class="n">clap</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">version</code><code class="w"> </code><code class="p">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">4.5.0</code><code class="s2">"</code><code class="p">,</code><code class="w"> </code><code class="n">features</code><code class="w"> </code><code class="p">=</code><code class="w"> </code><code class="p">[</code><code class="s2">"</code><code class="s2">derive</code><code class="s2">"</code><code class="p">]</code><code class="w"> </code><code class="p">}</code><code class="w">
+</code><code class="n">regex</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">1.10.3</code><code class="s2">"</code><code class="w">
+</code><code class="n">walkdir</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">2.4.0</code><code class="s2">"</code><code class="w">
+
+</code><code class="k">[</code><code class="k">dev-dependencies</code><code class="k">]</code><code class="w">
+</code><code class="n">assert_cmd</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">2.0.13</code><code class="s2">"</code><code class="w">
+</code><code class="n">predicates</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">3.0.4</code><code class="s2">"</code><code class="w">
+</code><code class="n">pretty_assertions</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">1.4.0</code><code class="s2">"</code><code class="w">
+</code><code class="n">rand</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">0.8.5</code><code class="s2">"</code><code class="w">
+</code><code class="n">sys-info</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"</code><code class="s2">0.9.1</code><code class="s2">"</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO1-1" id="co_jack_the_grepper_CO1-1"><img alt="1" src="assets/1.png"/></a></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_jack_the_grepper_CO1-1" id="callout_jack_the_grepper_CO1-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The tests use this crate to determine whether they are being run on Windows or not.<a data-primary="Windows" data-secondary="determining if grepr tests are being run in" data-type="indexterm" id="id1142"/></p></dd>
+</dl>
+
+<p>You can run <strong><code>cargo test</code></strong> to perform an initial build and run the tests, all of which should fail.</p>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Defining the Arguments" data-type="sect2"><div class="sect2" id="id91">
+<h2>Defining the Arguments</h2>
+
+<p>To start, I’ll update <em>src/main.rs</em> to define <a data-primary="grep utility" data-secondary="writing grepr version" data-tertiary="defining the arguments" data-type="indexterm" id="ix_grepwrdefarg"/> the <code>Args</code> struct for the program’s arguments:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[</code><code class="cp">derive(Debug)</code><code class="cp">]</code><code class="w">
+</code><code class="k">struct</code><code> </code><code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="n">pattern</code><code>:</code><code> </code><code class="nb">String</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO2-1" id="co_jack_the_grepper_CO2-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="n">files</code><code>:</code><code> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO2-2" id="co_jack_the_grepper_CO2-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="n">insensitive</code><code>:</code><code> </code><code class="kt">bool</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO2-3" id="co_jack_the_grepper_CO2-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+    </code><code class="n">recursive</code><code>:</code><code> </code><code class="kt">bool</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO2-4" id="co_jack_the_grepper_CO2-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+    </code><code class="n">count</code><code>:</code><code> </code><code class="kt">bool</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO2-5" id="co_jack_the_grepper_CO2-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+    </code><code class="n">invert</code><code>:</code><code> </code><code class="kt">bool</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO2-6" id="co_jack_the_grepper_CO2-6"><img alt="6" src="assets/6.png"/></a><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_jack_the_grepper_CO2-1" id="callout_jack_the_grepper_CO2-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <code>pattern</code> is a required string.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO2-2" id="callout_jack_the_grepper_CO2-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <code>files</code> option is a vector of strings.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO2-3" id="callout_jack_the_grepper_CO2-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>The <code>insensitive</code> option is a Boolean for whether or not to match with case 
+<span class="keep-together">sensitivity</span>.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO2-4" id="callout_jack_the_grepper_CO2-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>The <code>recursive</code> option is a Boolean for whether or not to recursively search directories.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO2-5" id="callout_jack_the_grepper_CO2-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>The <code>count</code> option is a Boolean for whether or not to display a count of the matches.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO2-6" id="callout_jack_the_grepper_CO2-6"><img alt="6" src="assets/6.png"/></a></dt>
+<dd><p>The <code>invert</code> option is a Boolean for whether or not to find lines that do not match the pattern.</p></dd>
+</dl>
+
+<p>If you want to use the <code>clap</code> derive pattern, then annotate the preceding struct as needed.
+If you prefer the builder pattern,<a data-primary="builder pattern" data-secondary="using in grepr program" data-type="indexterm" id="id1143"/><a data-primary="get_args function" data-secondary="grepr utility" data-type="indexterm" id="id1144"/> I suggest you start a <code>get_args</code> function like so:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">get_args</code><code class="p">()</code><code class="w"> </code>-&gt; <code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">matches</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code>::<code class="n">new</code><code class="p">(</code><code class="s">"grepr"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">version</code><code class="p">(</code><code class="s">"0.1.0"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">author</code><code class="p">(</code><code class="s">"Ken Youens-Clark &lt;kyclark@gmail.com&gt;"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">about</code><code class="p">(</code><code class="s">"Rust version of `grep`"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="c1">// What goes here?</code>
+<code class="w">        </code><code class="p">.</code><code class="n">get_matches</code><code class="p">();</code><code class="w"/>
+
+<code class="w">    </code><code class="n">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">pattern</code>: <code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">        </code><code class="n">files</code>: <code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">        </code><code class="n">insensitive</code>: <code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">        </code><code class="n">recursive</code>: <code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">        </code><code class="n">count</code>: <code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">        </code><code class="n">invert</code>: <code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Update the <code>main</code> function to parse and pretty-print the arguments:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">args</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Args</code>::<code class="n">parse</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{args:#?}"</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Your program should produce the following usage:</p>
+
+<pre data-type="programlisting">$ cargo run -- -h
+Rust version of `grep`
+
+Usage: grepr [OPTIONS] &lt;PATTERN&gt; [FILE]...
+
+Arguments:
+  &lt;PATTERN&gt;  Search pattern <a class="co" href="#callout_jack_the_grepper_CO3-1" id="co_jack_the_grepper_CO3-1"><img alt="1" src="assets/1.png"/></a>
+  [FILE]...  Input file(s) [default: -] <a class="co" href="#callout_jack_the_grepper_CO3-2" id="co_jack_the_grepper_CO3-2"><img alt="2" src="assets/2.png"/></a>
+
+Options:
+  -i, --insensitive   Case-insensitive
+  -r, --recursive     Recursive search
+  -c, --count         Count occurrences
+  -v, --invert-match  Invert match
+  -h, --help          Print help
+  -V, --version       Print version</pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_jack_the_grepper_CO3-1" id="callout_jack_the_grepper_CO3-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The search pattern is a required argument.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO3-2" id="callout_jack_the_grepper_CO3-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The input files are optional and default to a dash for <code>STDIN</code>.</p></dd>
+</dl>
+
+<p>Your program should be able to print the arguments like the following when provided a pattern and no input files:</p>
+
+<pre data-type="programlisting">$ cargo run -- dog
+Args {
+    pattern: "dog",
+    files: [
+        "-",
+    ],
+    insensitive: false,
+    recursive: false,
+    count: false,
+    invert: false,
+}</pre>
+
+<p>All the Boolean options default to <code>false</code>, so ensure they are properly set when the flags are present:</p>
+
+<pre data-type="programlisting">$ cargo run -- dog -ricv tests/inputs/*.txt
+Args {
+    pattern: "dog",
+    files: [
+        "tests/inputs/bustle.txt",
+        "tests/inputs/empty.txt",
+        "tests/inputs/fox.txt",
+        "tests/inputs/nobody.txt",
+    ],
+    insensitive: true,
+    recursive: true,
+    count: true,
+    invert: true,
+}</pre>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Take a moment to get your program to this point. It should at least pass <strong><code>cargo test dies_no_args</code></strong>.</p>
+</div>
+
+<p>Following is <a data-primary="get_args function" data-secondary="grepr utility" data-type="indexterm" id="id1145"/>how I wrote my <code>get_args</code>.
+Be sure to add <code>use clap::{Arg, ArgAction, Command}</code> for this code:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">get_args</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">matches</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">grepr</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">version</code><code class="p">(</code><code class="s">"</code><code class="s">0.1.0</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">author</code><code class="p">(</code><code class="s">"</code><code class="s">Ken Youens-Clark &lt;kyclark@gmail.com&gt;</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">about</code><code class="p">(</code><code class="s">"</code><code class="s">Rust version of `grep`</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w">
+</code><code class="w">            </code><code class="n">Arg</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">pattern</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO4-1" id="co_jack_the_grepper_CO4-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+                </code><code class="p">.</code><code class="n">value_name</code><code class="p">(</code><code class="s">"</code><code class="s">PATTERN</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"</code><code class="s">Search pattern</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">required</code><code class="p">(</code><code class="kc">true</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w">
+</code><code class="w">            </code><code class="n">Arg</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">files</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO4-2" id="co_jack_the_grepper_CO4-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+                </code><code class="p">.</code><code class="n">value_name</code><code class="p">(</code><code class="s">"</code><code class="s">FILE</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"</code><code class="s">Input file(s)</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">num_args</code><code class="p">(</code><code class="mi">1</code><code class="o">..</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">default_value</code><code class="p">(</code><code class="s">"</code><code class="s">-</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w">
+</code><code class="w">            </code><code class="n">Arg</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">insensitive</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO4-3" id="co_jack_the_grepper_CO4-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+                </code><code class="p">.</code><code class="n">short</code><code class="p">(</code><code class="sc">'i'</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">long</code><code class="p">(</code><code class="s">"</code><code class="s">insensitive</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"</code><code class="s">Case-insensitive</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">action</code><code class="p">(</code><code class="n">ArgAction</code><code>::</code><code class="n">SetTrue</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w">
+</code><code class="w">            </code><code class="n">Arg</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">recursive</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO4-4" id="co_jack_the_grepper_CO4-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+                </code><code class="p">.</code><code class="n">short</code><code class="p">(</code><code class="sc">'r'</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">long</code><code class="p">(</code><code class="s">"</code><code class="s">recursive</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"</code><code class="s">Recursive search</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">action</code><code class="p">(</code><code class="n">ArgAction</code><code>::</code><code class="n">SetTrue</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w">
+</code><code class="w">            </code><code class="n">Arg</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">count</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO4-5" id="co_jack_the_grepper_CO4-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+                </code><code class="p">.</code><code class="n">short</code><code class="p">(</code><code class="sc">'c'</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">long</code><code class="p">(</code><code class="s">"</code><code class="s">count</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"</code><code class="s">Count occurrences</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">action</code><code class="p">(</code><code class="n">ArgAction</code><code>::</code><code class="n">SetTrue</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="w">
+</code><code class="w">            </code><code class="n">Arg</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="s">"</code><code class="s">invert</code><code class="s">"</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO4-6" id="co_jack_the_grepper_CO4-6"><img alt="6" src="assets/6.png"/></a><code class="w">
+                </code><code class="p">.</code><code class="n">short</code><code class="p">(</code><code class="sc">'v'</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">long</code><code class="p">(</code><code class="s">"</code><code class="s">invert-match</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">help</code><code class="p">(</code><code class="s">"</code><code class="s">Invert match</code><code class="s">"</code><code class="p">)</code><code class="w">
+</code><code class="w">                </code><code class="p">.</code><code class="n">action</code><code class="p">(</code><code class="n">ArgAction</code><code>::</code><code class="n">SetTrue</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">get_matches</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="n">Args</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="n">pattern</code><code>:</code><code> </code><code class="nc">matches</code><code class="p">.</code><code class="n">get_one</code><code class="p">(</code><code class="s">"</code><code class="s">pattern</code><code class="s">"</code><code class="p">)</code><code class="p">.</code><code class="n">cloned</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="n">files</code><code>:</code><code> </code><code class="nc">matches</code><code class="p">.</code><code class="n">get_many</code><code class="p">(</code><code class="s">"</code><code class="s">files</code><code class="s">"</code><code class="p">)</code><code class="p">.</code><code class="n">unwrap</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">cloned</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">collect</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="n">insensitive</code><code>:</code><code> </code><code class="nc">matches</code><code class="p">.</code><code class="n">get_flag</code><code class="p">(</code><code class="s">"</code><code class="s">insensitive</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="n">recursive</code><code>:</code><code> </code><code class="nc">matches</code><code class="p">.</code><code class="n">get_flag</code><code class="p">(</code><code class="s">"</code><code class="s">recursive</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="n">count</code><code>:</code><code> </code><code class="nc">matches</code><code class="p">.</code><code class="n">get_flag</code><code class="p">(</code><code class="s">"</code><code class="s">count</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="n">invert</code><code>:</code><code> </code><code class="nc">matches</code><code class="p">.</code><code class="n">get_flag</code><code class="p">(</code><code class="s">"</code><code class="s">invert</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_jack_the_grepper_CO4-1" id="callout_jack_the_grepper_CO4-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The first positional argument is for the <code>pattern</code>.<a data-primary="pattern argument" data-type="indexterm" id="id1146"/></p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO4-2" id="callout_jack_the_grepper_CO4-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The rest of the positional arguments are for the inputs. The default is a dash.<a data-primary="case-insensitive matching" data-secondary="in grepr" data-type="indexterm" id="id1147"/><a data-primary="insensitive flag" data-type="indexterm" id="id1148"/></p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO4-3" id="callout_jack_the_grepper_CO4-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>The <code>insensitive</code> flag will handle case-insensitive options.<a data-primary="recursive flag" data-type="indexterm" id="id1149"/><a data-primary="counts" data-secondary="count flag in grepr" data-type="indexterm" id="id1150"/></p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO4-4" id="callout_jack_the_grepper_CO4-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>The <code>recursive</code> flag will handle searching for files in directories.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO4-5" id="callout_jack_the_grepper_CO4-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>The <code>count</code> flag will cause the program to print counts.<a data-primary="invert flag" data-type="indexterm" id="id1151"/></p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO4-6" id="callout_jack_the_grepper_CO4-6"><img alt="6" src="assets/6.png"/></a></dt>
+<dd><p>The <code>invert</code> flag will search for lines not matching the pattern.</p></dd>
+</dl>
+<div data-type="tip"><h6>Tip</h6>
+<p>Here, the order in which you declare the positional parameters is important, as the <a data-primary="positional arguments" data-secondary="order of declaration in grepr" data-type="indexterm" id="id1152"/>first one defined will be for the first positional argument. You may define the optional arguments before or after the positional parameters.</p>
+</div>
+
+<p class="pagebreak-before">Following is how I wrote the derive pattern<a data-primary="derive pattern" data-secondary="using in grepr program" data-type="indexterm" id="id1153"/> with <code>use clap::Parser</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[derive(Debug, Parser)]</code><code class="w"/>
+<code class="cp">#[command(author, version, about)]</code><code class="w"/>
+<code class="sd">/// Rust version of `grep`</code>
+<code class="k">struct</code> <code class="nc">Args</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="sd">/// Search pattern</code>
+<code class="w">    </code><code class="cp">#[arg()]</code><code class="w"/>
+<code class="w">    </code><code class="n">pattern</code>: <code class="nb">String</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Input file(s)</code>
+<code class="w">    </code><code class="cp">#[arg(default_value = </code><code class="s">"-"</code><code class="cp">, value_name = </code><code class="s">"FILE"</code><code class="cp">)]</code><code class="w"/>
+<code class="w">    </code><code class="n">files</code>: <code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Case-insensitive</code>
+<code class="w">    </code><code class="cp">#[arg(short, long)]</code><code class="w"/>
+<code class="w">    </code><code class="n">insensitive</code>: <code class="kt">bool</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Recursive search</code>
+<code class="w">    </code><code class="cp">#[arg(short, long)]</code><code class="w"/>
+<code class="w">    </code><code class="n">recursive</code>: <code class="kt">bool</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Count occurrences</code>
+<code class="w">    </code><code class="cp">#[arg(short, long)]</code><code class="w"/>
+<code class="w">    </code><code class="n">count</code>: <code class="kt">bool</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Invert match</code>
+<code class="w">    </code><code class="cp">#[arg(short('v'), long(</code><code class="s">"invert-match"</code><code class="cp">))]</code><code class="w"/>
+<code class="w">    </code><code class="n">invert</code>: <code class="kt">bool</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>Next, it’s time to have <code>main</code> call a <code>run</code> function as in previous programs.</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">run</code><code class="p">(</code><code class="n">Args</code>::<code class="n">parse</code><code class="p">())</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"{e}"</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="n">std</code>::<code class="n">process</code>::<code class="n">exit</code><code class="p">(</code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>In the <code>run</code> function, I use the arguments to create a <a data-primary="regular expressions" data-secondary="creating to incorporate insensitive option in grepr" data-type="indexterm" id="id1154"/>regular expression that will incorporate the <code>insensitive</code> option.<a data-primary="regex::RegexBuilder struct" data-type="indexterm" id="id1155"/>
+Be sure to use both <code>regex::RegexBuilder</code> and 
+<span class="keep-together"><code>anyhow::{anyhow, Result}</code></span> for the following code:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">pattern</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">RegexBuilder</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="o">&amp;</code><code class="n">args</code><code class="p">.</code><code class="n">pattern</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO5-1" id="co_jack_the_grepper_CO5-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+        </code><code class="p">.</code><code class="n">case_insensitive</code><code class="p">(</code><code class="n">args</code><code class="p">.</code><code class="n">insensitive</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO5-2" id="co_jack_the_grepper_CO5-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+        </code><code class="p">.</code><code class="n">build</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO5-3" id="co_jack_the_grepper_CO5-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+        </code><code class="p">.</code><code class="n">map_err</code><code class="p">(</code><code class="o">|</code><code class="n">_</code><code class="o">|</code><code class="w"> </code><code class="n">anyhow</code><code class="o">!</code><code class="p">(</code><code class="s">r#"Invalid pattern "{}""#</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">pattern</code><code class="p">)</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO5-4" id="co_jack_the_grepper_CO5-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+    </code><code class="fm">println!</code><code class="p">(</code><code class="s">r#"pattern "{pattern}""#</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO5-5" id="co_jack_the_grepper_CO5-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_jack_the_grepper_CO5-1" id="callout_jack_the_grepper_CO5-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <a href="https://oreil.ly/Aw1Hk"><code>RegexBuilder::new</code> method</a> will create a new regular expression.<a data-primary="RegexBuilder::new method" data-type="indexterm" id="id1156"/></p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO5-2" id="callout_jack_the_grepper_CO5-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <a href="https://oreil.ly/bvRkF"><code>RegexBuilder::case_insensitive</code> method</a> will cause the regex to disregard case in comparisons when the <code>insensitive</code> flag is present.<a data-primary="RegexBuilder::case_insensitive method" data-type="indexterm" id="id1157"/><a data-primary="RegexBuilder::build method" data-type="indexterm" id="id1158"/></p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO5-3" id="callout_jack_the_grepper_CO5-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>The <a href="https://oreil.ly/LbZh5"><code>RegexBuilder::build</code> method</a> will compile the regex.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO5-4" id="callout_jack_the_grepper_CO5-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>If <code>build</code> returns an error, use <a href="https://oreil.ly/4izCX"><code>Result::map_err</code></a> to create an error message stating that the given pattern is invalid.<a data-primary="Result::map_err function" data-type="indexterm" id="id1159"/></p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO5-5" id="callout_jack_the_grepper_CO5-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>Print the compiled regex.</p></dd>
+</dl>
+
+<p>Your program should reject an invalid regular expression.<a data-primary="* (asterisk)" data-secondary="matching zero or more occurrences in regular expressions" data-type="indexterm" id="id1160"/>
+For instance, <code>*</code> signifies <em>zero or more</em> of the preceding pattern.
+By itself, this is incomplete and should cause an error message, which also means your program should also pass <strong><code>cargo test dies_bad_pattern</code></strong>:</p>
+
+<pre data-type="programlisting">$ cargo run -- \*
+Invalid pattern "*"</pre>
+
+<p>Run the program with a pattern to ensure it prints something reasonable:</p>
+
+<pre data-type="programlisting">$ cargo run -- fox
+pattern "fox"</pre>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Printing a regular expression means calling the <a href="https://oreil.ly/SrNIX"><code>Regex::as_str</code> method</a>.<a data-primary="Regex::as_str method" data-type="indexterm" id="id1161"/> <a href="https://oreil.ly/82KDm"><code>RegexBuilder::build</code></a> notes that this “will produce the pattern given to <code>new</code> verbatim. Notably, it will not incorporate any of the flags set on this builder,” which includes the case-insensitive option.</p>
+</div>
+
+<p><code>RegexBuilder::build</code> will reject any pattern that is not a valid regular expression, and this raises an interesting point.
+There are many syntaxes for writing regular expressions.<a data-primary="regular expressions" data-secondary="syntax, options for" data-type="indexterm" id="id1162"/>
+If you look closely at the manual page for <code>grep</code>, you’ll notice these options:<a data-primary="-E flag for extended regular expressions" data-primary-sortas="E flag" data-type="indexterm" id="id1163"/><a data-primary="extended regular expressions" data-type="indexterm" id="id1164"/><a data-primary="-e pattern regular expressions in grep" data-primary-sortas="e pattern" data-type="indexterm" id="id1165"/></p>
+
+<pre data-type="programlisting">-E, --extended-regexp
+        Interpret pattern as an extended regular expression (i.e. force
+        grep to behave as egrep).
+
+-e pattern, --regexp=pattern
+        Specify a pattern used during the search of the input: an input
+        line is selected if it matches any of the specified patterns.
+        This option is most useful when multiple -e options are used to
+        specify multiple patterns, or when a pattern begins with a dash
+        ('-').</pre>
+
+<p>The converse of these options is:<a data-primary="-G flag for basic regular expressions in grep" data-primary-sortas="G flag" data-type="indexterm" id="id1166"/><a data-primary="basic regular expressions" data-type="indexterm" id="id1167"/></p>
+
+<pre data-type="programlisting">-G, --basic-regexp
+        Interpret pattern as a basic regular expression (i.e. force grep
+        to behave as traditional grep).</pre>
+
+<p>Regular expressions have been around since the 1950s when they were invented by the American mathematician Stephen Cole Kleene.<sup><a data-type="noteref" href="ch09.html#id1168" id="id1168-marker">2</a></sup>
+Since that time, the syntax has been modified and expanded by various groups, perhaps most notably by the Perl community, which created Perl Compatible Regular Expressions (PCRE).<a data-primary="Perl Compatible Regular Expressions (PCRE)" data-type="indexterm" id="id1169"/>
+By default, <code>grep</code> will parse only basic regexes, but the preceding flags can allow it to use other varieties.
+For instance, I can use the pattern <code>ee</code> to search for any lines containing two adjacent <em>e</em>s.
+Note that I have added the bold style in the following output to help you see the pattern that was found:</p>
+
+<pre data-type="programlisting">$ grep 'ee' tests/inputs/*
+tests/inputs/bustle.txt:The sw<strong>ee</strong>ping up the heart,</pre>
+
+<p>If I want to find any character that is repeated twice, the pattern is <code>(.)\1</code>, where the dot (<code>.</code>) represents any character, and the capturing parentheses allow me to use the backreference <code>\1</code> to refer to the first capture group.<a data-primary="(.)\1 pattern, finding any character repeated twice" data-type="indexterm" id="id1170"/><a data-primary="backreferences" data-type="indexterm" id="id1171"/><a data-primary="\1 backreference" data-type="indexterm" id="id1172"/>
+This is an example of an <a data-primary="extended regular expressions" data-secondary="indicating with -E flag" data-type="indexterm" id="id1173"/>extended expression and so requires the <code>-E</code> flag:</p>
+
+<pre data-type="programlisting">$ grep -E '(.)\1' tests/inputs/*
+tests/inputs/bustle.txt:The sw<strong>ee</strong>ping up the heart,
+tests/inputs/bustle.txt:And pu<strong>tt</strong>ing love away
+tests/inputs/bustle.txt:We sha<strong>ll</strong> not want to use again
+tests/inputs/nobody.txt:Are you—Nobody—t<strong>oo</strong>?
+tests/inputs/nobody.txt:Don't te<strong>ll</strong>! they'd advertise—you know!
+tests/inputs/nobody.txt:To te<strong>ll</strong> one's name—the livelong June—</pre>
+
+<p>The Rust <a href="https://oreil.ly/qCN0o"><code>regex</code> crate’s documentation</a> notes<a data-primary="regex crate" data-type="indexterm" id="id1174"/> that the “regex syntax supported by this crate is similar to other regex engines, but it lacks several features that are not known how to implement efficiently. This includes, but is not limited to, look-around and backreferences.”
+(<em>Look-around</em> assertions allow the expression to assert that a pattern must be followed or preceded by another pattern, and <em>backreferences</em> allow the pattern to refer to previously captured values.)
+This means that the challenge program will work more like <code>egrep</code> in handling extended regular expressions by default.<a data-primary="look-around assertions" data-type="indexterm" id="id1175"/>
+Sadly, this also means that the program will not be able to handle the preceding pattern because it requires backreferences.
+It will still be a wicked cool program to write, though, so let’s keep going.<a data-primary="grep utility" data-secondary="writing grepr version" data-startref="ix_grepwrdefarg" data-tertiary="defining the arguments" data-type="indexterm" id="id1176"/></p>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Finding the Files to Search" data-type="sect2"><div class="sect2" id="id92">
+<h2>Finding the Files to Search</h2>
+
+<p>Next, I need to find all the files to search.<a data-primary="grep utility" data-secondary="writing grepr version" data-tertiary="finding files to search" data-type="indexterm" id="ix_grepwrfndfi"/><a data-primary="finding files to search in grepr" data-type="indexterm" id="ix_fndfile"/>
+Recall that the user might provide directory names with the <code>--recursive</code> option to search for all the files contained in each directory; otherwise, directory names should result in a warning printed to <code>STDERR</code>.
+I decided to write a function called <code>find_files</code> that will accept a vector of strings that may be file or directory names along with a Boolean for whether or not to recurse into directories.
+It returns a vector of <code>Result</code> values that will hold a string that is the name of a valid file or an error message.
+You can start your version with the following skeleton:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">find_files</code><code class="p">(</code><code class="n">paths</code>: <code class="kp">&amp;</code><code class="p">[</code><code class="nb">String</code><code class="p">],</code><code class="w"> </code><code class="n">recursive</code>: <code class="kt">bool</code><code class="p">)</code><code class="w"> </code>-&gt; <code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">Result</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">unimplemented!</code><code class="p">();</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>To test this, I can add a <code>tests</code> module to <em>src/main.rs</em>.
+Note that this will use the <code>rand</code> crate that should be <a data-primary="rand crate" data-type="indexterm" id="id1177"/>listed in the <code>[dev-dependencies]</code> section of your <em>Cargo.toml</em>, as noted earlier in the chapter:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[cfg(test)]</code><code class="w"/>
+<code class="k">mod</code> <code class="nn">tests</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">use</code><code class="w"> </code><code class="k">super</code>::<code class="n">find_files</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="k">use</code><code class="w"> </code><code class="n">rand</code>::<code class="p">{</code><code class="n">distributions</code>::<code class="n">Alphanumeric</code><code class="p">,</code><code class="w"> </code><code class="n">Rng</code><code class="p">};</code><code class="w"/>
+
+<code class="w">    </code><code class="cp">#[test]</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code> <code class="nf">test_find_files</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="c1">// Verify that the function finds a file known to exist</code>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">files</code><code class="w"> </code><code class="o">=</code><code class="w"/>
+<code class="w">            </code><code class="n">find_files</code><code class="p">(</code><code class="o">&amp;</code><code class="p">[</code><code class="s">"./tests/inputs/fox.txt"</code><code class="p">.</code><code class="n">to_string</code><code class="p">()],</code><code class="w"> </code><code class="kc">false</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">files</code><code class="p">.</code><code class="n">len</code><code class="p">(),</code><code class="w"> </code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">files</code><code class="p">[</code><code class="mi">0</code><code class="p">].</code><code class="n">as_ref</code><code class="p">().</code><code class="n">unwrap</code><code class="p">(),</code><code class="w"> </code><code class="s">"./tests/inputs/fox.txt"</code><code class="p">);</code><code class="w"/>
+
+<code class="w">        </code><code class="c1">// The function should reject a directory without the recursive option</code>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">files</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">find_files</code><code class="p">(</code><code class="o">&amp;</code><code class="p">[</code><code class="s">"./tests/inputs"</code><code class="p">.</code><code class="n">to_string</code><code class="p">()],</code><code class="w"> </code><code class="kc">false</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">files</code><code class="p">.</code><code class="n">len</code><code class="p">(),</code><code class="w"> </code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="n">files</code><code class="p">[</code><code class="mi">0</code><code class="p">]</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">e</code><code class="p">.</code><code class="n">to_string</code><code class="p">(),</code><code class="w"> </code><code class="s">"./tests/inputs is a directory"</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+
+<code class="w">        </code><code class="c1">// Verify the function recurses to find four files in the directory</code>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">res</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">find_files</code><code class="p">(</code><code class="o">&amp;</code><code class="p">[</code><code class="s">"./tests/inputs"</code><code class="p">.</code><code class="n">to_string</code><code class="p">()],</code><code class="w"> </code><code class="kc">true</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">files</code>: <code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">res</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">iter</code><code class="p">()</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">map</code><code class="p">(</code><code class="o">|</code><code class="n">r</code><code class="o">|</code><code class="w"> </code><code class="n">r</code><code class="p">.</code><code class="n">as_ref</code><code class="p">().</code><code class="n">unwrap</code><code class="p">().</code><code class="n">replace</code><code class="p">(</code><code class="s">"</code><code class="se">\\</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="s">"/"</code><code class="p">))</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">collect</code><code class="p">();</code><code class="w"/>
+<code class="w">        </code><code class="n">files</code><code class="p">.</code><code class="n">sort</code><code class="p">();</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">files</code><code class="p">.</code><code class="n">len</code><code class="p">(),</code><code class="w"> </code><code class="mi">4</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="w"/>
+<code class="w">            </code><code class="n">files</code><code class="p">,</code><code class="w"/>
+<code class="w">            </code><code class="fm">vec!</code><code class="p">[</code><code class="w"/>
+<code class="w">                </code><code class="s">"./tests/inputs/bustle.txt"</code><code class="p">,</code><code class="w"/>
+<code class="w">                </code><code class="s">"./tests/inputs/empty.txt"</code><code class="p">,</code><code class="w"/>
+<code class="w">                </code><code class="s">"./tests/inputs/fox.txt"</code><code class="p">,</code><code class="w"/>
+<code class="w">                </code><code class="s">"./tests/inputs/nobody.txt"</code><code class="p">,</code><code class="w"/>
+<code class="w">            </code><code class="p">]</code><code class="w"/>
+<code class="w">        </code><code class="p">);</code><code class="w"/>
+
+<code class="w">        </code><code class="c1">// Generate a random string to represent a nonexistent file</code>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">bad</code>: <code class="nb">String</code> <code class="o">=</code><code class="w"> </code><code class="n">rand</code>::<code class="n">thread_rng</code><code class="p">()</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">sample_iter</code><code class="p">(</code><code class="o">&amp;</code><code class="n">Alphanumeric</code><code class="p">)</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">take</code><code class="p">(</code><code class="mi">7</code><code class="p">)</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">map</code><code class="p">(</code><code class="kt">char</code>::<code class="n">from</code><code class="p">)</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">collect</code><code class="p">();</code><code class="w"/>
+
+<code class="w">        </code><code class="c1">// Verify that the function returns the bad file as an error</code>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">files</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">find_files</code><code class="p">(</code><code class="o">&amp;</code><code class="p">[</code><code class="n">bad</code><code class="p">],</code><code class="w"> </code><code class="kc">false</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">files</code><code class="p">.</code><code class="n">len</code><code class="p">(),</code><code class="w"> </code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert!</code><code class="p">(</code><code class="n">files</code><code class="p">[</code><code class="mi">0</code><code class="p">].</code><code class="n">is_err</code><code class="p">());</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Stop reading and write the code to pass <strong><code>cargo test test_find_files</code></strong>.</p>
+</div>
+
+<p>Here is how I can use <code>find_files</code> in my code:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">run</code><code class="p">(</code><code class="n">args</code>: <code class="nc">Args</code><code class="p">)</code><code class="w"> </code>-&gt; <code class="nb">Result</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">pattern</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">RegexBuilder</code>::<code class="n">new</code><code class="p">(</code><code class="o">&amp;</code><code class="n">args</code><code class="p">.</code><code class="n">pattern</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">case_insensitive</code><code class="p">(</code><code class="n">args</code><code class="p">.</code><code class="n">insensitive</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">build</code><code class="p">()</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">map_err</code><code class="p">(</code><code class="o">|</code><code class="n">_</code><code class="o">|</code><code class="w"> </code><code class="n">anyhow</code><code class="o">!</code><code class="p">(</code><code class="s">r#"Invalid pattern "{}""#</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">pattern</code><code class="p">))</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">r#"pattern "{pattern}""#</code><code class="p">);</code><code class="w"/>
+
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">entries</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">find_files</code><code class="p">(</code><code class="o">&amp;</code><code class="n">args</code><code class="p">.</code><code class="n">files</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">recursive</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">entry</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">entries</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">match</code><code class="w"> </code><code class="n">entry</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"{e}"</code><code class="p">),</code><code class="w"/>
+<code class="w">            </code><code class="nb">Ok</code><code class="p">(</code><code class="n">filename</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="fm">println!</code><code class="p">(</code><code class="s">r#"file "{filename}""#</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(())</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>My solution uses <a href="https://oreil.ly/oVQEG"><code>WalkDir</code></a>, which I<a data-primary="WalkDir type" data-type="indexterm" id="id1178"/> introduced in <a data-type="xref" href="ch07.html#ch07">Chapter 7</a>.
+See if you can get your program to reproduce the following output.
+To start, the default input should be a dash (<code>-</code>), to represent reading from <code>STDIN</code>:</p>
+
+<pre data-type="programlisting">$ cargo run -- fox
+pattern "fox"
+file "-"</pre>
+
+<p>Explicitly listing a dash as the input should produce the same output:</p>
+
+<pre data-type="programlisting">$ cargo run -- fox -
+pattern "fox"
+file "-"</pre>
+
+<p>The program should handle multiple input files:</p>
+
+<pre data-type="programlisting">$ cargo run -- fox tests/inputs/*
+pattern "fox"
+file "tests/inputs/bustle.txt"
+file "tests/inputs/empty.txt"
+file "tests/inputs/fox.txt"
+file "tests/inputs/nobody.txt"</pre>
+
+<p>A directory name without the <code>--recursive</code> option<a data-primary="directories" data-secondary="directory name without --recursive option rejected in grepr" data-type="indexterm" id="id1179"/><a data-primary="--recursive option" data-primary-sortas="recursive" data-type="indexterm" id="id1180"/> should be rejected:</p>
+
+<pre data-type="programlisting">$ cargo run -- fox tests/inputs
+pattern "fox"
+tests/inputs is a directory</pre>
+
+<p>With the <code>--recursive</code> flag, it should find the directory’s files:</p>
+
+<pre data-type="programlisting">$ cargo run -- -r fox tests/inputs
+pattern "fox"
+file "tests/inputs/empty.txt"
+file "tests/inputs/nobody.txt"
+file "tests/inputs/bustle.txt"
+file "tests/inputs/fox.txt"</pre>
+
+<p>Invalid file arguments should be printed to <code>STDERR</code> in the course of handling each entry.<a data-primary="errors" data-secondary="invalid file arguments printed to STDERR" data-type="indexterm" id="id1181"/>
+In the following example, <em>blargh</em> represents a nonexistent file:</p>
+
+<pre data-type="programlisting">$ cargo run -- -r fox <strong>blargh</strong> tests/inputs/fox.txt
+pattern "fox"
+<strong>blargh: No such file or directory (os error 2)</strong>
+file "tests/inputs/fox.txt"</pre>
+</div></section>
+
+
+
+
+
+
+
+
+<section data-pdf-bookmark="Finding the Matching Lines of Input" data-type="sect2"><div class="sect2" id="id93">
+<h2>Finding the Matching Lines of Input</h2>
+
+<p>Now it’s time for your program to open the files and search for matching lines.<a data-primary="finding files to search in grepr" data-startref="ix_fndfile" data-type="indexterm" id="id1182"/><a data-primary="grep utility" data-secondary="writing grepr version" data-startref="ix_grepwrfndfi" data-tertiary="finding files to search" data-type="indexterm" id="id1183"/><a data-primary="grep utility" data-secondary="writing grepr version" data-tertiary="finding matching lines of input" data-type="indexterm" id="ix_grepwrfndmtch"/><a data-primary="finding matching lines of input in grepr" data-type="indexterm" id="ix_fndmtchln"/><a data-primary="open function" data-type="indexterm" id="id1184"/>
+I suggest you again use the <code>open</code> function and necessary imports from earlier chapters, which will open and read either an existing file or <code>STDIN</code> for a filename that equals a dash (<code>-</code>):</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code> <code class="nf">open</code><code class="p">(</code><code class="n">filename</code>: <code class="kp">&amp;</code><code class="kt">str</code><code class="p">)</code><code class="w"> </code>-&gt; <code class="nb">Result</code><code class="o">&lt;</code><code class="nb">Box</code><code class="o">&lt;</code><code class="k">dyn</code><code class="w"> </code><code class="n">BufRead</code><code class="o">&gt;&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">match</code><code class="w"> </code><code class="n">filename</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="s">"-"</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">Ok</code><code class="p">(</code><code class="nb">Box</code>::<code class="n">new</code><code class="p">(</code><code class="n">BufReader</code>::<code class="n">new</code><code class="p">(</code><code class="n">io</code>::<code class="n">stdin</code><code class="p">()))),</code><code class="w"/>
+<code class="w">        </code><code class="n">_</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">Ok</code><code class="p">(</code><code class="nb">Box</code>::<code class="n">new</code><code class="p">(</code><code class="n">BufReader</code>::<code class="n">new</code><code class="p">(</code><code class="n">File</code>::<code class="n">open</code><code class="p">(</code><code class="n">filename</code><code class="p">)</code><code class="o">?</code><code class="p">))),</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+
+<p>When reading the lines, be sure to preserve the line endings as one of the input files contains Windows-style CRLF endings.<a data-primary="lines" data-secondary="preserving line endings while reading a file" data-type="indexterm" id="id1185"/>
+My solution uses a function called <code>find_lines</code>, which you can start with the following skeleton.
+Be sure to add <code>use regex::Regex</code> to your imports:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">find_lines</code><code class="o">&lt;</code><code class="n">T</code><code>:</code><code> </code><code class="nc">BufRead</code><code class="o">&gt;</code><code class="p">(</code><code class="w">
+</code><code class="w">    </code><code class="k">mut</code><code class="w"> </code><code class="n">file</code><code>:</code><code> </code><code class="nc">T</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO6-1" id="co_jack_the_grepper_CO6-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="n">pattern</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="nc">Regex</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO6-2" id="co_jack_the_grepper_CO6-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="n">invert</code><code>:</code><code> </code><code class="kt">bool</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO6-3" id="co_jack_the_grepper_CO6-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="fm">unimplemented!</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_jack_the_grepper_CO6-1" id="callout_jack_the_grepper_CO6-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>The <code>file</code> option must implement the <a href="https://oreil.ly/c5fGP"><code>std::io::BufRead</code> trait</a>.<a data-primary="std::io::BufRead trait" data-type="indexterm" id="id1186"/><a data-primary="BufRead trait" data-type="indexterm" id="id1187"/></p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO6-2" id="callout_jack_the_grepper_CO6-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>The <code>pattern</code> argument is a reference to a compiled regular expression.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO6-3" id="callout_jack_the_grepper_CO6-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>The <code>invert</code> argument is a Boolean for whether to reverse the match 
+<span class="keep-together">operation.</span><a data-primary="pattern argument" data-type="indexterm" id="id1188"/><a data-primary="invert argument" data-type="indexterm" id="id1189"/></p></dd>
+</dl>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>In the <code>wcr</code> program from <a data-type="xref" href="ch05.html#ch05">Chapter 5</a>, I used <code>impl BufRead</code> to indicate a value that must implement the <code>BufRead</code> trait. In the preceding code, I’m using <code>&lt;T: BufRead&gt;</code> to indicate the trait bound for the type <code>T</code>. They both accomplish the same thing, but I wanted to show another common way to write this.<a data-primary="BufRead trait" data-secondary="indicating a trait bound like BufRead in function signatures" data-type="indexterm" id="id1190"/></p>
+</div>
+
+<p>To test this function, I expanded my <code>tests</code> module by adding the following <code>test_find_lines</code> function, which again uses <code>std::io::Cursor</code> to create a fake filehandle<a data-primary="std::io::Cursor" data-type="indexterm" id="id1191"/><a data-primary="Cursor type" data-type="indexterm" id="id1192"/> that implements <code>BufRead</code> for testing:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="cp">#[cfg(test)]</code><code class="w"/>
+<code class="k">mod</code> <code class="nn">test</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">use</code><code class="w"> </code><code class="k">super</code>::<code class="p">{</code><code class="n">find_files</code><code class="p">,</code><code class="w"> </code><code class="n">find_lines</code><code class="p">};</code><code class="w"/>
+<code class="w">    </code><code class="k">use</code><code class="w"> </code><code class="n">rand</code>::<code class="p">{</code><code class="n">distributions</code>::<code class="n">Alphanumeric</code><code class="p">,</code><code class="w"> </code><code class="n">Rng</code><code class="p">};</code><code class="w"/>
+<code class="w">    </code><code class="k">use</code><code class="w"> </code><code class="n">regex</code>::<code class="p">{</code><code class="n">Regex</code><code class="p">,</code><code class="w"> </code><code class="n">RegexBuilder</code><code class="p">};</code><code class="w"/>
+<code class="w">    </code><code class="k">use</code><code class="w"> </code><code class="n">std</code>::<code class="n">io</code>::<code class="n">Cursor</code><code class="p">;</code><code class="w"/>
+
+<code class="w">    </code><code class="cp">#[test]</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code> <code class="nf">test_find_files</code><code class="p">()</code><code class="w"> </code><code class="p">{}</code><code class="w"> </code><code class="c1">// Same as before</code>
+
+<code class="w">    </code><code class="cp">#[test]</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code> <code class="nf">test_find_lines</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">text</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">b"Lorem</code><code class="se">\n</code><code class="s">Ipsum</code><code class="se">\r\n</code><code class="s">DOLOR"</code><code class="p">;</code><code class="w"/>
+
+<code class="w">        </code><code class="c1">// The pattern _or_ should match the one line, "Lorem"</code>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">re1</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Regex</code>::<code class="n">new</code><code class="p">(</code><code class="s">"or"</code><code class="p">).</code><code class="n">unwrap</code><code class="p">();</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">matches</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">find_lines</code><code class="p">(</code><code class="n">Cursor</code>::<code class="n">new</code><code class="p">(</code><code class="o">&amp;</code><code class="n">text</code><code class="p">),</code><code class="w"> </code><code class="o">&amp;</code><code class="n">re1</code><code class="p">,</code><code class="w"> </code><code class="kc">false</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert!</code><code class="p">(</code><code class="n">matches</code><code class="p">.</code><code class="n">is_ok</code><code class="p">());</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">matches</code><code class="p">.</code><code class="n">unwrap</code><code class="p">().</code><code class="n">len</code><code class="p">(),</code><code class="w"> </code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+
+<code class="w">        </code><code class="c1">// When inverted, the function should match the other two lines</code>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">matches</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">find_lines</code><code class="p">(</code><code class="n">Cursor</code>::<code class="n">new</code><code class="p">(</code><code class="o">&amp;</code><code class="n">text</code><code class="p">),</code><code class="w"> </code><code class="o">&amp;</code><code class="n">re1</code><code class="p">,</code><code class="w"> </code><code class="kc">true</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert!</code><code class="p">(</code><code class="n">matches</code><code class="p">.</code><code class="n">is_ok</code><code class="p">());</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">matches</code><code class="p">.</code><code class="n">unwrap</code><code class="p">().</code><code class="n">len</code><code class="p">(),</code><code class="w"> </code><code class="mi">2</code><code class="p">);</code><code class="w"/>
+
+<code class="w">        </code><code class="c1">// This regex will be case-insensitive</code>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">re2</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">RegexBuilder</code>::<code class="n">new</code><code class="p">(</code><code class="s">"or"</code><code class="p">)</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">case_insensitive</code><code class="p">(</code><code class="kc">true</code><code class="p">)</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">build</code><code class="p">()</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">unwrap</code><code class="p">();</code><code class="w"/>
+
+<code class="w">        </code><code class="c1">// The two lines "Lorem" and "DOLOR" should match</code>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">matches</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">find_lines</code><code class="p">(</code><code class="n">Cursor</code>::<code class="n">new</code><code class="p">(</code><code class="o">&amp;</code><code class="n">text</code><code class="p">),</code><code class="w"> </code><code class="o">&amp;</code><code class="n">re2</code><code class="p">,</code><code class="w"> </code><code class="kc">false</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert!</code><code class="p">(</code><code class="n">matches</code><code class="p">.</code><code class="n">is_ok</code><code class="p">());</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">matches</code><code class="p">.</code><code class="n">unwrap</code><code class="p">().</code><code class="n">len</code><code class="p">(),</code><code class="w"> </code><code class="mi">2</code><code class="p">);</code><code class="w"/>
+
+<code class="w">        </code><code class="c1">// When inverted, the one remaining line should match</code>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">matches</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">find_lines</code><code class="p">(</code><code class="n">Cursor</code>::<code class="n">new</code><code class="p">(</code><code class="o">&amp;</code><code class="n">text</code><code class="p">),</code><code class="w"> </code><code class="o">&amp;</code><code class="n">re2</code><code class="p">,</code><code class="w"> </code><code class="kc">true</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert!</code><code class="p">(</code><code class="n">matches</code><code class="p">.</code><code class="n">is_ok</code><code class="p">());</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">matches</code><code class="p">.</code><code class="n">unwrap</code><code class="p">().</code><code class="n">len</code><code class="p">(),</code><code class="w"> </code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/></pre>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Stop reading and write the function that will pass <strong><code>cargo test test_find_lines</code></strong>.</p>
+</div>
+
+<p>Next, I suggest you incorporate these ideas into your <code>run</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">pattern</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">RegexBuilder</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="o">&amp;</code><code class="n">args</code><code class="p">.</code><code class="n">pattern</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">case_insensitive</code><code class="p">(</code><code class="n">args</code><code class="p">.</code><code class="n">insensitive</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">build</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">map_err</code><code class="p">(</code><code class="o">|</code><code class="n">_</code><code class="o">|</code><code class="w"> </code><code class="n">anyhow</code><code class="o">!</code><code class="p">(</code><code class="s">r#"Invalid pattern "{}""#</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">pattern</code><code class="p">)</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">entries</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">find_files</code><code class="p">(</code><code class="o">&amp;</code><code class="n">args</code><code class="p">.</code><code class="n">files</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">recursive</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO7-1" id="co_jack_the_grepper_CO7-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="k">for</code><code class="w"> </code><code class="n">entry</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">entries</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="k">match</code><code class="w"> </code><code class="n">entry</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"</code><code class="s">{e}</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO7-2" id="co_jack_the_grepper_CO7-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+            </code><code class="nb">Ok</code><code class="p">(</code><code class="n">filename</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="k">match</code><code class="w"> </code><code class="n">open</code><code class="p">(</code><code class="o">&amp;</code><code class="n">filename</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO7-3" id="co_jack_the_grepper_CO7-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+                </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"</code><code class="s">{filename}: {e}</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO7-4" id="co_jack_the_grepper_CO7-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+                </code><code class="nb">Ok</code><code class="p">(</code><code class="n">file</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                    </code><code class="kd">let</code><code class="w"> </code><code class="n">matches</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">find_lines</code><code class="p">(</code><code class="n">file</code><code class="p">,</code><code class="w"> </code><code class="o">&amp;</code><code class="n">pattern</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">invert</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO7-5" id="co_jack_the_grepper_CO7-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+                    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"</code><code class="s">Found {matches:?}</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                </code><code class="p">}</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_jack_the_grepper_CO7-1" id="callout_jack_the_grepper_CO7-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Look for the input files.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO7-2" id="callout_jack_the_grepper_CO7-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Handle the errors from finding input files.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO7-3" id="callout_jack_the_grepper_CO7-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Try to open a valid filename.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO7-4" id="callout_jack_the_grepper_CO7-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Handle errors opening a file.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO7-5" id="callout_jack_the_grepper_CO7-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>Use the open filehandle to find the lines matching (or not matching) the regex.</p></dd>
+</dl>
+
+<p>At this point, the program should show the following output:</p>
+
+<pre data-type="programlisting">$ cargo run -- -r fox tests/inputs/*
+Found Ok([])
+Found Ok([])
+Found Ok(["The quick brown fox jumps over the lazy dog.\n"])
+Found Ok([])</pre>
+
+<p>Modify this version to meet the criteria for the program.
+Start as simply as possible, perhaps by using an empty regular expression that should match all the lines from the input:</p>
+
+<pre data-type="programlisting">$ cargo run -- "" tests/inputs/fox.txt
+The quick brown fox jumps over the lazy dog.</pre>
+
+<p>Be sure you are reading <code>STDIN</code> by default:</p>
+
+<pre data-type="programlisting">$ cargo run -- "" &lt; tests/inputs/fox.txt
+The quick brown fox jumps over the lazy dog.</pre>
+
+<p>Run with<a data-primary="case-sensitive pattern" data-type="indexterm" id="id1193"/> several input files and a case-sensitive pattern:</p>
+
+<pre data-type="programlisting">$ cargo run -- The tests/inputs/*
+tests/inputs/bustle.txt:The bustle in a house
+tests/inputs/bustle.txt:The morning after death
+tests/inputs/bustle.txt:The sweeping up the heart,
+tests/inputs/fox.txt:The quick brown fox jumps over the lazy dog.
+tests/inputs/nobody.txt:Then there's a pair of us!</pre>
+
+<p class="pagebreak-before">Then try to print <a data-primary="counts" data-secondary="counting matches" data-type="indexterm" id="id1194"/>the number of matches instead of the lines:</p>
+
+<pre data-type="programlisting">$ cargo run -- --count The tests/inputs/*
+tests/inputs/bustle.txt:3
+tests/inputs/empty.txt:0
+tests/inputs/fox.txt:1
+tests/inputs/nobody.txt:1</pre>
+
+<p>Incorporate<a data-primary="--insensitive option" data-primary-sortas="insensitive" data-type="indexterm" id="id1195"/> the <code>--insensitive</code> option:</p>
+
+<pre data-type="programlisting">$ cargo run -- --count --insensitive The tests/inputs/*
+tests/inputs/bustle.txt:3
+tests/inputs/empty.txt:0
+tests/inputs/fox.txt:1
+tests/inputs/nobody.txt:3</pre>
+
+<p>Next, try <a data-primary="inverting matching" data-type="indexterm" id="id1196"/>to invert the matching:</p>
+
+<pre data-type="programlisting">$ cargo run -- --count --invert-match The tests/inputs/*
+tests/inputs/bustle.txt:6
+tests/inputs/empty.txt:0
+tests/inputs/fox.txt:0
+tests/inputs/nobody.txt:8</pre>
+
+<p>Be sure<a data-primary="--recursive option" data-primary-sortas="recursive" data-type="indexterm" id="id1197"/> your <code>--recursive</code> option works:</p>
+
+<pre data-type="programlisting">$ cargo run -- -icr the tests/inputs
+tests/inputs/empty.txt:0
+tests/inputs/nobody.txt:3
+tests/inputs/bustle.txt:3
+tests/inputs/fox.txt:1</pre>
+
+<p>Handle errors such as <a data-primary="errors" data-secondary="handling in finding matching input lines in grepr" data-type="indexterm" id="id1198"/>the nonexistent file <em>blargh</em> while processing the files in order:</p>
+
+<pre data-type="programlisting">$ cargo run -- fox <strong>blargh</strong> tests/inputs/fox.txt
+<strong>blargh: No such file or directory (os error 2)</strong>
+tests/inputs/fox.txt:The quick brown fox jumps over the lazy dog.</pre>
+
+<p>Another potential problem you should gracefully handle is failure to open a file, perhaps due to insufficient permissions:</p>
+
+<pre data-type="programlisting">$ touch hammer &amp;&amp; chmod 000 hammer
+$ cargo run -- fox <strong>hammer</strong> tests/inputs/fox.txt
+<strong>hammer: Permission denied (os error 13)</strong>
+tests/inputs/fox.txt:The quick brown fox jumps over the lazy dog.</pre>
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>It’s go time. These challenges are getting harder, so it’s OK to feel a bit overwhelmed by the requirements. Tackle each task in order, and keep running <strong><code>cargo test</code></strong> to see how many you’re able to pass. When you get stuck, run <code>grep</code> with the arguments from the test and closely examine the output. Then run your program with the same arguments and try to find the differences.<a data-primary="finding matching lines of input in grepr" data-startref="ix_fndmtchln" data-type="indexterm" id="id1199"/><a data-primary="grep utility" data-secondary="writing grepr version" data-startref="ix_grepwrfndmtch" data-tertiary="finding matching lines of input" data-type="indexterm" id="id1200"/></p>
+</div>
+</div></section>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Solution" data-type="sect1"><div class="sect1" id="id94">
+<h1>Solution</h1>
+
+<p>I will always stress that your solution can be written however you like as long as it passes the provided test suite.<a data-primary="grep utility" data-secondary="writing grepr version" data-tertiary="find_files function" data-type="indexterm" id="id1201"/><a data-primary="find_files function" data-type="indexterm" id="id1202"/><a data-primary="finding files to search in grepr" data-type="indexterm" id="id1203"/>
+In the following <code>find_files</code> function, I choose to use the imperative approach of manually pushing to a vector rather than collecting from an iterator.<a data-primary="vectors" data-secondary="manually pushing to in find_files function" data-type="indexterm" id="id1204"/>
+The function will either collect a single error for a bad path or flatten the iterable <code>WalkDir</code> to recursively get the files.<a data-primary="std::fs module" data-type="indexterm" id="id1205"/><a data-primary="fs module" data-type="indexterm" id="id1206"/><a data-primary="WalkDir type" data-type="indexterm" id="id1207"/>
+Be sure you add <code>use std::fs</code> and <code>use walkdir::WalkDir</code> for this code:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">find_files</code><code class="p">(</code><code class="n">paths</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="p">[</code><code class="nb">String</code><code class="p">]</code><code class="p">,</code><code class="w"> </code><code class="n">recursive</code><code>:</code><code> </code><code class="kt">bool</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">Result</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">results</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="p">]</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO8-1" id="co_jack_the_grepper_CO8-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+
+    </code><code class="k">for</code><code class="w"> </code><code class="n">path</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">paths</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO8-2" id="co_jack_the_grepper_CO8-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+        </code><code class="k">match</code><code class="w"> </code><code class="n">path</code><code class="p">.</code><code class="n">as_str</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="s">"</code><code class="s">-</code><code class="s">"</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="n">results</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="nb">Ok</code><code class="p">(</code><code class="n">path</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO8-3" id="co_jack_the_grepper_CO8-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+            </code><code class="n">_</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="k">match</code><code class="w"> </code><code class="n">fs</code><code>::</code><code class="n">metadata</code><code class="p">(</code><code class="n">path</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO8-4" id="co_jack_the_grepper_CO8-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+                </code><code class="nb">Ok</code><code class="p">(</code><code class="n">metadata</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                    </code><code class="k">if</code><code class="w"> </code><code class="n">metadata</code><code class="p">.</code><code class="n">is_dir</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO8-5" id="co_jack_the_grepper_CO8-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+                        </code><code class="k">if</code><code class="w"> </code><code class="n">recursive</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO8-6" id="co_jack_the_grepper_CO8-6"><img alt="6" src="assets/6.png"/></a><code class="w">
+                            </code><code class="k">for</code><code class="w"> </code><code class="n">entry</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">WalkDir</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="n">path</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO8-7" id="co_jack_the_grepper_CO8-7"><img alt="7" src="assets/7.png"/></a><code class="w">
+                                </code><code class="p">.</code><code class="n">into_iter</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">                                </code><code class="p">.</code><code class="n">flatten</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO8-8" id="co_jack_the_grepper_CO8-8"><img alt="8" src="assets/8.png"/></a><code class="w">
+                                </code><code class="p">.</code><code class="n">filter</code><code class="p">(</code><code class="o">|</code><code class="n">e</code><code class="o">|</code><code class="w"> </code><code class="n">e</code><code class="p">.</code><code class="n">file_type</code><code class="p">(</code><code class="p">)</code><code class="p">.</code><code class="n">is_file</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="w">                            </code><code class="p">{</code><code class="w">
+</code><code class="w">                                </code><code class="n">results</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="nb">Ok</code><code class="p">(</code><code class="n">entry</code><code class="w">
+</code><code class="w">                                    </code><code class="p">.</code><code class="n">path</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">                                    </code><code class="p">.</code><code class="n">display</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">                                    </code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                            </code><code class="p">}</code><code class="w">
+</code><code class="w">                        </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                            </code><code class="n">results</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO8-9" id="co_jack_the_grepper_CO8-9"><img alt="9" src="assets/9.png"/></a><code class="w">
+                                </code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="nb">Err</code><code class="p">(</code><code class="n">anyhow</code><code class="o">!</code><code class="p">(</code><code class="s">"</code><code class="s">{path} is a directory</code><code class="s">"</code><code class="p">)</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                        </code><code class="p">}</code><code class="w">
+</code><code class="w">                    </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="k">if</code><code class="w"> </code><code class="n">metadata</code><code class="p">.</code><code class="n">is_file</code><code class="p">(</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO8-10" id="co_jack_the_grepper_CO8-10"><img alt="10" src="assets/10.png"/></a><code class="w">
+                        </code><code class="n">results</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="nb">Ok</code><code class="p">(</code><code class="n">path</code><code class="p">.</code><code class="n">to_string</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                    </code><code class="p">}</code><code class="w">
+</code><code class="w">                </code><code class="p">}</code><code class="w">
+</code><code class="w">                </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO8-11" id="co_jack_the_grepper_CO8-11"><img alt="11" src="assets/11.png"/></a><code class="w">
+                    </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="n">results</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="nb">Err</code><code class="p">(</code><code class="n">anyhow</code><code class="o">!</code><code class="p">(</code><code class="s">"</code><code class="s">{path}: {e}</code><code class="s">"</code><code class="p">)</code><code class="p">)</code><code class="p">)</code><code class="p">,</code><code class="w">
+</code><code class="w">                </code><code class="p">}</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="n">results</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_jack_the_grepper_CO8-1" id="callout_jack_the_grepper_CO8-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Initialize an empty vector to hold the <code>results</code>.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO8-2" id="callout_jack_the_grepper_CO8-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Iterate over each of the given paths.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO8-3" id="callout_jack_the_grepper_CO8-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>First, accept a dash (<code>-</code>) as a path, for <code>STDIN</code>.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO8-4" id="callout_jack_the_grepper_CO8-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Try to get the path’s metadata.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO8-5" id="callout_jack_the_grepper_CO8-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>Check if the path is a directory.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO8-6" id="callout_jack_the_grepper_CO8-6"><img alt="6" src="assets/6.png"/></a></dt>
+<dd><p>Check if the user wants to recursively search directories.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO8-7" id="callout_jack_the_grepper_CO8-7"><img alt="7" src="assets/7.png"/></a></dt>
+<dd><p>Add all the files in the given directory to the <code>results</code>.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO8-8" id="callout_jack_the_grepper_CO8-8"><img alt="8" src="assets/8.png"/></a></dt>
+<dd><p><a href="https://oreil.ly/RzXDz"><code>Iterator::flatten</code></a> will take the <code>Ok</code> or <code>Some</code> variants for <code>Result</code> and <code>Option</code> types and will ignore the <code>Err</code> and <code>None</code> variants, meaning it will ignore any errors with files found by recursing through directories.<a data-primary="Iterator::flatten function" data-type="indexterm" id="id1208"/></p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO8-9" id="callout_jack_the_grepper_CO8-9"><img alt="9" src="assets/9.png"/></a></dt>
+<dd><p>Note an error that the given entry is a directory.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO8-10" id="callout_jack_the_grepper_CO8-10"><img alt="10" src="assets/10.png"/></a></dt>
+<dd><p>If the path is a file, add it to the <code>results</code>.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO8-11" id="callout_jack_the_grepper_CO8-11"><img alt="11" src="assets/11.png"/></a></dt>
+<dd><p>This arm will be triggered by nonexistent files.</p></dd>
+</dl>
+
+<p>Next, I will share my <code>find_lines</code> function.<a data-primary="grep utility" data-secondary="writing grepr version" data-tertiary="find_lines function" data-type="indexterm" id="id1209"/><a data-primary="finding matching lines of input in grepr" data-type="indexterm" id="id1210"/><a data-primary="find_lines function" data-type="indexterm" id="id1211"/>
+The following code requires that you add <code>use std::mem</code> to your imports.<a data-primary="std::mem module" data-type="indexterm" id="id1212"/><a data-primary="mem module" data-type="indexterm" id="id1213"/>
+This borrows heavily from previous functions that read files line by line, so I won’t comment on code I’ve used before:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">find_lines</code><code class="o">&lt;</code><code class="n">T</code><code>:</code><code> </code><code class="nc">BufRead</code><code class="o">&gt;</code><code class="p">(</code><code class="w">
+</code><code class="w">    </code><code class="k">mut</code><code class="w"> </code><code class="n">file</code><code>:</code><code> </code><code class="nc">T</code><code class="p">,</code><code class="w">
+</code><code class="w">    </code><code class="n">pattern</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="nc">Regex</code><code class="p">,</code><code class="w">
+</code><code class="w">    </code><code class="n">invert</code><code>:</code><code> </code><code class="kt">bool</code><code class="p">,</code><code class="w">
+</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">matches</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="p">]</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO9-1" id="co_jack_the_grepper_CO9-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">line</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">String</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="k">loop</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">bytes</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">file</code><code class="p">.</code><code class="n">read_line</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">line</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="n">bytes</code><code class="w"> </code><code class="o">=</code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="k">break</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="n">pattern</code><code class="p">.</code><code class="n">is_match</code><code class="p">(</code><code class="o">&amp;</code><code class="n">line</code><code class="p">)</code><code class="w"> </code><code class="o">^</code><code class="w"> </code><code class="n">invert</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO9-2" id="co_jack_the_grepper_CO9-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+            </code><code class="n">matches</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="n">mem</code><code>::</code><code class="n">take</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">line</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO9-3" id="co_jack_the_grepper_CO9-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+        </code><code class="p">}</code><code class="w">
+</code><code class="w">        </code><code class="n">line</code><code class="p">.</code><code class="n">clear</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="n">matches</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_jack_the_grepper_CO9-1" id="callout_jack_the_grepper_CO9-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Initialize a mutable vector to hold the matching lines.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO9-2" id="callout_jack_the_grepper_CO9-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Use the <a href="https://oreil.ly/fwIFt"><code>BitXor</code> <em>bit-wise exclusive OR</em></a> operator (<code>^</code>) to determine if the line should be included.<a data-primary="^ (caret)" data-secondary="bit-wise exclusive OR operator" data-type="indexterm" id="id1214"/><a data-primary="BitXor operator" data-type="indexterm" id="id1215"/></p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO9-3" id="callout_jack_the_grepper_CO9-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Use <a href="https://oreil.ly/bKZz9"><code>std::mem::take</code></a> to take ownership of the line.<a data-primary="std::mem::take function" data-type="indexterm" id="id1216"/> I could have used <a href="https://oreil.ly/NkRmp"><code>clone</code></a> to copy the string and add it to the <code>matches</code>, but <code>take</code> avoids an unnecessary copy.</p></dd>
+</dl>
+
+<p>In the preceding function, the bitwise <em>XOR</em> comparison (<code>^</code>) could also be expressed using a <a data-primary="&amp;&amp; (logical and) operator" data-secondary="combining with || (logical or operator)" data-type="indexterm" id="id1217"/><a data-primary="|| (pipes)" data-secondary="or operator, combining with &amp;&amp; operator" data-type="indexterm" id="id1218"/>combination of the logical <em>AND</em> (<code>&amp;&amp;</code>) and <em>OR</em> operators (<code>||</code>) like so:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">if</code><code class="w"> </code><code class="p">(</code><code class="n">pattern</code><code class="p">.</code><code class="n">is_match</code><code class="p">(</code><code class="o">&amp;</code><code class="n">line</code><code class="p">)</code><code class="w"> </code><code class="o">&amp;</code><code class="o">&amp;</code><code class="w"> </code><code class="o">!</code><code class="n">invert</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO10-1" id="co_jack_the_grepper_CO10-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="o">|</code><code class="o">|</code><code class="w"> </code><code class="p">(</code><code class="o">!</code><code class="n">pattern</code><code class="p">.</code><code class="n">is_match</code><code class="p">(</code><code class="o">&amp;</code><code class="n">line</code><code class="p">)</code><code class="w"> </code><code class="o">&amp;</code><code class="o">&amp;</code><code class="w"> </code><code class="n">invert</code><code class="p">)</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO10-2" id="co_jack_the_grepper_CO10-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+</code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="n">matches</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="n">line</code><code class="p">.</code><code class="n">clone</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_jack_the_grepper_CO10-1" id="callout_jack_the_grepper_CO10-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Verify that the line matches and the user does not want to invert the match.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO10-2" id="callout_jack_the_grepper_CO10-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Alternatively, check if the line does not match and the user wants to invert the match.</p></dd>
+</dl>
+
+<p>At the beginning of the <code>run</code> function, I decided to create a closure to handle the printing of the output with or<a data-primary="closures" data-secondary="handling printing of output for grepr" data-type="indexterm" id="id1219"/> without the filenames given the number of input files:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="k">fn</code><code> </code><code class="nf">run</code><code class="p">(</code><code class="n">args</code><code>:</code><code> </code><code class="nc">Args</code><code class="p">)</code><code class="w"> </code><code>-&gt;</code><code> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">pattern</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">RegexBuilder</code><code>::</code><code class="n">new</code><code class="p">(</code><code class="o">&amp;</code><code class="n">args</code><code class="p">.</code><code class="n">pattern</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">case_insensitive</code><code class="p">(</code><code class="n">args</code><code class="p">.</code><code class="n">insensitive</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">build</code><code class="p">(</code><code class="p">)</code><code class="w">
+</code><code class="w">        </code><code class="p">.</code><code class="n">map_err</code><code class="p">(</code><code class="o">|</code><code class="n">_</code><code class="o">|</code><code class="w"> </code><code class="n">anyhow</code><code class="o">!</code><code class="p">(</code><code class="s">r#"Invalid pattern "{}""#</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">pattern</code><code class="p">)</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w">
+</code><code class="w">
+</code><code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">entries</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">find_files</code><code class="p">(</code><code class="o">&amp;</code><code class="n">args</code><code class="p">.</code><code class="n">files</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">recursive</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO11-1" id="co_jack_the_grepper_CO11-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="n">num_files</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">entries</code><code class="p">.</code><code class="n">len</code><code class="p">(</code><code class="p">)</code><code class="p">;</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO11-2" id="co_jack_the_grepper_CO11-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+    </code><code class="kd">let</code><code class="w"> </code><code class="n">print</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">|</code><code class="n">fname</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">,</code><code class="w"> </code><code class="n">val</code><code>:</code><code> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="o">|</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO11-3" id="co_jack_the_grepper_CO11-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+        </code><code class="k">if</code><code class="w"> </code><code class="n">num_files</code><code class="w"> </code><code class="o">&gt;</code><code class="w"> </code><code class="mi">1</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="fm">print!</code><code class="p">(</code><code class="s">"</code><code class="s">{fname}:{val}</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="fm">print!</code><code class="p">(</code><code class="s">"</code><code class="s">{val}</code><code class="s">"</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="p">;</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_jack_the_grepper_CO11-1" id="callout_jack_the_grepper_CO11-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Find all the inputs.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO11-2" id="callout_jack_the_grepper_CO11-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Find the number of inputs.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO11-3" id="callout_jack_the_grepper_CO11-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Create a <code>print</code> closure that uses the number of inputs to decide whether to print the filenames in the output.</p></dd>
+</dl>
+
+<p>Continuing from there, the program attempts to find the matching lines from the entries:</p>
+
+<pre data-code-language="rust" data-type="programlisting"><code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">entry</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">entries</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">        </code><code class="k">match</code><code class="w"> </code><code class="n">entry</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">            </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"</code><code class="s">{e}</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO12-1" id="co_jack_the_grepper_CO12-1"><img alt="1" src="assets/1.png"/></a><code class="w">
+            </code><code class="nb">Ok</code><code class="p">(</code><code class="n">filename</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="k">match</code><code class="w"> </code><code class="n">open</code><code class="p">(</code><code class="o">&amp;</code><code class="n">filename</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO12-2" id="co_jack_the_grepper_CO12-2"><img alt="2" src="assets/2.png"/></a><code class="w">
+                </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"</code><code class="s">{filename}: {e}</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO12-3" id="co_jack_the_grepper_CO12-3"><img alt="3" src="assets/3.png"/></a><code class="w">
+                </code><code class="nb">Ok</code><code class="p">(</code><code class="n">file</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="k">match</code><code class="w"> </code><code class="n">find_lines</code><code class="p">(</code><code class="n">file</code><code class="p">,</code><code class="w"> </code><code class="o">&amp;</code><code class="n">pattern</code><code class="p">,</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">invert</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO12-4" id="co_jack_the_grepper_CO12-4"><img alt="4" src="assets/4.png"/></a><code class="w">
+                    </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"</code><code class="s">{e}</code><code class="s">"</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO12-5" id="co_jack_the_grepper_CO12-5"><img alt="5" src="assets/5.png"/></a><code class="w">
+                    </code><code class="nb">Ok</code><code class="p">(</code><code class="n">matches</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                        </code><code class="k">if</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">count</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><a class="co" href="#callout_jack_the_grepper_CO12-6" id="co_jack_the_grepper_CO12-6"><img alt="6" src="assets/6.png"/></a><code class="w">
+                            </code><code class="n">print</code><code class="p">(</code><code class="o">&amp;</code><code class="n">filename</code><code class="p">,</code><code class="w"> </code><code class="o">&amp;</code><code class="fm">format!</code><code class="p">(</code><code class="s">"</code><code class="s">{}</code><code class="se">\n</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="n">matches</code><code class="p">.</code><code class="n">len</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                        </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                            </code><code class="k">for</code><code class="w"> </code><code class="n">line</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="o">&amp;</code><code class="n">matches</code><code class="w"> </code><code class="p">{</code><code class="w">
+</code><code class="w">                                </code><code class="n">print</code><code class="p">(</code><code class="o">&amp;</code><code class="n">filename</code><code class="p">,</code><code class="w"> </code><code class="n">line</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="w">                            </code><code class="p">}</code><code class="w">
+</code><code class="w">                        </code><code class="p">}</code><code class="w">
+</code><code class="w">                    </code><code class="p">}</code><code class="w">
+</code><code class="w">                </code><code class="p">}</code><code class="p">,</code><code class="w">
+</code><code class="w">            </code><code class="p">}</code><code class="p">,</code><code class="w">
+</code><code class="w">        </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="p">}</code><code class="w">
+</code><code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="p">(</code><code class="p">)</code><code class="p">)</code><code class="w">
+</code><code class="p">}</code></pre>
+<dl class="calloutlist">
+<dt><a class="co" href="#co_jack_the_grepper_CO12-1" id="callout_jack_the_grepper_CO12-1"><img alt="1" src="assets/1.png"/></a></dt>
+<dd><p>Print errors like nonexistent files to <code>STDERR</code>.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO12-2" id="callout_jack_the_grepper_CO12-2"><img alt="2" src="assets/2.png"/></a></dt>
+<dd><p>Attempt to open a file. This might fail due to permissions.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO12-3" id="callout_jack_the_grepper_CO12-3"><img alt="3" src="assets/3.png"/></a></dt>
+<dd><p>Print an error to <code>STDERR</code>.<a data-primary="errors" data-secondary="printing to STDERR for grepr finding matching lines of input" data-type="indexterm" id="id1220"/></p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO12-4" id="callout_jack_the_grepper_CO12-4"><img alt="4" src="assets/4.png"/></a></dt>
+<dd><p>Attempt to find the matching lines of text.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO12-5" id="callout_jack_the_grepper_CO12-5"><img alt="5" src="assets/5.png"/></a></dt>
+<dd><p>Print errors to <code>STDERR</code>.</p></dd>
+<dt><a class="co" href="#co_jack_the_grepper_CO12-6" id="callout_jack_the_grepper_CO12-6"><img alt="6" src="assets/6.png"/></a></dt>
+<dd><p>Decide whether to print the number of matches or the matches themselves.</p></dd>
+</dl>
+
+<p>At this point, the program should pass all the tests.</p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Going Further" data-type="sect1"><div class="sect1" id="id95">
+<h1>Going Further</h1>
+
+<p>The <a href="https://oreil.ly/oqlzw">Rust <code>ripgrep</code> tool</a> implements many of the features of <code>grep</code> and is worthy of your study.<a data-primary="grep utility" data-secondary="writing grepr version" data-tertiary="going further" data-type="indexterm" id="id1221"/><a data-primary="ripgrep (rg) tool" data-type="indexterm" id="id1222"/>
+You can install the program using the instructions provided and then execute <code>rg</code>.
+As shown in <a data-type="xref" href="#fig_9.1">Figure 9-1</a>, the matching text is highlighted in the output.
+Try to add that feature to your program using <a href="https://oreil.ly/MzvvZ"><code>Regex::find</code></a> to find the start and stop positions of the matching pattern and something like <a href="https://oreil.ly/QRuAE"><code>termcolor</code></a> to highlight the matches.</p>
+
+<figure><div class="figure" id="fig_9.1">
+<img alt="clru 0901" src="assets/clru_0901.png"/>
+<h6><span class="label">Figure 9-1. </span>The <code>ripgrep</code> tool will highlight the matching text.</h6>
+</div></figure>
+
+<p>The author of <code>ripgrep</code> wrote an extensive <a href="https://oreil.ly/JfnB8">blog post</a> about design decisions that went into writing the program.
+In the section “Repeat After Me: Thou Shalt Not Search Line by Line,” the author discusses the performance hit of searching over lines of text, the majority of which will not match.</p>
+</div></section>
+
+
+
+
+
+
+<section data-pdf-bookmark="Summary" data-type="sect1"><div class="sect1" id="id96">
+<h1>Summary</h1>
+
+<p>This chapter challenged you to extend skills you learned in <a data-type="xref" href="ch07.html#ch07">Chapter 7</a>, such as recursively finding files in directories and using regular expressions.
+In this chapter, you combined those skills to find content inside files matching (or not matching) a given regex.
+In addition, you learned the following:</p>
+
+<ul>
+<li>
+<p>How to use <code>RegexBuilder</code> to create more complicated regular expressions using, for instance, the case-insensitive option to match strings regardless of case.</p>
+</li>
+<li>
+<p>There are multiple syntaxes for writing regular expressions that different tools recognize, such as PCRE. Rust’s <code>regex</code> engine does not implement some features of PCRE, such as look-around assertions or backreferences.</p>
+</li>
+<li>
+<p>You can indicate a trait bound like <code>BufRead</code> in function signatures using either <code>impl BufRead</code> or <code>&lt;T: BufRead&gt;</code>.</p>
+</li>
+<li>
+<p>Rust’s bitwise <em>XOR</em> operator can replace more complex logical operations that combine <em>AND</em> and <em>OR</em> comparisons.<a data-primary="grep utility" data-startref="ix_grep" data-type="indexterm" id="id1223"/></p>
+</li>
+</ul>
+
+<p>In the next chapter, you’ll learn more about iterating the lines of a file, how to compare strings, and how to create a more complicated <code>enum</code> type.</p>
+</div></section>
+<div data-type="footnotes"><p data-type="footnote" id="id1123"><sup><a href="ch09.html#id1123-marker">1</a></sup> The name <code>grep</code> comes from the <code>ed</code> command <code>g/re/p</code>, which means “global regular expression print,” where <code>ed</code> is the standard text editor.</p><p data-type="footnote" id="id1168"><sup><a href="ch09.html#id1168-marker">2</a></sup> If you would like to learn more about regexes, I recommend <a class="orm:hideurl" href="https://oreil.ly/jwvCB"><em>Mastering Regular Expressions</em>, 3rd ed.</a>, by Jeffrey E. F. Friedl (O’Reilly).</p></div></div></section></body></html>

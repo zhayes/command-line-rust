@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EPUB 章节预览</title>
+    <style>
+      :root {
+        --bg: #f4f1ea;
+        --panel: #fffaf0;
+        --ink: #1f2937;
+        --sub: #6b7280;
+        --line: #d8d4ca;
+        --accent: #0f766e;
+        --btn-bg: #ffffff;
+        --reader-bg: #ffffff;
+      }
+
+      body.dark {
+        --bg: #0b1220;
+        --panel: #111827;
+        --ink: #e5e7eb;
+        --sub: #94a3b8;
+        --line: #263244;
+        --accent: #22d3ee;
+        --btn-bg: #1f2937;
+        --reader-bg: #0f172a;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        color: var(--ink);
+        font-family: 'SF Pro Text', 'PingFang SC', 'Noto Sans CJK SC', sans-serif;
+        background: radial-gradient(circle at 18% 8%, rgba(255,255,255,0.8), transparent 28%), var(--bg);
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: 300px 1fr;
+        height: 100vh;
+      }
+
+      .left {
+        border-right: 1px solid var(--line);
+        background: var(--panel);
+        overflow: auto;
+        padding: 16px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .sub {
+        margin: 8px 0 12px;
+        color: var(--sub);
+        font-size: 13px;
+      }
+
+      .menu {
+        display: grid;
+        gap: 8px;
+      }
+
+      .menu button,
+      .toolbar button {
+        border: 1px solid var(--line);
+        background: var(--btn-bg);
+        color: var(--ink);
+        padding: 8px 10px;
+        border-radius: 10px;
+        cursor: pointer;
+        text-align: left;
+      }
+
+      .menu button:hover,
+      .toolbar button:hover {
+        border-color: var(--accent);
+      }
+
+      .menu button.active {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+      }
+
+      .right {
+        display: grid;
+        grid-template-rows: auto 1fr;
+        min-width: 0;
+      }
+
+      .toolbar {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--line);
+        background: color-mix(in srgb, var(--panel) 80%, transparent);
+      }
+
+      .path {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--sub);
+        font-size: 13px;
+      }
+
+      .reader-wrap {
+        padding: 22px;
+      }
+
+      .reader-card {
+        height: 100%;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        overflow: hidden;
+        background: var(--reader-bg);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+      }
+
+      iframe {
+        width: 100%;
+        height: 100%;
+        border: 0;
+        background: #fff;
+      }
+
+      @media (max-width: 900px) {
+        .app {
+          grid-template-columns: 1fr;
+          grid-template-rows: 38vh 62vh;
+        }
+        .left {
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+        .reader-wrap {
+          padding: 10px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="left">
+        <h1>章节目录</h1>
+        <p class="sub">仅显示可阅读章节菜单</p>
+        <div class="menu" id="menu"></div>
+      </aside>
+
+      <section class="right">
+        <div class="toolbar">
+          <button id="themeBtn" type="button">切换暗黑模式</button>
+          <button id="openRaw" type="button">新标签打开</button>
+          <span class="path" id="currentPath">未选择章节</span>
+        </div>
+
+        <div class="reader-wrap">
+          <div class="reader-card">
+            <iframe id="viewer" title="epub chapter viewer"></iframe>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const viewer = document.getElementById('viewer');
+      const currentPath = document.getElementById('currentPath');
+      const openRaw = document.getElementById('openRaw');
+      const themeBtn = document.getElementById('themeBtn');
+      const menu = document.getElementById('menu');
+
+      let activePath = '';
+      let activeButton = null;
+
+      const chapterItems = [
+        { label: '目录', path: 'OEBPS/toc01.html' },
+        { label: '前言', path: 'OEBPS/preface01.html' },
+        ...Array.from({ length: 14 }, (_, i) => {
+          const idx = String(i + 1).padStart(2, '0');
+          return { label: `第 ${i + 1} 章`, path: `OEBPS/ch${idx}.html` };
+        })
+      ];
+
+      function fileUrl(rel) {
+        return '/epub/' + rel;
+      }
+
+      function openFile(rel, btn) {
+        activePath = rel;
+        currentPath.textContent = rel;
+        viewer.src = fileUrl(rel);
+
+        if (activeButton) activeButton.classList.remove('active');
+        if (btn) {
+          btn.classList.add('active');
+          activeButton = btn;
+        }
+      }
+
+      function applyReaderSpacing() {
+        try {
+          const doc = viewer.contentDocument || viewer.contentWindow.document;
+          if (!doc || !doc.head || !doc.body) return;
+
+          let style = doc.getElementById('codex-reader-spacing');
+          if (!style) {
+            style = doc.createElement('style');
+            style.id = 'codex-reader-spacing';
+            doc.head.appendChild(style);
+          }
+
+          style.textContent = `
+            body {
+              max-width: 920px !important;
+              margin: 0 auto !important;
+              padding: 28px 36px 40px !important;
+              line-height: 1.7 !important;
+              box-sizing: border-box;
+            }
+            @media (max-width: 900px) {
+              body {
+                padding: 18px 14px 26px !important;
+              }
+            }
+          `;
+        } catch (err) {
+          // Keep silent if an unexpected document cannot be styled.
+        }
+      }
+
+      function renderMenu() {
+        chapterItems.forEach((item) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.textContent = item.label;
+          btn.addEventListener('click', () => openFile(item.path, btn));
+          menu.appendChild(btn);
+        });
+      }
+
+      function applyTheme(theme) {
+        if (theme === 'dark') {
+          document.body.classList.add('dark');
+        } else {
+          document.body.classList.remove('dark');
+        }
+      }
+
+      function initTheme() {
+        const saved = localStorage.getItem('epub-preview-theme');
+        if (saved === 'light' || saved === 'dark') {
+          applyTheme(saved);
+          return;
+        }
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        applyTheme(prefersDark ? 'dark' : 'light');
+      }
+
+      themeBtn.addEventListener('click', () => {
+        const next = document.body.classList.contains('dark') ? 'light' : 'dark';
+        localStorage.setItem('epub-preview-theme', next);
+        applyTheme(next);
+      });
+
+      openRaw.addEventListener('click', () => {
+        if (!activePath) return;
+        window.open(fileUrl(activePath), '_blank');
+      });
+
+      viewer.addEventListener('load', applyReaderSpacing);
+
+      initTheme();
+      renderMenu();
+      // 默认打开第一章
+      const firstChapterButton = Array.from(menu.querySelectorAll('button')).find((b) => b.textContent === '第 1 章');
+      openFile('OEBPS/ch01.html', firstChapterButton || null);
+    </script>
+  </body>
+</html>

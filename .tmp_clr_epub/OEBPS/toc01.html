@@ -1,0 +1,1772 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html><html xmlns:epub="http://www.idpf.org/2007/ops" xmlns="http://www.w3.org/1999/xhtml"><head><title>nav</title><link rel="stylesheet" type="text/css" href="epub.css"/></head><body data-type="book"><nav data-type="toc" epub:type="toc" id="id188"><ol><li data-type="preface"><a href="preface01.html#id189">Preface</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect1"><a href="preface01.html#id193">What Is Rust (and Why Is Everybody Talkin’ About It)?</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="preface01.html#id194">Who Should Read This Book</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="preface01.html#id195">Why You Should Learn Rust</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="preface01.html#id196">The Coding Challenges</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="preface01.html#id197">Getting Rust and the Code</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="preface01.html#id1">March 2024 Update</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="preface01.html#id198">Conventions Used in This Book</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="preface01.html#id199">Using Code Examples</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="preface01.html#id200">O’Reilly Online Learning</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="preface01.html#id201">How to Contact Us</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="preface01.html#id202">Acknowledgments</a></li>
+</ol></li><li data-type="chapter"><a href="ch01.html#ch01">1. Truth or Consequences</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch01.html#id3">Getting Started with “Hello, world!”</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch01.html#id4">Organizing a Rust Project Directory</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch01.html#id5">Creating and Running a Project with Cargo</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch01.html#id6">Writing and Running Integration Tests</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch01.html#id7">Adding Project Dependencies</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch01.html#id8">Understanding Program Exit Values</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch01.html#id9">Testing the Program Output</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch01.html#id10">Exit Values Make Programs Composable</a></li>
+</ol></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch01.html#id11">Summary</a></li>
+</ol></li><li data-type="chapter"><a href="ch02.html#ch02">2. Test for Echo</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch02.html#id13">How echo Works</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch02.html#id14">Getting Started</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch02.html#id15">Accessing the Command-Line Arguments</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch02.html#id16">Adding clap as a Dependency</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch02.html#id17">Parsing Command-Line Arguments Using clap</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch02.html#id18">Creating the Program Output</a></li>
+</ol></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch02.html#id19">Writing Integration Tests</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch02.html#id20">Creating the Test Output Files</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch02.html#id21">Comparing Program Output</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch02.html#id22">Using the Result Type</a></li>
+</ol></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch02.html#id23">Using clap Derive</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch02.html#id24">Summary</a></li>
+</ol></li><li data-type="chapter"><a href="ch03.html#ch03">3. On the Catwalk</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch03.html#id26">How cat Works</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch03.html#id27">Getting Started</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch03.html#id28">Starting with Tests</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch03.html#id29">Defining the Parameters</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch03.html#iterating_thru_file_args">Iterating Through the File Arguments</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch03.html#id31">Opening a File or STDIN</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch03.html#id32">Using the Test Suite</a></li>
+</ol></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch03.html#id149">Solution</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch03.html#id33">Reading the Lines in a File</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch03.html#id34">Printing Line Numbers</a></li>
+</ol></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch03.html#id35">Going Further</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch03.html#id36">Summary</a></li>
+</ol></li><li data-type="chapter"><a href="ch04.html#ch04">4. Head Aches</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch04.html#id150">How head Works</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch04.html#id38">Getting Started</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch04.html#id39">Defining the Arguments</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch04.html#id40">Processing the Input Files</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch04.html#id41">Reading Bytes Versus Characters</a></li>
+</ol></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch04.html#id203">Solution</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch04.html#id42">Reading a File Line by Line</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch04.html#id43">Preserving Line Endings While Reading a File</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch04.html#id44">Reading Bytes from a File</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch04.html#id45">Printing the File Separators</a></li>
+</ol></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch04.html#id46">Going Further</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch04.html#id47">Summary</a></li>
+</ol></li><li data-type="chapter"><a href="ch05.html#ch05">5. Word to Your Mother</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch05.html#id49">How wc Works</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch05.html#id50">Getting Started</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch05.html#id51">Iterating the Files</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch05.html#id52">Writing and Testing a Function to Count File Elements</a></li>
+</ol></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch05.html#id204">Solution</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch05.html#id53">Counting the Elements of a File or STDIN</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch05.html#id54">Formatting the Output</a></li>
+</ol></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch05.html#id55">Going Further</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch05.html#id56">Summary</a></li>
+</ol></li><li data-type="chapter"><a href="ch06.html#ch06">6. Den of Uniquity</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch06.html#id58">How uniq Works</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch06.html#id156">Getting Started</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch06.html#id59">Defining the Arguments</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch06.html#id60">Testing the Program</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch06.html#id61">Processing the Input Files</a></li>
+</ol></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch06.html#id62">Solution</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch06.html#id63">Going Further</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch06.html#id64">Summary</a></li>
+</ol></li><li data-type="chapter"><a href="ch07.html#ch07">7. Finders Keepers</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch07.html#id66">How find Works</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch07.html#id67">Getting Started</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch07.html#id68">Defining the Arguments</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch07.html#id69">Validating the Arguments</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch07.html#id70">Finding All the Things</a></li>
+</ol></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch07.html#id71">Solution</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch07.html#id72">Conditionally Testing on Unix Versus Windows</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch07.html#id73">Going Further</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch07.html#id74">Summary</a></li>
+</ol></li><li data-type="chapter"><a href="ch08.html#ch08">8. Shave and a Haircut</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch08.html#id76">How cut Works</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch08.html#id77">Getting Started</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch08.html#id78">Defining the Arguments</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch08.html#id79">Validating the Delimiter</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch08.html#id80">Requirements for Parsing the Position List</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch08.html#id81">Solution for Parsing the Position List</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch08.html#id82">Extracting Characters or Bytes</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch08.html#id83">Parsing Delimited Text Files</a></li>
+</ol></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch08.html#id205">Solution</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch08.html#id84">Selecting Characters from a String</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch08.html#id85">Selecting Bytes from a String</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch08.html#id86">Selecting Fields from a csv::StringRecord</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch08.html#id87">Final Boss</a></li>
+</ol></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch08.html#id151">Going Further</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch08.html#id88">Summary</a></li>
+</ol></li><li data-type="chapter"><a href="ch09.html#ch09">9. Jack the Grepper</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch09.html#id90">How grep Works</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch09.html#id152">Getting Started</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch09.html#id91">Defining the Arguments</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch09.html#id92">Finding the Files to Search</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch09.html#id93">Finding the Matching Lines of Input</a></li>
+</ol></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch09.html#id94">Solution</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch09.html#id95">Going Further</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch09.html#id96">Summary</a></li>
+</ol></li><li data-type="chapter"><a href="ch10.html#ch10">10. Boston Commons</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch10.html#id98">How comm Works</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch10.html#id157">Getting Started</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch10.html#id99">Defining the Arguments</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch10.html#id100">Validating and Opening the Input Files</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch10.html#id101">Processing the Files</a></li>
+</ol></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch10.html#id102">Solution</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch10.html#id158">Going Further</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch10.html#id103">Summary</a></li>
+</ol></li><li data-type="chapter"><a href="ch11.html#ch11">11. Tailor Swyfte</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch11.html#id105">How tail Works</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch11.html#id106">Getting Started</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch11.html#id107">Defining the Arguments</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch11.html#id108">Parsing and Validating the Command-Line Arguments</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch11.html#id109">Parsing Positive and Negative Numeric Arguments</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch11.html#id110">Using a Regular Expression to Match an Integer with an Optional Sign</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch11.html#id111">Processing the Files</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch11.html#id112">Counting the Total Lines and Bytes in a File</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch11.html#id113">Finding the Starting Line to Print</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch11.html#id114">Finding the Starting Byte to Print</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch11.html#id115">Testing the Program with Large Input Files</a></li>
+</ol></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch11.html#id206">Solution</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch11.html#id116">Counting All the Lines and Bytes in a File</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch11.html#id117">Finding the Start Index</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch11.html#id118">Printing the Lines</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch11.html#id119">Printing the Bytes</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch11.html#id120">Benchmarking the Solution</a></li>
+</ol></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch11.html#id159">Going Further</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch11.html#id121">Summary</a></li>
+</ol></li><li data-type="chapter"><a href="ch12.html#ch12">12. Fortunate Son</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch12.html#id123">How fortune Works</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch12.html#id160">Getting Started</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch12.html#id124">Defining the Arguments</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch12.html#id125">Finding the Input Sources</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch12.html#id126">Reading the Fortune Files</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch12.html#id127">Randomly Selecting a Fortune</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch12.html#id153">Printing Records Matching a Pattern</a></li>
+</ol></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch12.html#id128">Solution</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch12.html#id161">Going Further</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch12.html#id129">Summary</a></li>
+</ol></li><li data-type="chapter"><a href="ch13.html#ch13">13. Rascalry</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch13.html#id131">How cal Works</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch13.html#id132">Getting Started</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch13.html#id133">Defining and Validating the Arguments</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch13.html#id134">Writing the Program</a></li>
+</ol></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch13.html#id135">Solution</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch13.html#id136">Going Further</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch13.html#id137">Summary</a></li>
+</ol></li><li data-type="chapter"><a href="ch14.html#ch14">14. Elless Island</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch14.html#id139">How ls Works</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch14.html#id140">Getting Started</a><ol>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch14.html#id141">Defining the Arguments</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch14.html#id142">Finding the Files</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch14.html#id143">Formatting the Long Listing</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch14.html#id144">Displaying Octal Permissions</a></li>
+
+
+
+
+
+
+
+
+<li data-type="sect2"><a href="ch14.html#id145">Testing the Long Format</a></li>
+</ol></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch14.html#id146">Solution</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch14.html#id147">Notes from the Testing Underground</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch14.html#id154">Going Further</a></li>
+
+
+
+
+
+
+<li data-type="sect1"><a href="ch14.html#id148">Summary</a></li>
+</ol></li><li data-type="afterword"><a href="afterword01.html#id155">Epilogue</a></li><li data-type="index"><a href="ix01.html#id190">Index</a></li><li data-type="colophon"><a href="colophon01.html#id191">About the Author</a></li></ol></nav></body></html>
