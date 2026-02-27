@@ -1,11 +1,11 @@
 # epub-preview
 
-一个零依赖前端预览项目，用于浏览 `/Users/chad/command_line/.tmp_clr_epub` 下的 EPUB 解包网页内容。
+一个零依赖前端预览项目，用于浏览 `/command_line/.tmp_clr_epub` 下的 EPUB 解包网页内容。
 
 ## 运行
 
 ```bash
-cd /Users/chad/command_line/epub-preview
+cd /command_line/epub-preview
 npm run dev
 ```
 
